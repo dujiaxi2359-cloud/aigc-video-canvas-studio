@@ -1,0 +1,173 @@
+import { getDb } from "../db/database.js";
+import { modelCatalog } from "./modelCatalog.js";
+import { getVideoModelCapabilityOrLegacy } from "../config/videoModelCapabilities.js";
+import { officialModeToLegacyInputMode, officialVideoModeLabels } from "../types/videoModes.js";
+import type {
+  AvailableImageOptions,
+  AvailableVideoOptions,
+  DurationCapability,
+  ImageNodeContext,
+  ModelCapabilities,
+  ModelConstraint,
+  VideoNodeContext
+} from "../types/model.js";
+
+function durationsFromCapability(duration?: DurationCapability) {
+  if (!duration) return [];
+  if (duration.type === "fixed") return [duration.value];
+  if (duration.type === "enum") return [...duration.values].sort((a, b) => a - b);
+  const values: number[] = [];
+  for (let value = duration.min; value <= duration.max; value += duration.step) values.push(value);
+  return values;
+}
+
+function constraintMatches(constraint: ModelConstraint, context: VideoNodeContext) {
+  const when = constraint.when;
+  if (when.resolution && !when.resolution.includes(context.selectedResolution ?? "")) return false;
+  if (when.inputMode && !when.inputMode.includes(context.inputMode)) return false;
+  if (when.hasImageInput !== undefined && when.hasImageInput !== context.hasImageInput) return false;
+  if (when.hasVideoInput !== undefined && when.hasVideoInput !== context.hasVideoInput) return false;
+  if (when.hasReferenceImage !== undefined && when.hasReferenceImage !== context.hasReferenceImage) return false;
+  if (when.hasFirstLastFrame !== undefined && when.hasFirstLastFrame !== context.hasFirstLastFrame) return false;
+  return true;
+}
+
+export function calculateAvailableVideoOptions(capabilities: ModelCapabilities, nodeContext: VideoNodeContext): AvailableVideoOptions {
+  let availableDurations = durationsFromCapability(capabilities.duration);
+  let availableResolutions = [...(capabilities.resolutions ?? [])];
+  let availableAspectRatios = [...(capabilities.aspectRatios ?? [])];
+  const availableInputModes = capabilities.inputModes.filter((mode) =>
+    ["text-to-video", "image-to-video", "first-last-frame", "reference-to-video", "video-to-video"].includes(mode)
+  );
+  const lockedFields: AvailableVideoOptions["lockedFields"] = {};
+  let warningMessage: string | undefined;
+
+  if (capabilities.duration?.type === "fixed") lockedFields.duration = true;
+
+  for (const constraint of capabilities.constraints ?? []) {
+    if (!constraintMatches(constraint, nodeContext)) continue;
+    warningMessage = constraint.reason;
+    if (constraint.forceDuration !== undefined) {
+      availableDurations = [constraint.forceDuration];
+      lockedFields.duration = true;
+    }
+    if (constraint.allowedDurations) availableDurations = constraint.allowedDurations;
+    if (constraint.disabledResolutions) availableResolutions = availableResolutions.filter((item) => !constraint.disabledResolutions!.includes(item));
+    if (constraint.disabledAspectRatios) availableAspectRatios = availableAspectRatios.filter((item) => !constraint.disabledAspectRatios!.includes(item));
+  }
+
+  return {
+    availableDurations,
+    availableAspectRatios,
+    availableResolutions,
+    availableInputModes,
+    lockedFields,
+    warningMessage,
+    normalizedSelection: {
+      duration: availableDurations.includes(nodeContext.selectedDuration ?? NaN) ? nodeContext.selectedDuration : availableDurations[0],
+      aspectRatio: availableAspectRatios.includes(nodeContext.selectedAspectRatio ?? "") ? nodeContext.selectedAspectRatio : availableAspectRatios[0],
+      resolution: availableResolutions.includes(nodeContext.selectedResolution ?? "") ? nodeContext.selectedResolution : availableResolutions[0],
+      inputMode: availableInputModes.includes(nodeContext.inputMode) ? nodeContext.inputMode : availableInputModes[0]
+    }
+  };
+}
+
+function calculateOfficialVideoOptions(
+  capability: NonNullable<ReturnType<typeof getVideoModelCapabilityOrLegacy>>,
+  nodeContext: VideoNodeContext
+): AvailableVideoOptions {
+  const availableVideoModes = capability.supportedModes
+    .filter((mode) => (mode.runtimeStatus ?? capability.runtimeStatus) !== "not_implemented")
+    .map((mode) => mode.mode);
+  const unavailableVideoModes = capability.supportedModes
+    .filter((mode) => (mode.runtimeStatus ?? capability.runtimeStatus) === "not_implemented")
+    .map((mode) => ({ mode: mode.mode, label: mode.label, reason: "adapter 未接入" }));
+  const selectedMode = nodeContext.videoMode && availableVideoModes.includes(nodeContext.videoMode)
+    ? nodeContext.videoMode
+    : availableVideoModes[0];
+  const availableInputModes = Array.from(new Set(availableVideoModes.map(officialModeToLegacyInputMode)));
+
+  return {
+    availableDurations: capability.supportedDurations,
+    availableAspectRatios: capability.supportedAspectRatios,
+    availableResolutions: capability.supportedResolutions,
+    availableInputModes,
+    availableVideoModes,
+    unavailableVideoModes,
+    videoModeLabels: officialVideoModeLabels,
+    lockedFields: {},
+    warningMessage: capability.runtimeStatus === "not_implemented" ? "当前视频模型 adapter 尚未接入，不能生成。" : undefined,
+    normalizedSelection: {
+      duration: capability.supportedDurations.includes(nodeContext.selectedDuration ?? NaN) ? nodeContext.selectedDuration : capability.defaultDuration,
+      aspectRatio: capability.supportedAspectRatios.includes(nodeContext.selectedAspectRatio ?? "") ? nodeContext.selectedAspectRatio : capability.defaultAspectRatio,
+      resolution: capability.supportedResolutions.includes(nodeContext.selectedResolution ?? "") ? nodeContext.selectedResolution : capability.defaultResolution,
+      videoMode: selectedMode,
+      inputMode: selectedMode ? officialModeToLegacyInputMode(selectedMode) : availableInputModes[0]
+    }
+  };
+}
+
+export function calculateAvailableImageOptions(capabilities: ModelCapabilities, nodeContext: ImageNodeContext): AvailableImageOptions {
+  const availableImageSizes = [...(capabilities.imageAspectRatios ?? capabilities.imageSizes ?? ["1:1"])];
+  const availableImageQualities = [...(capabilities.imageQualities ?? ["auto"])];
+  const availableImageFormats = [...(capabilities.imageFormats ?? ["png"])];
+  const availableInputModes = capabilities.inputModes.filter((mode) => ["text-to-image", "image-to-image", "image-edit"].includes(mode));
+  const warningMessage =
+    nodeContext.inputMode === "image-edit" && !nodeContext.hasImageInput
+      ? "图片编辑需要连接一张图片素材。"
+      : nodeContext.inputMode === "image-to-image" && !nodeContext.hasImageInput
+        ? "图生图需要连接一张图片素材。"
+        : undefined;
+
+  return {
+    availableImageSizes,
+    availableImageQualities,
+    availableImageFormats,
+    availableInputModes,
+    warningMessage,
+    normalizedSelection: {
+      imageSize: availableImageSizes.includes(nodeContext.selectedImageSize ?? "") ? nodeContext.selectedImageSize : availableImageSizes[0],
+      imageQuality: availableImageQualities.includes(nodeContext.selectedQuality ?? "") ? nodeContext.selectedQuality : availableImageQualities[0],
+      imageFormat: availableImageFormats.includes(nodeContext.selectedFormat ?? "") ? nodeContext.selectedFormat : availableImageFormats[0],
+      inputMode: availableInputModes.includes(nodeContext.inputMode) ? nodeContext.inputMode : availableInputModes[0]
+    }
+  };
+}
+
+async function getCapabilities(modelConfigId: string) {
+  const db = await getDb();
+  const row = await db.get<{ provider_id?: string; model_name: string; capabilities_json: string }>(
+    "SELECT provider_id, model_name, capabilities_json FROM model_configs WHERE id = ? AND enabled = 1",
+    modelConfigId
+  );
+  if (!row) throw new Error("Model config not found or disabled");
+  const catalogItem = modelCatalog.find((item) => item.providerId === row.provider_id && item.name === row.model_name);
+  return catalogItem?.capabilities ?? JSON.parse(row.capabilities_json) as ModelCapabilities;
+}
+
+async function getCapabilityContext(modelConfigId: string) {
+  const db = await getDb();
+  const row = await db.get<{ provider_id?: string; model_name: string; capabilities_json: string }>(
+    "SELECT provider_id, model_name, capabilities_json FROM model_configs WHERE id = ? AND enabled = 1",
+    modelConfigId
+  );
+  if (!row) throw new Error("Model config not found or disabled");
+  const catalogItem = modelCatalog.find((item) => item.providerId === row.provider_id && item.name === row.model_name);
+  return {
+    capabilities: catalogItem?.capabilities ?? JSON.parse(row.capabilities_json) as ModelCapabilities,
+    providerId: row.provider_id,
+    modelName: row.model_name,
+    catalogModelId: catalogItem?.id
+  };
+}
+
+export async function getAvailableVideoOptions(modelConfigId: string, nodeContext: VideoNodeContext) {
+  const context = await getCapabilityContext(modelConfigId);
+  const official = getVideoModelCapabilityOrLegacy(context.providerId, context.catalogModelId, context.modelName, nodeContext.videoMode);
+  if (official) return calculateOfficialVideoOptions(official, nodeContext);
+  return calculateAvailableVideoOptions(context.capabilities, nodeContext);
+}
+
+export async function getAvailableImageOptions(modelConfigId: string, nodeContext: ImageNodeContext) {
+  return calculateAvailableImageOptions(await getCapabilities(modelConfigId), nodeContext);
+}

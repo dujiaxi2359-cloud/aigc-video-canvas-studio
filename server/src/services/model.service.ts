@@ -1,0 +1,680 @@
+﻿import fs from "node:fs";
+import path from "node:path";
+import { createAsset } from "./asset.service.js";
+import { decryptApiKey } from "./encryption.service.js";
+import { addHistory } from "./history.service.js";
+import { modelCatalog } from "./modelCatalog.js";
+import { getInternalModelConfig } from "./modelConfig.service.js";
+import { calculateAvailableImageOptions, calculateAvailableVideoOptions } from "./modelCapability.service.js";
+import { getOfficialModelCapability, qualityTierFor } from "../config/officialModelCapabilities.js";
+import { capabilityForMode, getVideoModelCapabilityOrLegacy } from "../config/videoModelCapabilities.js";
+import { generateImageWithAlibaba } from "./providers/alibabaImage.service.js";
+import { generateVideoWithAlibabaWan } from "./providers/alibabaWan.service.js";
+import { generateImageWithAzureOpenAI } from "./providers/azureOpenAIImage.service.js";
+import { generateTextWithDeepSeek } from "./providers/deepseek.service.js";
+import { generateImageWithGoogle } from "./providers/googleImage.service.js";
+import { generateTextWithGoogle } from "./providers/googleText.service.js";
+import { generateVideoWithGoogleVeo } from "./providers/googleVeo.service.js";
+import { generateVideoWithGrok } from "./providers/grokVideo.service.js";
+import { generateVideoWithKling } from "./providers/klingVideo.service.js";
+import { generateImageWithOpenAI } from "./providers/openaiImage.service.js";
+import { generateVideoWithSeedance } from "./providers/seedanceVideo.service.js";
+import type { ImageInputMode, ModelCapabilities, ModelCatalogItem, VideoNodeContext } from "../types/model.js";
+import type { OfficialVideoMode } from "../types/videoModes.js";
+import { legacyInputModeToOfficialMode } from "../types/videoModes.js";
+import type { ProviderGenerateResult } from "./providers/providerTypes.js";
+import { isProviderError } from "../utils/providerErrors.js";
+import { buildPayloadSummary, logOfficialPayload } from "../utils/generationPayload.js";
+import { metadataToQualityAudit, readGeneratedFileMetadata } from "../utils/mediaMetadata.js";
+
+export type GenerateTextRequest = {
+  projectId?: string;
+  nodeId: string;
+  modelConfigId: string;
+  inputText: string;
+  systemPrompt?: string;
+  taskType?: "prompt-polish" | "script" | "reverse-prompt" | "custom";
+  imageAssetIds?: string[];
+};
+
+export type GenerateVideoRequest = {
+  projectId?: string;
+  nodeId: string;
+  modelConfigId: string;
+  inputMode: VideoNodeContext["inputMode"];
+  videoMode?: OfficialVideoMode;
+  prompt: string;
+  imageAssetIds?: string[];
+  videoAssetIds?: string[];
+  audioAssetIds?: string[];
+  duration: number;
+  aspectRatio: string;
+  resolution: string;
+  generateCount: number;
+  qualityMode?: "full_quality" | "balanced" | "fast";
+  negativePrompt?: string;
+  promptExtend?: boolean;
+  seed?: number;
+  realismMode?: "off" | "natural_human" | "commercial_human" | "cinematic_human";
+};
+
+export type GenerateImageRequest = {
+  projectId?: string;
+  nodeId: string;
+  modelConfigId: string;
+  inputMode: ImageInputMode;
+  prompt: string;
+  imageAssetIds?: string[];
+  aspectRatio?: string;
+  imageSize?: string;
+  imageQuality: string;
+  imageFormat: string;
+  generateCount: number;
+  qualityMode?: "full_quality" | "balanced" | "fast";
+  negativePrompt?: string;
+  promptExtend?: boolean;
+  seed?: number;
+  realismMode?: "off" | "natural_human" | "commercial_human" | "cinematic_human";
+};
+
+type InternalModelConfig = Awaited<ReturnType<typeof getInternalModelConfig>>;
+
+function forceMockGeneration() {
+  return process.env.ALLOW_MOCK_GENERATION === "true" || process.env.FORCE_MOCK_GENERATION === "true";
+}
+
+function providerErrorMeta(providerId: string | undefined, error: unknown) {
+  console.error("[provider adapter error]", providerId, error);
+  if (isProviderError(error)) {
+    return {
+      errorCode: error.errorCode,
+      errorMessage: error.message,
+      debugMessage: error.debugMessage
+    };
+  }
+  const message = error instanceof Error ? error.message : "生成失败";
+  if (/fetch failed/i.test(message)) {
+    return {
+      errorCode: "NETWORK_ERROR",
+      errorMessage: "网络请求失败，请检查本地服务、代理、接口地址或第三方 API 网络连接是否正常。",
+      debugMessage: message
+    };
+  }
+  return {
+    errorCode: "PROVIDER_ERROR",
+    errorMessage: message,
+    debugMessage: undefined
+  };
+}
+
+function errorResponse(errorMessage: string, errorCode = "PROVIDER_ERROR", debugMessage?: string) {
+  return { status: "error" as const, errorCode, errorMessage, debugMessage };
+}
+
+function catalogFor(model: NonNullable<InternalModelConfig>) {
+  return modelCatalog.find((item) => item.providerId === model.provider_id && item.name === model.model_name);
+}
+
+async function getGenerationContext(modelConfigId: string, type: "text" | "image" | "video") {
+  const model = await getInternalModelConfig(modelConfigId);
+  if (!model) throw new Error("模型配置不存在");
+  if (!model.enabled) throw new Error("模型已禁用");
+
+  const apiKey = model.encrypted_api_key ? decryptApiKey(model.encrypted_api_key) : "";
+  const catalogItem = catalogFor(model);
+  const forceMock = forceMockGeneration();
+
+  return { model, apiKey, catalogItem, forceMock };
+}
+
+function logGenerate(input: {
+  type: "text" | "image" | "video";
+  model: NonNullable<InternalModelConfig>;
+  catalogItem?: ModelCatalogItem;
+  apiKey: string;
+  inputMode?: string;
+}) {
+  console.log("[generate]", {
+    type: input.type,
+    providerId: input.model.provider_id,
+    catalogModelId: input.catalogItem?.id,
+    modelName: input.model.model_name,
+    inputMode: input.inputMode,
+    hasApiKey: Boolean(input.apiKey),
+    apiBaseUrl: input.model.api_base_url,
+    forceMock: process.env.FORCE_MOCK_GENERATION
+  });
+}
+
+function validateVideoRequest(capabilities: ModelCapabilities, input: GenerateVideoRequest) {
+  const options = calculateAvailableVideoOptions(capabilities, {
+    inputMode: input.inputMode,
+    hasImageInput: Boolean(input.imageAssetIds?.length),
+    hasVideoInput: Boolean(input.videoAssetIds?.length),
+    hasReferenceImage: Boolean(input.imageAssetIds?.length),
+    hasFirstLastFrame: Boolean(input.imageAssetIds && input.imageAssetIds.length >= 2),
+    selectedDuration: input.duration,
+    selectedAspectRatio: input.aspectRatio,
+    selectedResolution: input.resolution
+  });
+  if (!options.availableInputModes.includes(input.inputMode)) throw new Error("当前模型不支持该输入模式");
+  if (!options.availableDurations.includes(input.duration)) throw new Error("当前模型不支持该视频时长");
+  if (!options.availableAspectRatios.includes(input.aspectRatio)) throw new Error("当前模型不支持该画面比例");
+  if (!options.availableResolutions.includes(input.resolution)) throw new Error("当前模型不支持该分辨率");
+}
+
+function assertFullQualityModel(input: { qualityMode?: string; providerId: string; catalogModelId?: string; modelName: string }) {
+  const mode = input.qualityMode ?? "full_quality";
+  const tier = qualityTierFor(input.providerId, input.catalogModelId, input.modelName);
+  const explicitlySelectedFastTier = /(?:fast|lite|turbo)/i.test(`${input.catalogModelId ?? ""} ${input.modelName}`);
+  if (mode === "full_quality" && ["fast", "lite", "turbo"].includes(tier) && !explicitlySelectedFastTier) {
+    throw new Error(`当前选择的是 ${tier} 质量档模型。如需满血质量，请切换到非 Fast/Lite/Turbo 模型。`);
+  }
+}
+
+function validateAgainstOfficial(input: {
+  providerId: string;
+  catalogModelId?: string;
+  modelName: string;
+  inputMode: string;
+  aspectRatio?: string;
+  duration?: number;
+  resolution?: string;
+}) {
+  const official = getOfficialModelCapability(input.providerId, input.catalogModelId, input.modelName);
+  if (!official) return;
+  if (official.runtimeStatus === "not_implemented") throw new Error("当前模型真实 adapter 尚未完整接入。");
+  if (!official.supportedInputModes.includes(input.inputMode)) throw new Error("当前官方模型不支持该输入模式。");
+  if (input.aspectRatio && official.supportedAspectRatios.length && !official.supportedAspectRatios.includes(input.aspectRatio)) {
+    throw new Error(`当前官方模型不支持 ${input.aspectRatio} 比例。`);
+  }
+  if (input.duration && official.supportedDurations?.length && !official.supportedDurations.includes(input.duration)) {
+    throw new Error(`当前官方模型不支持 ${input.duration}s 时长。`);
+  }
+  if (input.resolution && official.supportedResolutions?.length && !official.supportedResolutions.includes(input.resolution)) {
+    throw new Error(`当前官方模型不支持 ${input.resolution} 分辨率。`);
+  }
+}
+
+function validateAgainstOfficialVideo(input: {
+  providerId: string;
+  catalogModelId?: string;
+  modelName: string;
+  inputMode: string;
+  videoMode?: OfficialVideoMode;
+  aspectRatio?: string;
+  duration?: number;
+  resolution?: string;
+  imageCount?: number;
+  videoCount?: number;
+  audioCount?: number;
+}) {
+  const mode = input.videoMode ?? legacyInputModeToOfficialMode(input.inputMode, input.providerId);
+  const capability = getVideoModelCapabilityOrLegacy(input.providerId, input.catalogModelId, input.modelName, mode);
+  if (!capability) return legacyInputModeToOfficialMode(input.inputMode, input.providerId);
+  if (capability.runtimeStatus === "not_implemented") {
+    throw new Error(`${capability.displayName} 的真实视频 adapter 尚未接入，不能假装生成成功。`);
+  }
+  const modeCapability = capabilityForMode(capability, mode);
+  if (!modeCapability) throw new Error(`当前官方模型不支持 ${mode} 视频模式。`);
+  if ((modeCapability.runtimeStatus ?? capability.runtimeStatus) === "not_implemented") throw new Error(`${modeCapability.label} adapter 尚未接入，不能假装生成成功。`);
+  if (input.aspectRatio && !capability.supportedAspectRatios.includes(input.aspectRatio)) throw new Error(`当前官方模型不支持 ${input.aspectRatio} 比例。`);
+  if (input.duration && !capability.supportedDurations.includes(input.duration)) throw new Error(`当前官方模型不支持 ${input.duration}s 时长。`);
+  if (input.resolution && !capability.supportedResolutions.includes(input.resolution)) throw new Error(`当前官方模型不支持 ${input.resolution} 分辨率。`);
+  const imageCount = input.imageCount ?? 0;
+  if (modeCapability.requiredInputs.includes("first_frame") && imageCount < 1) throw new Error("当前模式需要连接首帧图片。");
+  if (modeCapability.requiredInputs.includes("last_frame") && imageCount < 2) throw new Error("当前模式需要连接尾帧图片。");
+  if (modeCapability.requiredInputs.includes("reference_images") && imageCount < (modeCapability.minImages ?? 1)) throw new Error("当前模式需要连接参考图片。");
+  if (modeCapability.maxImages && imageCount > modeCapability.maxImages) throw new Error(`当前模式最多支持 ${modeCapability.maxImages} 张参考图片。`);
+  if (modeCapability.requiredInputs.includes("video") && !(input.videoCount ?? 0)) throw new Error("当前模式需要连接视频素材。");
+  if (modeCapability.requiredInputs.includes("reference_video") && !(input.videoCount ?? 0)) throw new Error("当前模式需要连接参考视频素材。");
+  if (modeCapability.requiredInputs.includes("first_clip") && !(input.videoCount ?? 0)) throw new Error("当前模式需要连接续写视频素材。");
+  if (modeCapability.maxVideos && (input.videoCount ?? 0) > modeCapability.maxVideos) throw new Error(`当前模式最多支持 ${modeCapability.maxVideos} 个视频素材。`);
+  if (modeCapability.requiredInputs.includes("driving_audio") && !(input.audioCount ?? 0)) throw new Error("当前模式需要连接驱动音频。");
+  return mode;
+}
+
+function validateImageRequest(capabilities: ModelCapabilities, input: GenerateImageRequest) {
+  const options = calculateAvailableImageOptions(capabilities, {
+    inputMode: input.inputMode,
+    hasImageInput: Boolean(input.imageAssetIds?.length),
+    selectedImageSize: input.imageSize,
+    selectedQuality: input.imageQuality,
+    selectedFormat: input.imageFormat
+  });
+  if (!options.availableInputModes.includes(input.inputMode)) throw new Error("当前模型不支持该图片输入模式");
+  if (input.inputMode !== "text-to-image" && !input.imageAssetIds?.length) {
+    throw new Error(input.inputMode === "image-edit" ? "图片编辑需要连接一张图片素材" : "图生图需要连接一张图片素材");
+  }
+  if (input.imageSize && !options.availableImageSizes.includes(input.imageSize)) throw new Error("当前模型不支持该图片尺寸");
+  if (!options.availableImageQualities.includes(input.imageQuality)) throw new Error("当前模型不支持该图片质量");
+  if (!options.availableImageFormats.includes(input.imageFormat)) throw new Error("当前模型不支持该图片格式");
+}
+
+async function writeMockAsset(input: { nodeId: string; kind: "image" | "video"; payload: Record<string, unknown> }) {
+  const uploadRoot = process.env.UPLOAD_DIR ?? "./uploads";
+  const outputDir = path.resolve(process.cwd(), uploadRoot, "generated");
+  fs.mkdirSync(outputDir, { recursive: true });
+  if (input.kind === "video") {
+    const mockVideoPath = path.resolve(process.cwd(), uploadRoot, "mock", "mock-video.mp4");
+    if (fs.existsSync(mockVideoPath)) {
+      const fileName = `video_${input.nodeId}_${Date.now()}.mp4`;
+      const outputPath = path.join(outputDir, fileName);
+      fs.copyFileSync(mockVideoPath, outputPath);
+      return createAsset({
+        type: "generated",
+        source: "generated",
+        originalName: fileName,
+        localPath: outputPath,
+        url: `/uploads/generated/${fileName}`,
+        size: fs.statSync(outputPath).size
+      });
+    }
+  }
+
+  const fileName = `${input.nodeId}-${Date.now()}.json`;
+  const outputPath = path.join(outputDir, fileName);
+  fs.writeFileSync(outputPath, JSON.stringify({ mock: true, kind: input.kind, ...input.payload }, null, 2));
+  return createAsset({
+    type: "generated",
+    source: "generated",
+    originalName: fileName,
+    localPath: outputPath,
+    url: `/uploads/generated/${fileName}`,
+    size: fs.statSync(outputPath).size
+  });
+}
+
+async function createGeneratedAssetFromProvider(
+  result: ProviderGenerateResult,
+  fallbackName: string,
+  context?: {
+    providerId?: string;
+    modelId?: string;
+    nodeId?: string;
+    projectId?: string;
+    prompt?: string;
+    negativePrompt?: string;
+  }
+) {
+  if (!result.outputUrl || !result.localPath) return undefined;
+  return createAsset({
+    type: "generated",
+    source: "generated",
+    originalName: path.basename(result.localPath) || fallbackName,
+    localPath: result.localPath,
+    url: result.outputUrl,
+    size: fs.existsSync(result.localPath) ? fs.statSync(result.localPath).size : undefined,
+    providerId: context?.providerId,
+    modelId: context?.modelId,
+    nodeId: context?.nodeId,
+    projectId: context?.projectId,
+    prompt: context?.prompt,
+    negativePrompt: context?.negativePrompt,
+    generationParams: result.payloadSummary && typeof result.payloadSummary === "object" ? result.payloadSummary as Record<string, unknown> : undefined
+  });
+}
+
+async function enrichPayloadSummaryWithOutput(
+  preflightSummary: Record<string, unknown>,
+  result: ProviderGenerateResult
+) {
+  const outputMetadata = await readGeneratedFileMetadata(result.localPath);
+  const outputAudit = metadataToQualityAudit(outputMetadata);
+  const providerSummary = result.payloadSummary && typeof result.payloadSummary === "object" ? result.payloadSummary as Record<string, unknown> : {};
+  return {
+    ...preflightSummary,
+    ...providerSummary,
+    ...outputAudit,
+    payloadSummary: {
+      ...(preflightSummary.payloadSummary && typeof preflightSummary.payloadSummary === "object" ? preflightSummary.payloadSummary as Record<string, unknown> : {}),
+      ...(providerSummary.payloadSummary && typeof providerSummary.payloadSummary === "object" ? providerSummary.payloadSummary as Record<string, unknown> : {}),
+      output: outputMetadata
+    }
+  };
+}
+
+export async function generateText(input: GenerateTextRequest) {
+  const { model, apiKey, catalogItem, forceMock } = await getGenerationContext(input.modelConfigId, "text");
+  logGenerate({ type: "text", model, catalogItem, apiKey, inputMode: "text" });
+
+  try {
+    if (forceMock) {
+      return { status: "success" as const, outputText: `Mock 文本结果：${input.inputText}` };
+    }
+    if (!apiKey) throw new Error("请先在设置中心配置该模型 API Key");
+    const providerParams = {
+      ...input,
+      apiKey,
+      apiBaseUrl: model.api_base_url,
+      modelName: model.model_name,
+      providerId: model.provider_id,
+      catalogModelId: catalogItem?.id
+    };
+
+    if (model.provider_id === "deepseek") return await generateTextWithDeepSeek(providerParams);
+    if (model.provider_id === "google") return await generateTextWithGoogle(providerParams);
+    throw new Error("该文本模型暂未支持真实调用");
+  } catch (error) {
+    const meta = providerErrorMeta(model.provider_id, error);
+    return errorResponse(meta.errorMessage, meta.errorCode, meta.debugMessage);
+  }
+}
+export async function generateVideo(input: GenerateVideoRequest) {
+  const { model, apiKey, catalogItem, forceMock } = await getGenerationContext(input.modelConfigId, "video");
+  logGenerate({ type: "video", model, catalogItem, apiKey, inputMode: input.inputMode });
+  const capabilities = catalogItem?.capabilities ?? JSON.parse(model.capabilities_json) as ModelCapabilities;
+  try {
+    validateVideoRequest(capabilities, input);
+    if (forceMock) {
+      const asset = await writeMockAsset({
+        nodeId: input.nodeId,
+        kind: "video",
+        payload: {
+        message: "Mock video generation result. Set ALLOW_MOCK_GENERATION=false to use provider adapters.",
+          prompt: input.prompt,
+          duration: input.duration,
+          aspectRatio: input.aspectRatio,
+          resolution: input.resolution
+        }
+      });
+      await addHistory({
+        generationType: "video",
+        projectId: input.projectId,
+        nodeId: input.nodeId,
+        modelConfigId: input.modelConfigId,
+        modelDisplayName: model.display_name,
+        inputMode: input.inputMode,
+        prompt: input.prompt,
+        duration: input.duration,
+        aspectRatio: input.aspectRatio,
+        resolution: input.resolution,
+        status: "success",
+        outputPath: asset.localPath,
+        outputUrl: asset.url
+      });
+      return { status: "success" as const, outputAssetId: asset.id, outputUrl: asset.url };
+    }
+
+    if (!apiKey) throw new Error("请先在设置中心配置该模型 API Key");
+    const providerId = model.provider_id ?? "";
+    const modelName = model.model_name ?? "";
+    assertFullQualityModel({ qualityMode: input.qualityMode, providerId, catalogModelId: catalogItem?.id, modelName });
+    const officialVideoMode = validateAgainstOfficialVideo({
+      providerId,
+      catalogModelId: catalogItem?.id,
+      modelName,
+      inputMode: input.inputMode,
+      videoMode: input.videoMode,
+      aspectRatio: input.aspectRatio,
+      duration: input.duration,
+      resolution: input.resolution,
+      imageCount: input.imageAssetIds?.length ?? 0,
+      videoCount: input.videoAssetIds?.length ?? 0,
+      audioCount: input.audioAssetIds?.length ?? 0
+    });
+    const providerParams = {
+      ...input,
+      apiKey,
+      apiBaseUrl: model.api_base_url ?? "",
+      modelName,
+      providerId,
+      catalogModelId: catalogItem?.id,
+      qualityMode: input.qualityMode ?? "full_quality"
+    };
+
+    const preflightSummary = buildPayloadSummary({
+      providerId,
+      selectedModelId: catalogItem?.id,
+      actualModelName: modelName,
+      inputMode: officialVideoMode,
+      aspectRatio: input.aspectRatio,
+      mappedResolution: input.resolution,
+      duration: input.duration,
+      quality: input.qualityMode ?? "full_quality",
+      qualityMode: input.qualityMode ?? "full_quality",
+      hasImageInput: Boolean(input.imageAssetIds?.length),
+      imageInputCount: input.imageAssetIds?.length ?? 0,
+      prompt: input.prompt,
+      negativePrompt: input.negativePrompt,
+      isMock: false,
+      qualityAudit: {
+        videoMode: officialVideoMode,
+        qualityMode: input.qualityMode ?? "full_quality",
+        promptExtend: input.promptExtend ?? true,
+        seed: input.seed,
+        isFallback: false
+      },
+      payloadSummary: { stage: "preflight", legacyInputMode: input.inputMode, officialMode: officialVideoMode }
+    });
+    logOfficialPayload(preflightSummary);
+
+    let result: ProviderGenerateResult;
+    switch (providerId) {
+      case "google":
+        result = await generateVideoWithGoogleVeo(providerParams);
+        break;
+      case "alibaba":
+        result = await generateVideoWithAlibabaWan(providerParams);
+        break;
+      case "kling":
+        result = await generateVideoWithKling(providerParams);
+        break;
+      case "grok":
+        result = await generateVideoWithGrok(providerParams);
+        break;
+      case "seedance":
+        result = await generateVideoWithSeedance(providerParams);
+        break;
+      default:
+        throw new Error("该视频模型暂未支持真实调用");
+    }
+
+    const asset = await createGeneratedAssetFromProvider(result, `video_${input.nodeId}.mp4`, {
+      providerId,
+      modelId: catalogItem?.id,
+      nodeId: input.nodeId,
+      projectId: input.projectId,
+      prompt: input.prompt,
+      negativePrompt: input.negativePrompt
+    });
+    const payloadSummary = await enrichPayloadSummaryWithOutput(preflightSummary, result);
+    await addHistory({
+      generationType: "video",
+      projectId: input.projectId,
+      nodeId: input.nodeId,
+      modelConfigId: input.modelConfigId,
+      modelDisplayName: model.display_name,
+      inputMode: input.inputMode,
+      prompt: input.prompt,
+      duration: input.duration,
+      aspectRatio: input.aspectRatio,
+      resolution: input.resolution,
+      status: "success",
+      outputPath: asset?.localPath ?? result.localPath,
+      outputUrl: asset?.url ?? result.outputUrl
+    });
+    return { status: "success" as const, outputAssetId: asset?.id, outputUrl: asset?.url ?? result.outputUrl, payloadSummary };
+  } catch (error) {
+    const meta = providerErrorMeta(model.provider_id, error);
+    await addHistory({
+      generationType: "video",
+      projectId: input.projectId,
+      nodeId: input.nodeId,
+      modelConfigId: input.modelConfigId,
+      modelDisplayName: model.display_name,
+      inputMode: input.inputMode,
+      prompt: input.prompt,
+      duration: input.duration,
+      aspectRatio: input.aspectRatio,
+      resolution: input.resolution,
+      status: "error",
+      errorMessage: meta.errorMessage
+    });
+    return errorResponse(meta.errorMessage, meta.errorCode, meta.debugMessage);
+  }
+}
+
+export async function generateImage(input: GenerateImageRequest) {
+  const { model, apiKey, catalogItem, forceMock } = await getGenerationContext(input.modelConfigId, "image");
+  logGenerate({ type: "image", model, catalogItem, apiKey, inputMode: input.inputMode });
+  const capabilities = catalogItem?.capabilities ?? JSON.parse(model.capabilities_json) as ModelCapabilities;
+  try {
+    validateImageRequest(capabilities, input);
+    if (forceMock) {
+      const asset = await writeMockAsset({
+        nodeId: input.nodeId,
+        kind: "image",
+        payload: {
+        message: "Mock image generation result. Set ALLOW_MOCK_GENERATION=false to use provider adapters.",
+          prompt: input.prompt,
+          aspectRatio: input.aspectRatio,
+          imageSize: input.imageSize,
+          imageQuality: input.imageQuality,
+          imageFormat: input.imageFormat
+        }
+      });
+      await addHistory({
+        generationType: "image",
+        projectId: input.projectId,
+        nodeId: input.nodeId,
+        modelConfigId: input.modelConfigId,
+        modelDisplayName: model.display_name,
+        inputMode: input.inputMode,
+        prompt: input.prompt,
+        resolution: input.aspectRatio ?? input.imageSize,
+        aspectRatio: input.aspectRatio,
+        status: "success",
+        outputPath: asset.localPath,
+        outputUrl: asset.url
+      });
+      return { status: "success" as const, outputAssetId: asset.id, outputUrl: asset.url };
+    }
+
+    if (!apiKey) throw new Error("请先在设置中心配置该模型 API Key");
+    const providerId = model.provider_id ?? "";
+    const modelName = model.model_name ?? "";
+    assertFullQualityModel({ qualityMode: input.qualityMode, providerId, catalogModelId: catalogItem?.id, modelName });
+    validateAgainstOfficial({
+      providerId,
+      catalogModelId: catalogItem?.id,
+      modelName,
+      inputMode: input.inputMode,
+      aspectRatio: input.aspectRatio
+    });
+    const providerParams = {
+      ...input,
+      apiKey,
+      apiBaseUrl: model.api_base_url ?? "",
+      modelName,
+      providerId,
+      catalogModelId: catalogItem?.id,
+      qualityMode: input.qualityMode ?? "full_quality"
+    };
+
+    const preflightSummary = buildPayloadSummary({
+      providerId,
+      selectedModelId: catalogItem?.id,
+      actualModelName: modelName,
+      inputMode: input.inputMode,
+      aspectRatio: input.aspectRatio,
+      quality: input.imageQuality,
+      qualityMode: input.qualityMode ?? "full_quality",
+      hasImageInput: Boolean(input.imageAssetIds?.length),
+      imageInputCount: input.imageAssetIds?.length ?? 0,
+      prompt: input.prompt,
+      negativePrompt: input.negativePrompt,
+      isMock: false,
+      qualityAudit: {
+        qualityMode: input.qualityMode ?? "full_quality",
+        promptExtend: input.promptExtend,
+        seed: input.seed,
+        isFallback: false
+      },
+      payloadSummary: { stage: "preflight" }
+    });
+    logOfficialPayload(preflightSummary);
+
+    let result: ProviderGenerateResult;
+    switch (providerId) {
+      case "openai":
+        result = await generateImageWithOpenAI(providerParams);
+        break;
+      case "azure-openai":
+        result = await generateImageWithAzureOpenAI(providerParams);
+        break;
+      case "alibaba":
+        result = await generateImageWithAlibaba(providerParams);
+        break;
+      case "google":
+        result = await generateImageWithGoogle(providerParams);
+        break;
+      default:
+        throw new Error("该图片模型暂未支持真实调用");
+    }
+
+    const asset = await createGeneratedAssetFromProvider(result, `image_${input.nodeId}.png`, {
+      providerId,
+      modelId: catalogItem?.id,
+      nodeId: input.nodeId,
+      projectId: input.projectId,
+      prompt: input.prompt,
+      negativePrompt: input.negativePrompt
+    });
+    const payloadSummary = await enrichPayloadSummaryWithOutput(preflightSummary, result);
+    await addHistory({
+      generationType: "image",
+      projectId: input.projectId,
+      nodeId: input.nodeId,
+      modelConfigId: input.modelConfigId,
+      modelDisplayName: model.display_name,
+      inputMode: input.inputMode,
+      prompt: input.prompt,
+      resolution: input.aspectRatio ?? input.imageSize,
+      aspectRatio: input.aspectRatio,
+      status: "success",
+      outputPath: asset?.localPath ?? result.localPath,
+      outputUrl: asset?.url ?? result.outputUrl
+    });
+    return { status: "success" as const, outputAssetId: asset?.id, outputUrl: asset?.url ?? result.outputUrl, payloadSummary };
+  } catch (error) {
+    const meta = providerErrorMeta(model.provider_id, error);
+    await addHistory({
+      generationType: "image",
+      projectId: input.projectId,
+      nodeId: input.nodeId,
+      modelConfigId: input.modelConfigId,
+      modelDisplayName: model.display_name,
+      inputMode: input.inputMode,
+      prompt: input.prompt,
+      status: "error",
+      errorMessage: meta.errorMessage
+    });
+    return errorResponse(meta.errorMessage, meta.errorCode, meta.debugMessage);
+  }
+}
+
+export async function generateWithVeo() {
+  throw new Error("Google Veo 真实调用入口已迁移到 generateVideoWithGoogleVeo。");
+}
+
+export async function generateWithWan() {
+  throw new Error("阿里 Wan 真实调用入口已迁移到 generateVideoWithAlibabaWan。");
+}
+
+export async function generateWithSeedance() {
+  throw new Error("Seedance 真实调用入口已迁移到 generateVideoWithSeedance。");
+}
+
+export async function generateWithKling() {
+  throw new Error("可灵真实调用入口已迁移到 generateVideoWithKling。");
+}
+
+export async function generateWithOpenAICompatible() {
+  throw new Error("OpenAI-compatible 真实调用入口尚未接入。");
+}
+
+export async function generateWithCustomApi() {
+  throw new Error("自定义 API 真实调用入口尚未接入。");
+}
+

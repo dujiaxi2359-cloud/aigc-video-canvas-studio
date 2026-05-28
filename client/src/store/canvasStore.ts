@@ -1,0 +1,250 @@
+﻿import { create } from "zustand";
+import {
+  addEdge,
+  applyEdgeChanges,
+  applyNodeChanges,
+  type Connection,
+  type Edge,
+  type EdgeChange,
+  type Node,
+  type NodeChange
+} from "reactflow";
+import { createClientId } from "../utils/id";
+import type { AgentWorkflowPlan, AgentNodeType } from "../types/agent";
+import type { WorkflowNodeType } from "../types/node";
+
+const defaults: Record<WorkflowNodeType, unknown> = {
+  textGenerate: { title: "Gemini 智能体", prompt: "", taskType: "prompt-polish", status: "idle" },
+  text: { title: "文本节点", content: "" },
+  image: { title: "图片素材" },
+  imageGenerate: { title: "图片生成", prompt: "", inputMode: "text-to-image", aspectRatio: "1:1", generateCount: 1, status: "idle" },
+  video: { title: "视频节点", prompt: "", inputMode: "text-to-video", videoMode: "text_to_video", generateCount: 1, status: "idle" },
+  audio: { title: "音频节点" },
+  script: {
+    title: "脚本节点",
+    shots: [{ id: createClientId("shot"), shotNumber: 1, duration: 5, visualDescription: "", prompt: "", subtitle: "", soundDesign: "" }]
+  },
+  compose: { title: "视频合成", inputVideoAssetIds: [], status: "idle" }
+};
+
+const nodeWidths: Record<WorkflowNodeType, number> = {
+  textGenerate: 380,
+  text: 300,
+  image: 440,
+  imageGenerate: 500,
+  video: 500,
+  audio: 320,
+  script: 320,
+  compose: 320
+};
+
+type State = {
+  nodes: Node[];
+  edges: Edge[];
+  selectedNodeId?: string;
+  addNode: (type: WorkflowNodeType, position?: { x: number; y: number }) => void;
+  addAssetNode: (asset: { assetId: string; type: string; url?: string; filePath?: string; thumbnailUrl?: string }, position?: { x: number; y: number }) => void;
+  addConnectedNode: (sourceId: string, type: WorkflowNodeType, position?: { x: number; y: number }) => void;
+  updateNodeData: (id: string, data: Record<string, unknown>) => void;
+  deleteNode: (id: string) => void;
+  duplicateNode: (id: string) => void;
+  deleteEdge: (id: string) => void;
+  deleteEdges: (ids: string[]) => void;
+  deleteSelected: () => void;
+  disconnectNode: (id: string) => void;
+  disconnectNodeInputs: (id: string) => void;
+  disconnectNodeOutputs: (id: string) => void;
+  deleteUnconnectedNodes: () => void;
+  clearCanvas: () => void;
+  selectAll: () => void;
+  clearSelection: () => void;
+  selectEdge: (id: string) => void;
+  selectNode: (id: string) => void;
+  onNodesChange: (changes: NodeChange[]) => void;
+  onEdgesChange: (changes: EdgeChange[]) => void;
+  connectNodes: (connection: Connection) => void;
+  loadProject: (nodes: Node[], edges: Edge[]) => void;
+  getCanvasState: () => { nodes: Array<{ id: string; type?: string; data?: Record<string, unknown> }>; edges: Array<{ id?: string; source: string; target: string }> };
+  applyAgentWorkflowPlan: (plan: AgentWorkflowPlan) => void;
+};
+
+function mapAgentNodeType(type: AgentNodeType): WorkflowNodeType {
+  if (type === "imageAsset") return "image";
+  if (type === "videoGenerate") return "video";
+  return type;
+}
+
+function nextPosition(nodes: Node[], position?: { x: number; y: number }) {
+  if (position) return avoidOverlap(nodes, position);
+  const index = nodes.length;
+  return avoidOverlap(nodes, { x: 320 + index * 68, y: 110 + index * 42 });
+}
+
+function avoidOverlap(nodes: Node[], position: { x: number; y: number }) {
+  let y = position.y;
+  while (nodes.some((node) => Math.abs(node.position.x - position.x) < 140 && Math.abs(node.position.y - y) < 84)) y += 76;
+  return { x: position.x, y };
+}
+
+function edgeStyle() {
+  return { stroke: "rgba(81,199,255,0.62)", strokeWidth: 2, filter: "drop-shadow(0 0 4px rgba(81,199,255,0.24))" };
+}
+
+function createFlowEdge(sourceId: string, targetId: string): Edge {
+  return { id: createClientId("edge"), source: sourceId, target: targetId, sourceHandle: "out", type: "studioEdge", animated: true, style: edgeStyle() };
+}
+
+export const useCanvasStore = create<State>((set, get) => ({
+  nodes: [],
+  edges: [],
+  addNode: (type, position) =>
+    set((state) => ({
+      nodes: [
+        ...state.nodes,
+        { id: createClientId(type), type, dragHandle: ".node-drag-handle", position: nextPosition(state.nodes, position), data: defaults[type] }
+      ]
+    })),
+  addAssetNode: (asset, position) =>
+    set((state) => {
+      const type: WorkflowNodeType = asset.type === "video" ? "video" : asset.type === "audio" ? "audio" : asset.type === "text" || asset.type === "script" ? "text" : "image";
+      const data =
+        type === "image"
+          ? { ...(defaults.image as Record<string, unknown>), title: "图片素材", assetId: asset.assetId, url: asset.url, localPath: asset.filePath, thumbnailUrl: asset.thumbnailUrl }
+          : type === "audio"
+            ? { ...(defaults.audio as Record<string, unknown>), title: "音频素材", assetId: asset.assetId, url: asset.url }
+            : type === "video"
+              ? { ...(defaults.video as Record<string, unknown>), title: "视频素材", assetId: asset.assetId, outputAssetId: asset.assetId, outputUrl: asset.url, status: "success" }
+              : { ...(defaults.text as Record<string, unknown>), title: "文本素材", content: "" };
+      return {
+        nodes: [
+          ...state.nodes,
+          { id: createClientId(type), type, dragHandle: ".node-drag-handle", position: nextPosition(state.nodes, position), data }
+        ]
+      };
+    }),
+  addConnectedNode: (sourceId, type, position) =>
+    set((state) => {
+      const source = state.nodes.find((node) => node.id === sourceId);
+      if (!source) return {};
+      const sourceType = source.type as WorkflowNodeType;
+      const targetPosition = avoidOverlap(state.nodes, position ?? { x: source.position.x + nodeWidths[sourceType] + 180, y: source.position.y + 20 });
+      const targetId = createClientId(type);
+      const targetNode: Node = {
+        id: targetId,
+        type,
+        dragHandle: ".node-drag-handle",
+        position: targetPosition,
+        data: {
+          ...(defaults[type] as Record<string, unknown>),
+          referencedFrom: { sourceNodeId: sourceId, sourceNodeType: source.type }
+        }
+      };
+      return { nodes: [...state.nodes, targetNode], edges: addEdge(createFlowEdge(sourceId, targetId), state.edges) };
+    }),
+  updateNodeData: (id, data) =>
+    set((state) => ({
+      nodes: state.nodes.map((node) => {
+        if (node.id !== id) return node;
+        const currentData = (node.data ?? {}) as Record<string, unknown>;
+        const nextData = { ...currentData, ...data };
+        const changed = Object.keys(data).some((key) => currentData[key] !== nextData[key]);
+        return changed ? { ...node, data: nextData } : node;
+      })
+    })),
+  deleteNode: (id) =>
+    set((state) => ({ nodes: state.nodes.filter((node) => node.id !== id), edges: state.edges.filter((edge) => edge.source !== id && edge.target !== id) })),
+  duplicateNode: (id) =>
+    set((state) => {
+      const source = state.nodes.find((node) => node.id === id);
+      if (!source) return {};
+      const type = (source.type as WorkflowNodeType) ?? "text";
+      const duplicated: Node = {
+        ...source,
+        id: createClientId(type),
+        selected: true,
+        position: avoidOverlap(state.nodes, { x: source.position.x + 42, y: source.position.y + 42 }),
+        data: { ...((source.data ?? {}) as Record<string, unknown>), title: `${(source.data as { title?: string } | undefined)?.title ?? "节点"} Copy` }
+      };
+      return {
+        nodes: [...state.nodes.map((node) => ({ ...node, selected: false })), duplicated],
+        edges: state.edges.map((edge) => ({ ...edge, selected: false }))
+      };
+    }),
+  deleteEdge: (id) => set((state) => ({ edges: state.edges.filter((edge) => edge.id !== id) })),
+  deleteEdges: (ids) => set((state) => ({ edges: state.edges.filter((edge) => !ids.includes(edge.id)) })),
+  deleteSelected: () =>
+    set((state) => {
+      const selectedNodeIds = new Set(state.nodes.filter((node) => node.selected).map((node) => node.id));
+      const selectedEdgeIds = new Set(state.edges.filter((edge) => edge.selected).map((edge) => edge.id));
+      if (!selectedNodeIds.size && !selectedEdgeIds.size) return {};
+      return {
+        nodes: state.nodes.filter((node) => !selectedNodeIds.has(node.id)),
+        edges: state.edges.filter((edge) => !selectedEdgeIds.has(edge.id) && !selectedNodeIds.has(edge.source) && !selectedNodeIds.has(edge.target))
+      };
+    }),
+  disconnectNode: (id) => set((state) => ({ edges: state.edges.filter((edge) => edge.source !== id && edge.target !== id) })),
+  disconnectNodeInputs: (id) => set((state) => ({ edges: state.edges.filter((edge) => edge.target !== id) })),
+  disconnectNodeOutputs: (id) => set((state) => ({ edges: state.edges.filter((edge) => edge.source !== id) })),
+  deleteUnconnectedNodes: () =>
+    set((state) => {
+      const connected = new Set(state.edges.flatMap((edge) => [edge.source, edge.target]));
+      return { nodes: state.nodes.filter((node) => connected.has(node.id)) };
+    }),
+  clearCanvas: () => set({ nodes: [], edges: [], selectedNodeId: undefined }),
+  selectAll: () => set((state) => ({ nodes: state.nodes.map((node) => ({ ...node, selected: true })), edges: state.edges.map((edge) => ({ ...edge, selected: true })) })),
+  clearSelection: () => set((state) => ({ nodes: state.nodes.map((node) => ({ ...node, selected: false })), edges: state.edges.map((edge) => ({ ...edge, selected: false })) })),
+  selectEdge: (id) => set((state) => ({ nodes: state.nodes.map((node) => ({ ...node, selected: false })), edges: state.edges.map((edge) => ({ ...edge, selected: edge.id === id })) })),
+  selectNode: (id) => set((state) => ({ nodes: state.nodes.map((node) => ({ ...node, selected: node.id === id })), edges: state.edges.map((edge) => ({ ...edge, selected: false })) })),
+  onNodesChange: (changes) => set((state) => ({ nodes: applyNodeChanges(changes, state.nodes) })),
+  onEdgesChange: (changes) => set((state) => ({ edges: applyEdgeChanges(changes, state.edges) })),
+  connectNodes: (connection) => set((state) => ({ edges: addEdge({ ...connection, type: "studioEdge", animated: true, style: edgeStyle() }, state.edges) })),
+  loadProject: (nodes, edges) => set({ nodes, edges }),
+  getCanvasState: () => {
+    const state = get();
+    return {
+      nodes: state.nodes.map((node) => ({ id: node.id, type: node.type, data: node.data as Record<string, unknown> | undefined })),
+      edges: state.edges.map((edge) => ({ id: edge.id, source: edge.source, target: edge.target }))
+    };
+  },
+  applyAgentWorkflowPlan: (plan) =>
+    set((state) => {
+      const baseX = 160 + state.nodes.length * 24;
+      const baseY = 120 + state.nodes.length * 18;
+      const idByTempId = new Map<string, string>();
+      const plannedNodes = plan.nodes.map((planned, index) => {
+        const type = mapAgentNodeType(planned.type);
+        const id = createClientId(type);
+        idByTempId.set(planned.tempId, id);
+        const position = avoidOverlap([...state.nodes], {
+          x: baseX + (planned.position?.x ?? index * 360),
+          y: baseY + (planned.position?.y ?? 0)
+        });
+        return {
+          id,
+          type,
+          dragHandle: ".node-drag-handle",
+          position,
+          data: {
+            ...(defaults[type] as Record<string, unknown>),
+            title: planned.title,
+            ...(planned.data ?? {}),
+            createdByAgent: true
+          }
+        } satisfies Node;
+      });
+
+      const plannedEdges = plan.edges.flatMap((edge) => {
+        const source = idByTempId.get(edge.sourceTempId);
+        const target = idByTempId.get(edge.targetTempId);
+        return source && target ? [createFlowEdge(source, target)] : [];
+      });
+
+      return {
+        nodes: [...state.nodes, ...plannedNodes],
+        edges: [...state.edges, ...plannedEdges],
+        selectedNodeId: plannedNodes[0]?.id ?? state.selectedNodeId
+      };
+    })
+}));
+
+
