@@ -60,10 +60,14 @@ function mimeTypeFromFilename(filename?: string) {
   return "image/png";
 }
 
-function publicUrlFromBackend(url?: string) {
-  if (!url) return undefined;
-  const publicBaseUrl = process.env.BACKEND_PUBLIC_BASE_URL?.replace(/\/$/, "");
-  if (!publicBaseUrl) return undefined;
+function backendPublicBaseUrl() {
+  return process.env.BACKEND_PUBLIC_BASE_URL?.replace(/\/$/, "");
+}
+
+function publicUrlFromBackendUrl(url?: string) {
+  const publicBaseUrl = backendPublicBaseUrl();
+  if (!url || !publicBaseUrl) return undefined;
+
   if (/^https?:\/\//i.test(url)) {
     try {
       const parsed = new URL(url);
@@ -73,7 +77,36 @@ function publicUrlFromBackend(url?: string) {
       return undefined;
     }
   }
+
   return `${publicBaseUrl}${url.startsWith("/") ? url : `/${url}`}`;
+}
+
+function publicUrlFromLocalPath(localPath?: string) {
+  const publicBaseUrl = backendPublicBaseUrl();
+  if (!localPath || !publicBaseUrl) return undefined;
+
+  const uploadRoot = path.resolve(process.cwd(), process.env.UPLOAD_DIR ?? "./uploads");
+  const absolutePath = path.resolve(localPath);
+  const relativeToUpload = path.relative(uploadRoot, absolutePath);
+
+  if (relativeToUpload && !relativeToUpload.startsWith("..") && !path.isAbsolute(relativeToUpload)) {
+    const urlPath = `/uploads/${relativeToUpload.split(path.sep).map(encodeURIComponent).join("/")}`;
+    return `${publicBaseUrl}${urlPath}`;
+  }
+
+  const normalized = absolutePath.replace(/\\/g, "/");
+  const marker = "/uploads/";
+  const markerIndex = normalized.lastIndexOf(marker);
+  if (markerIndex >= 0) {
+    const urlPath = normalized
+      .slice(markerIndex)
+      .split("/")
+      .map((part, index) => (index === 0 ? "" : encodeURIComponent(part)))
+      .join("/");
+    return `${publicBaseUrl}${urlPath}`;
+  }
+
+  return undefined;
 }
 
 function assertLocalFile(localPath?: string) {
@@ -133,8 +166,11 @@ export async function resolveRemoteAsset(
   } else if (asset.localPath && strategy.prefer === "multipart" && strategy.supportsMultipart) {
     assertLocalFile(asset.localPath);
     result = { type: "multipart", mimeType, filename, localPath: asset.localPath, source: "localPath" };
-  } else if (strategy.supportsPublicUrl && publicUrlFromBackend(asset.url)) {
-    result = { type: "url", url: publicUrlFromBackend(asset.url), mimeType, filename, localPath: asset.localPath, source: "backendPublicUrl" };
+  } else if (strategy.supportsPublicUrl && publicUrlFromBackendUrl(asset.url)) {
+    result = { type: "url", url: publicUrlFromBackendUrl(asset.url), mimeType, filename, localPath: asset.localPath, source: "backendPublicUrl" };
+  } else if (asset.localPath && strategy.supportsPublicUrl && publicUrlFromLocalPath(asset.localPath)) {
+    assertLocalFile(asset.localPath);
+    result = { type: "url", url: publicUrlFromLocalPath(asset.localPath), mimeType, filename, localPath: asset.localPath, source: "backendPublicUrl" };
   } else if (asset.localPath && strategy.supportsPublicUrl) {
     const oss = await uploadLocalFileToOss({
       localPath: asset.localPath,
