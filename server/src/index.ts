@@ -35,12 +35,20 @@ const uploadDir = path.resolve(process.cwd(), process.env.UPLOAD_DIR ?? process.
 const clientDistDir = path.resolve(process.cwd(), "../client/dist");
 
 function localIpAddress() {
+  const candidates: string[] = [];
   for (const addresses of Object.values(os.networkInterfaces())) {
     for (const address of addresses ?? []) {
-      if (address.family === "IPv4" && !address.internal) return address.address;
+      if (address.family === "IPv4" && !address.internal) candidates.push(address.address);
     }
   }
-  return "127.0.0.1";
+  return (
+    candidates.find((ip) => /^192\.168\./.test(ip)) ||
+    candidates.find((ip) => /^10\./.test(ip)) ||
+    candidates.find((ip) => /^172\.(1[6-9]|2\d|3[0-1])\./.test(ip)) ||
+    candidates.find((ip) => !/^198\.18\./.test(ip) && !/^169\.254\./.test(ip)) ||
+    candidates[0] ||
+    "127.0.0.1"
+  );
 }
 
 function allowedOrigins() {
