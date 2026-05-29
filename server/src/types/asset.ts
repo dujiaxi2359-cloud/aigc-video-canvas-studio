@@ -21,6 +21,7 @@ export type Asset = {
   modelId?: string;
   nodeId?: string;
   projectId?: string;
+  ownerUserId?: string;
   prompt?: string;
   negativePrompt?: string;
   generationParams?: Record<string, unknown>;
@@ -33,6 +34,7 @@ export type AssetFolder = {
   name: string;
   parentId: string | null;
   projectId?: string;
+  ownerUserId?: string;
   createdAt: number;
   updatedAt?: number;
 };

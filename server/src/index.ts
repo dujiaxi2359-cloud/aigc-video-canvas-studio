@@ -1,6 +1,7 @@
 import express from "express";
 import cors from "cors";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import dotenv from "dotenv";
 import { getDb } from "./db/database.js";
@@ -28,15 +29,67 @@ if (!process.env.APP_SECRET || process.env.APP_SECRET === "replace-with-a-long-r
 }
 
 const app = express();
+const host = process.env.HOST || "0.0.0.0";
 const port = Number(process.env.PORT ?? 4000);
-const uploadDir = path.resolve(process.cwd(), process.env.UPLOAD_DIR ?? "./uploads");
+const uploadDir = path.resolve(process.cwd(), process.env.UPLOAD_DIR ?? process.env.UPLOADS_DIR ?? "./uploads");
 const clientDistDir = path.resolve(process.cwd(), "../client/dist");
 
-app.use(cors({ origin: ["http://localhost:3000", "http://127.0.0.1:3000", "http://localhost:3001", "http://127.0.0.1:3001"] }));
+function localIpAddress() {
+  for (const addresses of Object.values(os.networkInterfaces())) {
+    for (const address of addresses ?? []) {
+      if (address.family === "IPv4" && !address.internal) return address.address;
+    }
+  }
+  return "127.0.0.1";
+}
+
+function allowedOrigins() {
+  return (process.env.FRONTEND_ORIGIN || "")
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+}
+
+function isPrivateLanOrigin(origin: string) {
+  try {
+    const parsed = new URL(origin);
+    const hostName = parsed.hostname;
+    return (
+      ["localhost", "127.0.0.1", "::1"].includes(hostName) ||
+      /^192\.168\.\d{1,3}\.\d{1,3}$/.test(hostName) ||
+      /^10\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(hostName) ||
+      /^172\.(1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3}$/.test(hostName)
+    );
+  } catch {
+    return false;
+  }
+}
+
+app.use(cors({
+  origin: (origin, callback) => {
+    if (!origin) return callback(null, true);
+    const explicitOrigins = allowedOrigins();
+    if (explicitOrigins.includes(origin)) return callback(null, true);
+    if (process.env.NODE_ENV !== "production" && isPrivateLanOrigin(origin)) return callback(null, true);
+    return callback(new Error(`CORS blocked origin: ${origin}`));
+  }
+}));
 app.use(express.json({ limit: "10mb" }));
 app.use("/uploads", express.static(uploadDir));
 
 app.get("/api/health", (_req, res) => res.json({ ok: true, time: new Date().toISOString(), version: "0.1.0" }));
+app.get("/api/system/share-info", (_req, res) => {
+  const localIp = localIpAddress();
+  const frontendUrl = process.env.FRONTEND_ORIGIN?.split(",")[0]?.trim() || `http://${localIp}:3001`;
+  const backendUrl = process.env.BACKEND_PUBLIC_BASE_URL || `http://${localIp}:${port}`;
+  res.json({
+    ok: true,
+    localIp,
+    frontendUrl,
+    backendUrl,
+    uploadsUrl: `${backendUrl.replace(/\/$/, "")}/uploads`
+  });
+});
 app.use("/api/model-configs", modelConfigRouter);
 app.use("/api/projects", projectRouter);
 app.use("/api/assets", assetRouter);
@@ -73,6 +126,8 @@ app.use((error: unknown, _req: express.Request, res: express.Response, _next: ex
 });
 
 await getDb();
-app.listen(port, () => {
-  console.log(`AIGC Video Canvas Studio API listening on http://localhost:${port}`);
+app.listen(port, host, () => {
+  const localIp = localIpAddress();
+  console.log(`AIGC Video Canvas Studio API listening on http://${host}:${port}`);
+  console.log(`Intranet backend URL: http://${localIp}:${port}`);
 });

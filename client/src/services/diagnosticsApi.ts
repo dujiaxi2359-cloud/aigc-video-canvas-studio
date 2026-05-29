@@ -37,6 +37,14 @@ export type SystemNetworkHealthResult = {
   googleReachable: boolean;
 };
 
+export type ShareInfoResult = {
+  ok: boolean;
+  localIp: string;
+  frontendUrl: string;
+  backendUrl: string;
+  uploadsUrl: string;
+};
+
 export type ProxyMode = "off" | "env" | "manual" | "auto";
 
 export type ProxySettingsResult = {
@@ -69,5 +77,6 @@ export const diagnosticsApi = {
   network: (data: { providerId: string; apiBaseUrl?: string }) =>
     api.post<NetworkDiagnosticResult>("/api/diagnostics/network", data),
   ossHealth: () => api.get<OssHealthResult>("/api/system/oss/health"),
-  systemNetworkHealth: () => api.get<SystemNetworkHealthResult>("/api/system/network/health")
+  systemNetworkHealth: () => api.get<SystemNetworkHealthResult>("/api/system/network/health"),
+  shareInfo: () => api.get<ShareInfoResult>("/api/system/share-info")
 };

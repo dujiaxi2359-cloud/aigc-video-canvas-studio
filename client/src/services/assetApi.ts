@@ -1,4 +1,4 @@
-import { API_BASE_URL, api } from "./api";
+import { api, apiUrl } from "./api";
 import type { Asset, AssetFolder } from "../types/asset";
 
 export type AssetListQuery = {
@@ -28,5 +28,5 @@ export const assetApi = {
   },
   update: (id: string, input: { name?: string; folderId?: string | null }) => api.patch<Asset>(`/api/assets/${id}`, input),
   remove: (id: string) => api.delete(`/api/assets/${id}`),
-  downloadUrl: (id: string) => `${API_BASE_URL}/api/assets/${id}/download`
+  downloadUrl: (id: string) => apiUrl(`/api/assets/${id}/download`)
 };

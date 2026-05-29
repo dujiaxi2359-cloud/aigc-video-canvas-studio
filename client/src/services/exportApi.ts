@@ -1,6 +1,5 @@
 import type { Edge, Node } from "reactflow";
-
-const baseURL = import.meta.env.VITE_API_BASE_URL || window.location.origin;
+import { apiUrl } from "./api";
 
 export type ExportAsset = {
   nodeId?: string;
@@ -81,7 +80,7 @@ export function triggerBlobDownload(blob: Blob, filename: string) {
 }
 
 export async function downloadAsset(url: string, filename: string) {
-  const endpoint = new URL("/api/assets/download", baseURL);
+  const endpoint = new URL(apiUrl("/api/assets/download"), window.location.origin);
   endpoint.searchParams.set("url", url);
   endpoint.searchParams.set("filename", filename);
   await downloadBlob(await fetch(endpoint), filename);
@@ -94,7 +93,7 @@ export function exportProjectJson(project: ExportProject) {
 }
 
 export async function exportProjectPackage(project: ExportProject, assets: ExportAsset[], filename = `aigc_project_export_${timestamp()}.zip`) {
-  const response = await fetch(new URL("/api/export/project-package", baseURL), {
+  const response = await fetch(apiUrl("/api/export/project-package"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ project: sanitizeProjectForExport(project), assetUrls: assets })

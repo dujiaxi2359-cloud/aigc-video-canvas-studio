@@ -16,6 +16,8 @@ export type WorkflowEdge = {
 export type Project = {
   id: string;
   name: string;
+  ownerUserId?: string;
+  sharedWithUserIds?: string[];
   createdAt: number;
   updatedAt: number;
   nodes: WorkflowNode[];

@@ -1,13 +1,12 @@
+import { apiUrl } from "./api";
 import { triggerBlobDownload } from "./exportApi";
 
-const baseURL = import.meta.env.VITE_API_BASE_URL || window.location.origin;
-
 export function downloadAssetById(assetId: string) {
-  window.location.href = new URL(`/api/assets/${assetId}/download`, baseURL).toString();
+  window.location.href = apiUrl(`/api/assets/${assetId}/download`);
 }
 
 export async function downloadAsset(url: string, filename: string) {
-  const response = await fetch(new URL("/api/assets/download", baseURL), {
+  const response = await fetch(apiUrl("/api/assets/download"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ url, filename })

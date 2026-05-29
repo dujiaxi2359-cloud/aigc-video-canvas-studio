@@ -1,8 +1,15 @@
 import { useEffect, useState } from "react";
+import { Copy } from "lucide-react";
 import { Button } from "../common/Button";
 import { Input } from "../common/Input";
 import { Select } from "../common/Select";
-import { diagnosticsApi, type NetworkDiagnosticResult, type OssHealthResult, type ProxySettingsResult } from "../../services/diagnosticsApi";
+import {
+  diagnosticsApi,
+  type NetworkDiagnosticResult,
+  type OssHealthResult,
+  type ProxySettingsResult,
+  type ShareInfoResult
+} from "../../services/diagnosticsApi";
 
 const providers = [
   { id: "google", label: "Google" },
@@ -19,20 +26,15 @@ export function NetworkDiagnosticsPanel() {
   const [apiBaseUrl, setApiBaseUrl] = useState("");
   const [testing, setTesting] = useState(false);
   const [testingOss, setTestingOss] = useState(false);
+  const [copyStatus, setCopyStatus] = useState("");
   const [result, setResult] = useState<NetworkDiagnosticResult | null>(null);
   const [ossResult, setOssResult] = useState<OssHealthResult | null>(null);
   const [proxySettings, setProxySettings] = useState<ProxySettingsResult | null>(null);
+  const [shareInfo, setShareInfo] = useState<ShareInfoResult | null>(null);
 
   useEffect(() => {
-    diagnosticsApi
-      .proxy()
-      .then((settings) => {
-        setProxySettings(settings);
-        if (settings.config.mode !== "auto") {
-          void diagnosticsApi.setProxy({ mode: "auto" }).then(setProxySettings).catch(() => undefined);
-        }
-      })
-      .catch(() => undefined);
+    diagnosticsApi.proxy().then(setProxySettings).catch(() => undefined);
+    diagnosticsApi.shareInfo().then(setShareInfo).catch(() => undefined);
   }, []);
 
   async function testNetwork() {
@@ -46,7 +48,7 @@ export function NetworkDiagnosticsPanel() {
         providerId,
         usingProxy: false,
         errorCode: "NETWORK_ERROR",
-        errorMessage: error instanceof Error ? error.message : "网络诊断失败"
+        errorMessage: error instanceof Error ? error.message : "网络诊断失败，请检查后端服务是否启动。"
       });
     } finally {
       setTesting(false);
@@ -62,10 +64,21 @@ export function NetworkDiagnosticsPanel() {
       setOssResult({
         ok: false,
         code: "OSS_HEALTH_FAILED",
-        message: error instanceof Error ? error.message : "OSS 检测失败"
+        message: error instanceof Error ? error.message : "OSS 检测失败，请检查后端配置。"
       });
     } finally {
       setTestingOss(false);
+    }
+  }
+
+  async function copyShareUrl() {
+    try {
+      const info = shareInfo ?? (await diagnosticsApi.shareInfo());
+      setShareInfo(info);
+      await navigator.clipboard.writeText(info.frontendUrl);
+      setCopyStatus(`已复制：${info.frontendUrl}`);
+    } catch {
+      setCopyStatus("复制失败，请在 Windows CMD 输入 ipconfig，手动查看 IPv4 地址。");
     }
   }
 
@@ -74,9 +87,14 @@ export function NetworkDiagnosticsPanel() {
       <div className="mb-3 flex items-center justify-between gap-3">
         <div>
           <div className="text-[15px] font-semibold text-[#f3f5f7]">网络 / 代理诊断</div>
-          <div className="mt-1 text-[12px] text-[#7d8796]">测试请求从后端 Node 服务发出，用于确认 VPN / 代理是否被后端使用。</div>
+          <div className="mt-1 text-[12px] text-[#7d8796]">
+            测试请求从后端 Node 服务发出，用于确认 VPN / 代理、内网访问和第三方 API 是否正常。
+          </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <Button variant="secondary" onClick={copyShareUrl}>
+            <Copy size={14} /> 复制内网访问地址
+          </Button>
           <Button variant="secondary" disabled={testingOss} onClick={testOss}>
             {testingOss ? "检测中..." : "测试 OSS 连接"}
           </Button>
@@ -87,13 +105,27 @@ export function NetworkDiagnosticsPanel() {
       </div>
 
       <div className="mb-3 rounded-xl border border-white/[0.06] bg-black/[0.14] p-3">
+        <div className="text-[13px] font-semibold text-[#f3f5f7]">公司内网共享</div>
+        <div className="mt-1 text-[12px] leading-5 text-[#7d8796]">
+          同事需要和你在同一个 WiFi / 局域网，并访问下面的前端地址。模型 API Key 仍然只在后端保存，不会暴露到同事浏览器。
+        </div>
+        <div className="mt-2 grid gap-1 text-[12px] leading-5 text-[#a2acba]">
+          <div>前端地址：{shareInfo?.frontendUrl || "点击复制按钮自动检测"}</div>
+          <div>后端地址：{shareInfo?.backendUrl || "-"}</div>
+          <div>上传目录：{shareInfo?.uploadsUrl || "-"}</div>
+          {copyStatus && <div className="text-indigo-200">{copyStatus}</div>}
+        </div>
+      </div>
+
+      <div className="mb-3 rounded-xl border border-white/[0.06] bg-black/[0.14] p-3">
         <div className="text-[13px] font-semibold text-[#f3f5f7]">智能网络模式</div>
         <div className="mt-1 text-[12px] leading-5 text-[#7d8796]">
-          系统会自动识别本地 VPN 代理端口；识别不到代理时，会自动按 TUN / 系统路由直连处理。
+          系统会自动识别本地 VPN 代理端口；识别不到代理时，会按 TUN / 系统路由直连处理。
         </div>
         {proxySettings && (
           <div className="mt-2 text-[12px] leading-5 text-[#a2acba]">
-            当前：{proxySettings.info.usingProxy ? "已自动使用本地代理" : "正在使用 TUN / 系统直连"}
+            当前：
+            {proxySettings.info.usingProxy ? "已自动使用本地代理" : "正在使用 TUN / 系统直连"}
             {proxySettings.info.proxyUrlMasked ? ` · ${proxySettings.info.proxyUrlMasked}` : ""}
           </div>
         )}

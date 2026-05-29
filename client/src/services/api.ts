@@ -1,9 +1,15 @@
-export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || window.location.origin;
+export const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || "").replace(/\/$/, "");
 
 type RequestOptions = RequestInit & { params?: Record<string, string | undefined> };
 
+export function apiUrl(path: string) {
+  if (/^https?:\/\//i.test(path)) return path;
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+  return API_BASE_URL ? `${API_BASE_URL}${normalizedPath}` : normalizedPath;
+}
+
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const url = new URL(path, API_BASE_URL);
+  const url = new URL(apiUrl(path), window.location.origin);
   for (const [key, value] of Object.entries(options.params ?? {})) {
     if (value) url.searchParams.set(key, value);
   }
@@ -18,7 +24,7 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
       }
     });
   } catch {
-    throw new Error(`网络请求失败，请检查本地服务是否启动、接口地址是否可访问，或第三方 API 网络连接是否正常。后端地址：${API_BASE_URL}`);
+    throw new Error(`网络请求失败，请检查后端服务是否启动、接口地址是否可访问。当前后端地址：${API_BASE_URL || window.location.origin}`);
   }
 
   if (!response.ok) {
