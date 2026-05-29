@@ -56,6 +56,84 @@ function classifyWanError(error: unknown): ProviderError {
   return new ProviderError("PROVIDER_ERROR", "阿里 Wan 视频生成失败。", message);
 }
 
+async function readProviderErrorDetailed(response: Response) {
+  const text = await response.text();
+  try {
+    const json = JSON.parse(text) as {
+      message?: string;
+      code?: string;
+      request_id?: string;
+      requestId?: string;
+      error?: { message?: string; code?: string; request_id?: string; requestId?: string };
+    };
+    const code = json.error?.code ?? json.code;
+    const message = json.error?.message ?? json.message;
+    const requestId = json.error?.request_id ?? json.error?.requestId ?? json.request_id ?? json.requestId;
+    return JSON.stringify({ status: response.status, code, message, requestId, raw: json });
+  } catch {
+    return JSON.stringify({ status: response.status, message: text });
+  }
+}
+
+function classifyWanErrorDetailed(error: unknown): ProviderError {
+  if (error instanceof ProviderError) return error;
+  const message = rawErrorMessage(error);
+  const lower = message.toLowerCase();
+  if (lower.includes("invalidapikey") || lower.includes("invalid api-key") || lower.includes("invalid api key") || lower.includes("401")) {
+    return new ProviderError("API_KEY_INVALID", "阿里百炼 API Key 无效。请确认模型配置里的 API Key 是 DashScope / 百炼创建的 Key，并且没有填成掩码 key。", message);
+  }
+  if (lower.includes("accessdenied") || lower.includes("forbidden") || lower.includes("403")) {
+    return new ProviderError("API_KEY_INVALID", "阿里百炼 API Key 权限不足、模型未开通，或 Key 与 DashScope endpoint 区域不匹配。请检查模型权限和地域。", message);
+  }
+  if (lower.includes("model") && (lower.includes("not") || lower.includes("invalid") || lower.includes("unsupported"))) {
+    return new ProviderError("MODEL_PARAM_UNSUPPORTED", "当前阿里 Wan modelName 不存在或不支持当前接口，请检查模型名称、模式和 DashScope 区域。", message);
+  }
+  if (lower.includes("fetch failed") || lower.includes("network") || lower.includes("econn") || lower.includes("dns") || lower.includes("timeout")) {
+    return new ProviderError("NETWORK_ERROR", "DashScope Wan 请求没有成功发出或连接中断。请检查 Node 后端代理 / VPN / TUN，或 DashScope endpoint 是否可访问。", message);
+  }
+  if (lower.includes("region") || lower.includes("endpoint")) {
+    return new ProviderError("PROVIDER_ERROR", "阿里 Wan endpoint 区域可能与 API Key 或模型不匹配，请确认北京、新加坡或美国 endpoint 与 Key 同区域。", message);
+  }
+  return new ProviderError("PROVIDER_ERROR", "阿里 Wan 视频生成失败。", message);
+}
+
+async function wanFetch(stage: "createTask" | "pollTask", endpoint: string, init: RequestInit) {
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    try {
+      console.log("[wan-fetch-start]", {
+        stage,
+        attempt,
+        endpoint,
+        method: init.method ?? "GET",
+        hasBody: Boolean(init.body)
+      });
+      const response = await fetch(endpoint, init);
+      console.log("[wan-fetch-response]", {
+        stage,
+        attempt,
+        endpoint,
+        status: response.status,
+        ok: response.ok
+      });
+      return response;
+    } catch (error) {
+      lastError = error;
+      const cause = error instanceof Error && "cause" in error ? error.cause : undefined;
+      console.error("[wan-fetch-failed]", {
+        stage,
+        attempt,
+        endpoint,
+        errorName: error instanceof Error ? error.name : undefined,
+        errorMessage: error instanceof Error ? error.message : String(error),
+        cause
+      });
+      if (attempt < 2) await new Promise((resolve) => setTimeout(resolve, 1200));
+    }
+  }
+  throw lastError;
+}
+
 function findTaskId(value: unknown): string | undefined {
   if (!value || typeof value !== "object") return undefined;
   const record = value as Record<string, unknown>;
@@ -285,7 +363,7 @@ export async function createWanTask(params: VideoProviderParams, imageUrls: stri
     })
   );
 
-  const response = await fetch(endpoint, {
+  const response = await wanFetch("createTask", endpoint, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${params.apiKey}`,
@@ -295,7 +373,7 @@ export async function createWanTask(params: VideoProviderParams, imageUrls: stri
     body: JSON.stringify(body)
   });
 
-  if (!response.ok) throw classifyWanError(await readProviderError(response));
+  if (!response.ok) throw classifyWanErrorDetailed(await readProviderErrorDetailed(response));
   const json = await response.json();
   const taskId = findTaskId(json);
   if (!taskId) throw new ProviderError("PROVIDER_ERROR", "阿里 Wan 已返回任务创建结果，但没有找到 task_id。", rawErrorMessage(json));
@@ -309,8 +387,8 @@ export async function pollWanTask(params: VideoProviderParams, taskId: string) {
 
   while (Date.now() - startedAt < 15 * 60 * 1000) {
     await new Promise((resolve) => setTimeout(resolve, 5000));
-    const response = await fetch(endpoint, { method: "GET", headers: { Authorization: `Bearer ${params.apiKey}` } });
-    if (!response.ok) throw classifyWanError(await readProviderError(response));
+    const response = await wanFetch("pollTask", endpoint, { method: "GET", headers: { Authorization: `Bearer ${params.apiKey}` } });
+    if (!response.ok) throw classifyWanErrorDetailed(await readProviderErrorDetailed(response));
 
     const json = await response.json();
     lastResponse = json;
@@ -381,6 +459,6 @@ export async function generateVideoWithAlibabaWan(params: VideoProviderParams): 
     };
     return result;
   } catch (error) {
-    throw classifyWanError(error);
+    throw classifyWanErrorDetailed(error);
   }
 }
