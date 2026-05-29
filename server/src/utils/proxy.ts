@@ -60,7 +60,7 @@ function resolveProxy(config: ProxyConfig) {
   return { activeMode: "off" as const, proxyUrl: "", noProxy };
 }
 
-const commonHttpProxyPorts = [7890, 7897, 7899, 10809, 8080, 7078];
+const commonHttpProxyPorts = [17891, 7890, 7897, 7899, 10809, 10808, 8080, 7078];
 
 function canConnect(host: string, port: number, timeoutMs = 260) {
   return new Promise<boolean>((resolve) => {

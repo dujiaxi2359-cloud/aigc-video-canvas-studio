@@ -15,13 +15,13 @@ import { diagnosticsRouter } from "./routes/diagnostics.routes.js";
 import { ossDiagnosticsRouter } from "./routes/ossDiagnostics.routes.js";
 import { agentRouter } from "./routes/agent.routes.js";
 import { exportRouter } from "./routes/export.routes.js";
-import { setupGlobalProxy } from "./utils/proxy.js";
+import { applySmartProxyConfig } from "./utils/proxy.js";
 import { logOssConfig } from "./services/assets/ossUpload.service.js";
 
 dotenv.config({ path: path.resolve(process.cwd(), ".env") });
 dotenv.config({ path: path.resolve(process.cwd(), "../.env") });
 
-setupGlobalProxy();
+await applySmartProxyConfig();
 logOssConfig();
 
 if (!process.env.APP_SECRET || process.env.APP_SECRET === "replace-with-a-long-random-secret") {
