@@ -86,21 +86,44 @@ function calculateOfficialVideoOptions(
     ? nodeContext.videoMode
     : availableVideoModes[0];
   const availableInputModes = Array.from(new Set(availableVideoModes.map(officialModeToLegacyInputMode)));
+  let availableDurations = capability.supportedDurations;
+  let availableResolutions = capability.supportedResolutions;
+  const lockedFields: AvailableVideoOptions["lockedFields"] = {};
+  let warningMessage = capability.runtimeStatus === "not_implemented" ? "当前视频模型 adapter 尚未接入，不能生成。" : undefined;
+
+  const isVeo = capability.providerId === "google" && capability.family === "veo";
+  const requestedResolution = nodeContext.selectedResolution ?? capability.defaultResolution;
+  if (isVeo && selectedMode === "video_extension") {
+    availableResolutions = ["720p"];
+    availableDurations = [8];
+    lockedFields.resolution = true;
+    lockedFields.duration = true;
+    warningMessage = "Veo 视频延展官方只支持 720p，并按 8 秒任务处理。";
+  } else if (isVeo && (selectedMode === "reference_images_to_video" || requestedResolution === "1080p" || requestedResolution === "4k")) {
+    availableDurations = [8];
+    lockedFields.duration = true;
+    warningMessage = selectedMode === "reference_images_to_video"
+      ? "当前参考图模式官方要求 8 秒，已自动调整。"
+      : "当前分辨率官方要求 8 秒，已自动调整。";
+  }
+
+  const normalizedResolution = availableResolutions.includes(nodeContext.selectedResolution ?? "") ? nodeContext.selectedResolution : availableResolutions[0];
+  const normalizedDuration = availableDurations.includes(nodeContext.selectedDuration ?? NaN) ? nodeContext.selectedDuration : availableDurations[0];
 
   return {
-    availableDurations: capability.supportedDurations,
+    availableDurations,
     availableAspectRatios: capability.supportedAspectRatios,
-    availableResolutions: capability.supportedResolutions,
+    availableResolutions,
     availableInputModes,
     availableVideoModes,
     unavailableVideoModes,
     videoModeLabels: officialVideoModeLabels,
-    lockedFields: {},
-    warningMessage: capability.runtimeStatus === "not_implemented" ? "当前视频模型 adapter 尚未接入，不能生成。" : undefined,
+    lockedFields,
+    warningMessage,
     normalizedSelection: {
-      duration: capability.supportedDurations.includes(nodeContext.selectedDuration ?? NaN) ? nodeContext.selectedDuration : capability.defaultDuration,
+      duration: normalizedDuration,
       aspectRatio: capability.supportedAspectRatios.includes(nodeContext.selectedAspectRatio ?? "") ? nodeContext.selectedAspectRatio : capability.defaultAspectRatio,
-      resolution: capability.supportedResolutions.includes(nodeContext.selectedResolution ?? "") ? nodeContext.selectedResolution : capability.defaultResolution,
+      resolution: normalizedResolution,
       videoMode: selectedMode,
       inputMode: selectedMode ? officialModeToLegacyInputMode(selectedMode) : availableInputModes[0]
     }

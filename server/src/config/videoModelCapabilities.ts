@@ -40,7 +40,7 @@ export type VideoModelCapability = {
   officialDocsUrl?: string;
   adapterName: string;
   runtimeStatus: "verified" | "experimental" | "not_implemented";
-  qualityTier: "full" | "fast" | "lite" | "turbo";
+  qualityTier: "standard" | "full" | "fast" | "lite" | "turbo";
   supportedModes: VideoModeCapability[];
   supportedAspectRatios: string[];
   supportedDurations: number[];
@@ -94,9 +94,21 @@ const veoText = mode({ mode: "text_to_video", label: "文生视频", requiredInp
 const veoI2v = mode({ mode: "image_to_video_first_frame", label: "图生视频", requiredInputs: ["prompt", "first_frame"], minImages: 1, maxImages: 1 });
 const veoRef = mode({ mode: "reference_images_to_video", label: "参考图生视频", requiredInputs: ["prompt", "reference_images"], minImages: 1, maxImages: 3 });
 const veoFirstLast = mode({ mode: "image_to_video_first_last_frame", label: "首尾帧视频", requiredInputs: ["prompt", "first_frame", "last_frame"], minImages: 2, maxImages: 2 });
-const veoExtension = mode({ mode: "video_extension", label: "视频延展", requiredInputs: ["prompt", "video"], minVideos: 1, maxVideos: 1, runtimeStatus: "not_implemented", adapterName: "googleVeoVideoExtension" });
+const veoExtension = mode({ mode: "video_extension", label: "视频延展", requiredInputs: ["prompt", "video"], minVideos: 1, maxVideos: 1, adapterName: "googleVeoVideoExtension" });
 
-function veoCapability(input: { modelId: string; modelName: string; displayName: string; officialMode: OfficialVideoMode; qualityTier?: "full" | "fast" | "lite"; runtimeStatus?: "verified" | "experimental" | "not_implemented"; defaultResolution?: string; supportedModes?: VideoModeCapability[] }) {
+function veoCapability(input: {
+  modelId: string;
+  modelName: string;
+  displayName: string;
+  officialMode: OfficialVideoMode;
+  qualityTier?: "standard" | "full" | "fast" | "lite";
+  runtimeStatus?: "verified" | "experimental" | "not_implemented";
+  defaultResolution?: string;
+  supportedModes?: VideoModeCapability[];
+  supportedResolutions?: string[];
+  supportsReferenceImages?: boolean;
+  maxReferenceImages?: number;
+}) {
   return capability({
     providerId: "google",
     family: "veo",
@@ -105,12 +117,12 @@ function veoCapability(input: { modelId: string; modelName: string; displayName:
     displayName: input.displayName,
     officialMode: input.officialMode,
     adapterName: "googleVeo",
-    runtimeStatus: input.runtimeStatus ?? (input.officialMode === "video_extension" ? "not_implemented" : "verified"),
-    qualityTier: input.qualityTier ?? "full",
+    runtimeStatus: input.runtimeStatus ?? "verified",
+    qualityTier: input.qualityTier ?? "standard",
     supportedModes: input.supportedModes ?? [veoText, veoI2v, veoRef, veoFirstLast, veoExtension],
     supportedAspectRatios: ["16:9", "9:16"],
     supportedDurations: [4, 6, 8],
-    supportedResolutions: ["720p", "1080p", "4k"],
+    supportedResolutions: input.supportedResolutions ?? ["720p", "1080p", "4k"],
     defaultAspectRatio: "16:9",
     defaultDuration: 8,
     defaultResolution: input.defaultResolution ?? "1080p",
@@ -118,8 +130,8 @@ function veoCapability(input: { modelId: string; modelName: string; displayName:
     supportsNegativePrompt: false,
     supportsPromptExtend: false,
     supportsSeed: false,
-    supportsReferenceImages: true,
-    maxReferenceImages: 3,
+    supportsReferenceImages: input.supportsReferenceImages ?? true,
+    maxReferenceImages: input.maxReferenceImages,
     resultType: "async_task"
   });
 }
@@ -262,12 +274,13 @@ export const videoModelCapabilities: VideoModelCapability[] = [
     supportsReferenceImages: false,
     maxVideos: 1
   }),
-  veoCapability({ modelId: "google-veo-3-1", modelName: "veo-3.1-generate-preview", displayName: "Veo 3.1 文生视频", officialMode: "text_to_video" }),
-  veoCapability({ modelId: "google-veo-3-1-i2v", modelName: "veo-3.1-generate-preview", displayName: "Veo 3.1 图生视频", officialMode: "image_to_video_first_frame" }),
-  veoCapability({ modelId: "google-veo-3-1-reference", modelName: "veo-3.1-generate-preview", displayName: "Veo 3.1 参考图生视频", officialMode: "reference_images_to_video" }),
-  veoCapability({ modelId: "google-veo-3-1-first-last", modelName: "veo-3.1-generate-preview", displayName: "Veo 3.1 首尾帧视频", officialMode: "image_to_video_first_last_frame" }),
-  veoCapability({ modelId: "google-veo-3-1-extension", modelName: "veo-3.1-generate-preview", displayName: "Veo 3.1 视频延展", officialMode: "video_extension", runtimeStatus: "not_implemented" }),
-  veoCapability({ modelId: "google-veo-3-1-fast", modelName: "veo-3.1-fast-generate-preview", displayName: "Veo 3.1 Fast 文生视频", officialMode: "text_to_video", qualityTier: "fast", defaultResolution: "720p", supportedModes: [veoText, veoI2v] }),
+  veoCapability({ modelId: "google-veo-3-1", modelName: "veo-3.1-generate-preview", displayName: "Veo 3.1 文生视频", officialMode: "text_to_video", qualityTier: "standard", maxReferenceImages: 3 }),
+  veoCapability({ modelId: "google-veo-3-1-i2v", modelName: "veo-3.1-generate-preview", displayName: "Veo 3.1 图生视频", officialMode: "image_to_video_first_frame", qualityTier: "standard", maxReferenceImages: 3 }),
+  veoCapability({ modelId: "google-veo-3-1-reference", modelName: "veo-3.1-generate-preview", displayName: "Veo 3.1 参考图生视频", officialMode: "reference_images_to_video", qualityTier: "standard", maxReferenceImages: 3 }),
+  veoCapability({ modelId: "google-veo-3-1-first-last", modelName: "veo-3.1-generate-preview", displayName: "Veo 3.1 首尾帧视频", officialMode: "image_to_video_first_last_frame", qualityTier: "standard", maxReferenceImages: 3 }),
+  veoCapability({ modelId: "google-veo-3-1-extension", modelName: "veo-3.1-generate-preview", displayName: "Veo 3.1 视频延展", officialMode: "video_extension", qualityTier: "standard", maxReferenceImages: 3 }),
+  veoCapability({ modelId: "google-veo-3-1-fast", modelName: "veo-3.1-fast-generate-preview", displayName: "Veo 3.1 Fast 文生视频", officialMode: "text_to_video", qualityTier: "fast", defaultResolution: "720p", maxReferenceImages: 3 }),
+  veoCapability({ modelId: "google-veo-3-1-lite", modelName: "veo-3.1-lite-generate-preview", displayName: "Veo 3.1 Lite 文生视频", officialMode: "text_to_video", qualityTier: "lite", defaultResolution: "720p", supportedModes: [veoText, veoI2v, veoFirstLast], supportedResolutions: ["720p", "1080p"], supportsReferenceImages: false }),
   capability({
     providerId: "seedance",
     family: "seedance",

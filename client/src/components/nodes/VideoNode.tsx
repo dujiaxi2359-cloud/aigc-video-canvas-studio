@@ -58,7 +58,10 @@ function isRuntimeUsableVideoModel(model: ModelConfig) {
 function modelSupportsVideoCategory(model: ModelConfig, category: OfficialVideoCategory) {
   if (model.providerId === "google" && /^veo/i.test(model.modelName)) {
     if (category === "video_edit") return false;
-    if (category === "video_extension") return model.modelName === "veo-3.1-generate-preview";
+    if (model.modelName === "veo-3.1-lite-generate-preview") {
+      return category === "text_to_video" || category === "image_to_video" || category === "first_last_frame_video";
+    }
+    if (category === "video_extension") return model.modelName === "veo-3.1-generate-preview" || model.modelName === "veo-3.1-fast-generate-preview";
     return true;
   }
   if (model.providerId !== "alibaba") return false;
@@ -69,6 +72,15 @@ function modelSupportsVideoCategory(model: ModelConfig, category: OfficialVideoC
   if (category === "video_edit") return ["happyhorse-1.0-video-edit", "wan2.7-videoedit"].includes(model.modelName);
   if (category === "video_extension") return model.modelName === "wan2.7-i2v-2026-04-25";
   return false;
+}
+
+function disabledCategoryReason(model: ModelConfig | undefined, category: OfficialVideoCategory) {
+  if (!model) return undefined;
+  if (model.providerId === "google" && model.modelName === "veo-3.1-lite-generate-preview") {
+    if (category === "reference_to_video") return "Veo 3.1 Lite 官方不支持 referenceImages，请切换 Veo 3.1 或 Veo 3.1 Fast。";
+    if (category === "video_extension") return "Veo 3.1 Lite 官方不支持视频延展，请切换 Veo 3.1 或 Veo 3.1 Fast。";
+  }
+  return undefined;
 }
 
 function defaultModeForCategory(category: OfficialVideoCategory): OfficialVideoMode {
@@ -202,6 +214,11 @@ export function VideoNode(props: NodeProps<VideoNodeData>) {
   }, [props.data.inputMode, props.data.videoMode, selectedModel, videoCategory]);
 
   function changeVideoCategory(category: OfficialVideoCategory) {
+    const reason = disabledCategoryReason(selectedModel, category);
+    if (reason) {
+      setLocalError(reason);
+      return;
+    }
     const nextMode = defaultModeForCategory(category);
     const nextModel = allModels.find((model) => model.enabled && model.category === "video" && isRuntimeUsableVideoModel(model) && modelSupportsVideoCategory(model, category));
     setVideoCategory(category);
@@ -371,20 +388,25 @@ export function VideoNode(props: NodeProps<VideoNodeData>) {
       footer={
         <div className="nodrag nopan space-y-1.5">
           <div className="flex gap-1 overflow-x-auto">
-            {videoCategories.map((category) => (
-              <button
-                key={category}
-                type="button"
-                onClick={(event) => {
-                  event.preventDefault();
-                  event.stopPropagation();
-                  changeVideoCategory(category);
-                }}
-                className={`nodrag nopan h-7 shrink-0 rounded-full border px-2.5 text-[11px] transition ${videoCategory === category ? "border-[#8b7cf6]/40 bg-[#7c6cf6]/20 text-white" : "border-white/[0.06] bg-white/[0.025] text-[#8c97a7] hover:bg-white/[0.06] hover:text-white"}`}
-              >
-                {officialVideoCategoryLabels[category]}
-              </button>
-            ))}
+            {videoCategories.map((category) => {
+              const disabledReason = disabledCategoryReason(selectedModel, category);
+              return (
+                <button
+                  key={category}
+                  type="button"
+                  disabled={Boolean(disabledReason)}
+                  title={disabledReason}
+                  onClick={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    changeVideoCategory(category);
+                  }}
+                  className={`nodrag nopan h-7 shrink-0 rounded-full border px-2.5 text-[11px] transition disabled:cursor-not-allowed disabled:border-white/[0.035] disabled:bg-white/[0.015] disabled:text-[#535c69] ${videoCategory === category ? "border-[#8b7cf6]/40 bg-[#7c6cf6]/20 text-white" : "border-white/[0.06] bg-white/[0.025] text-[#8c97a7] hover:bg-white/[0.06] hover:text-white"}`}
+                >
+                  {officialVideoCategoryLabels[category]}
+                </button>
+              );
+            })}
           </div>
         {models.length > 0 ? (
           <div className="nodrag nopan flex h-[44px] items-center gap-1.5 overflow-hidden">

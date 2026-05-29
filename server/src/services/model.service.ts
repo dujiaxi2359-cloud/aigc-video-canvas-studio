@@ -369,31 +369,41 @@ export async function generateVideo(input: GenerateVideoRequest) {
   const { model, apiKey, catalogItem, forceMock } = await getGenerationContext(input.modelConfigId, "video");
   logGenerate({ type: "video", model, catalogItem, apiKey, inputMode: input.inputMode });
   const capabilities = catalogItem?.capabilities ?? JSON.parse(model.capabilities_json) as ModelCapabilities;
+  const inputForGeneration: GenerateVideoRequest = { ...input };
+  const requestedOfficialMode = inputForGeneration.videoMode ?? legacyInputModeToOfficialMode(inputForGeneration.inputMode, model.provider_id);
+  if (model.provider_id === "google" && /^veo/i.test(model.model_name ?? "")) {
+    if (requestedOfficialMode === "video_extension") {
+      inputForGeneration.resolution = "720p";
+      inputForGeneration.duration = 8;
+    } else if (requestedOfficialMode === "reference_images_to_video" || inputForGeneration.resolution === "1080p" || inputForGeneration.resolution === "4k") {
+      inputForGeneration.duration = 8;
+    }
+  }
   try {
-    validateVideoRequest(capabilities, input);
+    validateVideoRequest(capabilities, inputForGeneration);
     if (forceMock) {
       const asset = await writeMockAsset({
-        nodeId: input.nodeId,
+        nodeId: inputForGeneration.nodeId,
         kind: "video",
         payload: {
         message: "Mock video generation result. Set ALLOW_MOCK_GENERATION=false to use provider adapters.",
-          prompt: input.prompt,
-          duration: input.duration,
-          aspectRatio: input.aspectRatio,
-          resolution: input.resolution
+          prompt: inputForGeneration.prompt,
+          duration: inputForGeneration.duration,
+          aspectRatio: inputForGeneration.aspectRatio,
+          resolution: inputForGeneration.resolution
         }
       });
       await addHistory({
         generationType: "video",
-        projectId: input.projectId,
-        nodeId: input.nodeId,
-        modelConfigId: input.modelConfigId,
+        projectId: inputForGeneration.projectId,
+        nodeId: inputForGeneration.nodeId,
+        modelConfigId: inputForGeneration.modelConfigId,
         modelDisplayName: model.display_name,
-        inputMode: input.inputMode,
-        prompt: input.prompt,
-        duration: input.duration,
-        aspectRatio: input.aspectRatio,
-        resolution: input.resolution,
+        inputMode: inputForGeneration.inputMode,
+        prompt: inputForGeneration.prompt,
+        duration: inputForGeneration.duration,
+        aspectRatio: inputForGeneration.aspectRatio,
+        resolution: inputForGeneration.resolution,
         status: "success",
         outputPath: asset.localPath,
         outputUrl: asset.url
@@ -404,28 +414,28 @@ export async function generateVideo(input: GenerateVideoRequest) {
     if (!apiKey) throw new Error("请先在设置中心配置该模型 API Key");
     const providerId = model.provider_id ?? "";
     const modelName = model.model_name ?? "";
-    assertFullQualityModel({ qualityMode: input.qualityMode, providerId, catalogModelId: catalogItem?.id, modelName });
+    assertFullQualityModel({ qualityMode: inputForGeneration.qualityMode, providerId, catalogModelId: catalogItem?.id, modelName });
     const officialVideoMode = validateAgainstOfficialVideo({
       providerId,
       catalogModelId: catalogItem?.id,
       modelName,
-      inputMode: input.inputMode,
-      videoMode: input.videoMode,
-      aspectRatio: input.aspectRatio,
-      duration: input.duration,
-      resolution: input.resolution,
-      imageCount: input.imageAssetIds?.length ?? 0,
-      videoCount: input.videoAssetIds?.length ?? 0,
-      audioCount: input.audioAssetIds?.length ?? 0
+      inputMode: inputForGeneration.inputMode,
+      videoMode: inputForGeneration.videoMode,
+      aspectRatio: inputForGeneration.aspectRatio,
+      duration: inputForGeneration.duration,
+      resolution: inputForGeneration.resolution,
+      imageCount: inputForGeneration.imageAssetIds?.length ?? 0,
+      videoCount: inputForGeneration.videoAssetIds?.length ?? 0,
+      audioCount: inputForGeneration.audioAssetIds?.length ?? 0
     });
     const providerParams = {
-      ...input,
+      ...inputForGeneration,
       apiKey,
       apiBaseUrl: model.api_base_url ?? "",
       modelName,
       providerId,
       catalogModelId: catalogItem?.id,
-      qualityMode: input.qualityMode ?? "full_quality"
+      qualityMode: inputForGeneration.qualityMode ?? "full_quality"
     };
 
     const preflightSummary = buildPayloadSummary({
@@ -433,24 +443,24 @@ export async function generateVideo(input: GenerateVideoRequest) {
       selectedModelId: catalogItem?.id,
       actualModelName: modelName,
       inputMode: officialVideoMode,
-      aspectRatio: input.aspectRatio,
-      mappedResolution: input.resolution,
-      duration: input.duration,
-      quality: input.qualityMode ?? "full_quality",
-      qualityMode: input.qualityMode ?? "full_quality",
-      hasImageInput: Boolean(input.imageAssetIds?.length),
-      imageInputCount: input.imageAssetIds?.length ?? 0,
-      prompt: input.prompt,
-      negativePrompt: input.negativePrompt,
+      aspectRatio: inputForGeneration.aspectRatio,
+      mappedResolution: inputForGeneration.resolution,
+      duration: inputForGeneration.duration,
+      quality: inputForGeneration.qualityMode ?? "full_quality",
+      qualityMode: inputForGeneration.qualityMode ?? "full_quality",
+      hasImageInput: Boolean(inputForGeneration.imageAssetIds?.length),
+      imageInputCount: inputForGeneration.imageAssetIds?.length ?? 0,
+      prompt: inputForGeneration.prompt,
+      negativePrompt: inputForGeneration.negativePrompt,
       isMock: false,
       qualityAudit: {
         videoMode: officialVideoMode,
-        qualityMode: input.qualityMode ?? "full_quality",
-        promptExtend: input.promptExtend ?? true,
-        seed: input.seed,
+        qualityMode: inputForGeneration.qualityMode ?? "full_quality",
+        promptExtend: inputForGeneration.promptExtend ?? true,
+        seed: inputForGeneration.seed,
         isFallback: false
       },
-      payloadSummary: { stage: "preflight", legacyInputMode: input.inputMode, officialMode: officialVideoMode }
+      payloadSummary: { stage: "preflight", legacyInputMode: inputForGeneration.inputMode, officialMode: officialVideoMode }
     });
     logOfficialPayload(preflightSummary);
 
@@ -475,26 +485,26 @@ export async function generateVideo(input: GenerateVideoRequest) {
         throw new Error("该视频模型暂未支持真实调用");
     }
 
-    const asset = await createGeneratedAssetFromProvider(result, `video_${input.nodeId}.mp4`, {
+    const asset = await createGeneratedAssetFromProvider(result, `video_${inputForGeneration.nodeId}.mp4`, {
       providerId,
       modelId: catalogItem?.id,
-      nodeId: input.nodeId,
-      projectId: input.projectId,
-      prompt: input.prompt,
-      negativePrompt: input.negativePrompt
+      nodeId: inputForGeneration.nodeId,
+      projectId: inputForGeneration.projectId,
+      prompt: inputForGeneration.prompt,
+      negativePrompt: inputForGeneration.negativePrompt
     });
     const payloadSummary = await enrichPayloadSummaryWithOutput(preflightSummary, result);
     await addHistory({
       generationType: "video",
-      projectId: input.projectId,
-      nodeId: input.nodeId,
-      modelConfigId: input.modelConfigId,
+      projectId: inputForGeneration.projectId,
+      nodeId: inputForGeneration.nodeId,
+      modelConfigId: inputForGeneration.modelConfigId,
       modelDisplayName: model.display_name,
-      inputMode: input.inputMode,
-      prompt: input.prompt,
-      duration: input.duration,
-      aspectRatio: input.aspectRatio,
-      resolution: input.resolution,
+      inputMode: inputForGeneration.inputMode,
+      prompt: inputForGeneration.prompt,
+      duration: inputForGeneration.duration,
+      aspectRatio: inputForGeneration.aspectRatio,
+      resolution: inputForGeneration.resolution,
       status: "success",
       outputPath: asset?.localPath ?? result.localPath,
       outputUrl: asset?.url ?? result.outputUrl

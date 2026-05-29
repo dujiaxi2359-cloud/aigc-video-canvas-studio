@@ -1,4 +1,4 @@
-export type QualityTier = "full" | "fast" | "lite" | "turbo";
+export type QualityTier = "standard" | "full" | "fast" | "lite" | "turbo";
 
 export type OfficialModelCapability = {
   providerId: string;
@@ -31,7 +31,7 @@ export const officialModelCapabilities: OfficialModelCapability[] = [
     officialEndpointType: "gemini.generateVideos",
     adapterName: "googleVeo",
     runtimeStatus: "verified",
-    qualityTier: "full",
+    qualityTier: "standard",
     supportedInputModes: ["text-to-video", "image-to-video", "video-to-video", "reference-to-video", "first-last-frame"],
     supportedAspectRatios: googleVeoRatios,
     supportedDurations: [4, 6, 8],
@@ -64,7 +64,7 @@ export const officialModelCapabilities: OfficialModelCapability[] = [
     adapterName: "googleVeo",
     runtimeStatus: "verified",
     qualityTier: "lite",
-    supportedInputModes: ["text-to-video", "image-to-video"],
+    supportedInputModes: ["text-to-video", "image-to-video", "first-last-frame"],
     supportedAspectRatios: googleVeoRatios,
     supportedDurations: [4, 6, 8],
     supportedResolutions: ["720p", "1080p"],

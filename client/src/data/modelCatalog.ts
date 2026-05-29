@@ -223,8 +223,9 @@ const rawFallbackModelCatalog: ModelCatalogItem[] = [
     duration: { type: "enum", values: [4, 6, 8] },
     aspectRatios: ["16:9", "9:16"],
     resolutions: ["720p", "1080p"],
-    inputModes: ["text-to-video", "image-to-video"],
+    inputModes: ["text-to-video", "image-to-video", "first-last-frame"],
     supportsAudio: true,
+    supportsFirstLastFrame: true,
     supportsReferenceImage: false,
     constraints: [{ when: { resolution: ["1080p"] }, forceDuration: 8, reason: "Veo 3.1 Lite uses fixed 8s at 1080p." }]
   }),

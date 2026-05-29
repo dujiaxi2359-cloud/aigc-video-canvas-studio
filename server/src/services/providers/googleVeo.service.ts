@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { GoogleGenAI, VideoGenerationReferenceType, type Image } from "@google/genai";
+import { capabilityForMode, getVideoModelCapabilityOrLegacy } from "../../config/videoModelCapabilities.js";
 import { getAsset } from "../asset.service.js";
 import { saveGeneratedBuffer } from "../../utils/downloadGeneratedFile.js";
 import { buildPayloadSummary, logOfficialPayload } from "../../utils/generationPayload.js";
@@ -8,6 +9,7 @@ import { metadataToQualityAudit, readGeneratedFileMetadata } from "../../utils/m
 import { ProviderError, rawErrorMessage } from "../../utils/providerErrors.js";
 import { mapVideoParams } from "../../utils/videoParams.js";
 import { legacyInputModeToOfficialMode } from "../../types/videoModes.js";
+import type { OfficialVideoMode } from "../../types/videoModes.js";
 import { parseVeoOperationResult, type VeoOperationParseResult } from "./googleVeo/veoOperationParser.js";
 import type { ProviderGenerateResult, VideoProviderParams } from "./providerTypes.js";
 
@@ -39,6 +41,80 @@ function aspectRatioOf(width?: number, height?: number) {
   const gcd = (a: number, b: number): number => (b ? gcd(b, a % b) : a);
   const divisor = gcd(width, height);
   return `${Math.round(width / divisor)}:${Math.round(height / divisor)}`;
+}
+
+function isVeoLite(modelName: string) {
+  return modelName === "veo-3.1-lite-generate-preview";
+}
+
+export function normalizeVeoParams(params: VideoProviderParams, officialMode: OfficialVideoMode) {
+  const capability = getVideoModelCapabilityOrLegacy("google", params.catalogModelId, params.modelName, officialMode);
+  const modeCapability = capability ? capabilityForMode(capability, officialMode) : undefined;
+  if (!capability || !modeCapability) {
+    throw new ProviderError("MODEL_MODE_UNSUPPORTED", "当前 Veo 模型不支持该视频模式，请切换官方支持的模式。");
+  }
+
+  const imageCount = params.imageAssetIds?.length ?? 0;
+  const videoCount = params.videoAssetIds?.length ?? 0;
+  if (isVeoLite(params.modelName) && officialMode === "reference_images_to_video") {
+    throw new ProviderError("MODEL_MODE_UNSUPPORTED", "Veo 3.1 Lite 官方不支持 referenceImages，请切换 Veo 3.1 或 Veo 3.1 Fast。");
+  }
+  if (isVeoLite(params.modelName) && officialMode === "video_extension") {
+    throw new ProviderError("MODEL_MODE_UNSUPPORTED", "Veo 3.1 Lite 官方不支持视频延展，请切换 Veo 3.1 或 Veo 3.1 Fast。");
+  }
+  if (isVeoLite(params.modelName) && params.resolution === "4k") {
+    throw new ProviderError("MODEL_PARAM_UNSUPPORTED", "Veo 3.1 Lite 官方不支持 4k，请切换 720p / 1080p 或切换 Veo 3.1。");
+  }
+  if (officialMode === "reference_images_to_video" && imageCount > 3) {
+    throw new ProviderError("MODEL_PARAM_UNSUPPORTED", "Veo 参考图生视频最多支持 3 张参考图，请减少参考图数量。");
+  }
+  if (officialMode === "image_to_video_first_frame" && imageCount < 1) {
+    throw new ProviderError("MISSING_INPUT_ASSET", "图生视频需要连接一张首帧图片。");
+  }
+  if (officialMode === "reference_images_to_video" && imageCount < 1) {
+    throw new ProviderError("MISSING_INPUT_ASSET", "参考图生视频需要至少一张参考图片。");
+  }
+  if (officialMode === "image_to_video_first_last_frame" && imageCount < 2) {
+    throw new ProviderError("MISSING_INPUT_ASSET", "首尾帧视频需要连接首帧图和尾帧图。");
+  }
+  if (officialMode === "video_extension" && videoCount < 1) {
+    throw new ProviderError("MISSING_VIDEO_INPUT", "视频延展需要连接一个来自 Veo 生成结果的视频。");
+  }
+
+  let resolution = params.resolution || capability.defaultResolution;
+  let durationSeconds = params.duration || capability.defaultDuration;
+  let durationAutoAdjusted = false;
+  let resolutionAutoAdjusted = false;
+
+  if (officialMode === "video_extension") {
+    if (resolution !== "720p") resolutionAutoAdjusted = true;
+    resolution = "720p";
+    if (durationSeconds !== 8) durationAutoAdjusted = true;
+    durationSeconds = 8;
+  } else if (officialMode === "reference_images_to_video" || resolution === "1080p" || resolution === "4k") {
+    if (durationSeconds !== 8) durationAutoAdjusted = true;
+    durationSeconds = 8;
+  }
+
+  if (!capability.supportedResolutions.includes(resolution)) {
+    throw new ProviderError("MODEL_PARAM_UNSUPPORTED", `当前 Veo 模型不支持 ${resolution} 分辨率。`);
+  }
+  if (!capability.supportedAspectRatios.includes(params.aspectRatio)) {
+    throw new ProviderError("MODEL_PARAM_UNSUPPORTED", `当前 Veo 模型不支持 ${params.aspectRatio} 比例。`);
+  }
+  if (!capability.supportedDurations.includes(durationSeconds)) {
+    throw new ProviderError("MODEL_PARAM_UNSUPPORTED", `当前 Veo 模型不支持 ${durationSeconds}s 时长。`);
+  }
+
+  return {
+    capability,
+    modeCapability,
+    supportsCurrentMode: true,
+    resolution,
+    durationSeconds,
+    durationAutoAdjusted,
+    resolutionAutoAdjusted
+  };
 }
 
 function classifyGoogleVeoError(error: unknown): ProviderError {
@@ -110,6 +186,35 @@ function stripAudit(image: VeoInputImage): Image {
   return {
     imageBytes: image.imageBytes,
     mimeType: image.mimeType
+  };
+}
+
+async function assetVideoForExtension(assetId: string) {
+  const asset = await getAsset(assetId);
+  if (!asset?.localPath || !fs.existsSync(asset.localPath)) {
+    throw new ProviderError("MISSING_VIDEO_INPUT", "Veo 视频延展引用的视频素材不存在或已被删除。");
+  }
+  const providerId = asset.providerId;
+  const modelId = asset.modelId ?? "";
+  if (providerId !== "google" || !/veo/i.test(modelId)) {
+    throw new ProviderError("MODEL_MODE_UNSUPPORTED", "Veo 视频延展必须使用之前 Veo 生成的视频结果，不能直接使用普通上传视频或本地 mp4。");
+  }
+  const metadata = await readGeneratedFileMetadata(asset.localPath);
+  return {
+    video: {
+      videoBytes: fs.readFileSync(asset.localPath).toString("base64"),
+      mimeType: asset.mimeType || "video/mp4"
+    },
+    audit: {
+      assetId,
+      inputVideoSource: "localPath",
+      inputVideoWidth: metadata.width,
+      inputVideoHeight: metadata.height,
+      inputVideoDuration: metadata.duration,
+      inputVideoFileSize: metadata.fileSize,
+      usesOriginalFile: true,
+      usesPreviewUrl: false
+    }
   };
 }
 
@@ -188,22 +293,23 @@ async function downloadVeoVideoResult(input: {
 export async function generateVideoWithGoogleVeo(params: VideoProviderParams): Promise<ProviderGenerateResult> {
   if (!params.apiKey) throw new ProviderError("API_KEY_INVALID", "请先在设置中心配置该模型 API Key。");
   if (params.apiKey.includes("*")) throw new ProviderError("API_KEY_INVALID", "Google API Key 读取到的是 maskedKey，请在设置中心重新填写完整 API Key。");
-  if (params.inputMode === "video-to-video") {
+  if (params.inputMode === "video-to-video" && params.videoMode !== "video_extension") {
     throw new ProviderError("ADAPTER_NOT_IMPLEMENTED", "Google Veo 当前 video-to-video 的视频输入参数尚未接入。");
   }
 
   try {
     const ai = new GoogleGenAI({ apiKey: params.apiKey });
     const officialMode = params.videoMode ?? legacyInputModeToOfficialMode(params.inputMode, "google");
-    const mapped = mapVideoParams("google", params.modelName, officialMode, params.aspectRatio, params.resolution, params.duration);
+    const veoParams = normalizeVeoParams(params, officialMode);
+    const mapped = mapVideoParams("google", params.modelName, officialMode, params.aspectRatio, veoParams.resolution, veoParams.durationSeconds);
     const inputAudits: Array<Record<string, unknown>> = [];
 
     const config: Record<string, unknown> = {
       numberOfVideos: Math.max(1, params.generateCount || 1),
       aspectRatio: mapped.aspectRatio,
-      durationSeconds: mapped.durationSeconds,
       resolution: mapped.resolution
     };
+    if (officialMode !== "video_extension") config.durationSeconds = mapped.durationSeconds;
     const request: Record<string, unknown> = {
       model: params.modelName,
       prompt: params.prompt,
@@ -238,6 +344,15 @@ export async function generateVideoWithGoogleVeo(params: VideoProviderParams): P
       }));
     }
 
+    if (officialMode === "video_extension") {
+      if (!params.videoAssetIds?.length) throw new ProviderError("MISSING_VIDEO_INPUT", "视频延展需要连接一个来自 Veo 生成结果的视频。");
+      const extensionVideo = await assetVideoForExtension(params.videoAssetIds[0]);
+      inputAudits.push(extensionVideo.audit);
+      request.video = extensionVideo.video;
+      delete config.aspectRatio;
+      delete config.durationSeconds;
+    }
+
     const payloadSummary = buildPayloadSummary({
       providerId: "google",
       selectedModelId: params.catalogModelId,
@@ -268,9 +383,15 @@ export async function generateVideoWithGoogleVeo(params: VideoProviderParams): P
       payloadSummary: {
         endpointType: "gemini.generateVideos",
         officialMode,
+        selectedMode: officialMode,
+        supportsCurrentMode: veoParams.supportsCurrentMode,
+        qualityTier: veoParams.capability.qualityTier,
         configAspectRatio: config.aspectRatio,
         configResolution: config.resolution,
         configDurationSeconds: config.durationSeconds,
+        durationAutoAdjusted: veoParams.durationAutoAdjusted,
+        resolutionAutoAdjusted: veoParams.resolutionAutoAdjusted,
+        numberOfVideos: config.numberOfVideos,
         hasInlineData: Boolean(request.image || config.lastFrame || config.referenceImages),
         referenceImageCount: Array.isArray(config.referenceImages) ? config.referenceImages.length : 0
       }

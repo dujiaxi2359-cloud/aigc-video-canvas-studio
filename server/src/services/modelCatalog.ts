@@ -196,10 +196,11 @@ const rawModelCatalog: ModelCatalogItem[] = [
     ]
   }),
   video("google-veo-3-1-lite", "google", "veo-3.1-lite-generate-preview", "Veo 3.1 Lite", "text-to-video", {
-    inputModes: ["text-to-video", "image-to-video"],
+    inputModes: ["text-to-video", "image-to-video", "first-last-frame"],
     duration: { type: "enum", values: [4, 6, 8] },
     aspectRatios: ["16:9", "9:16"],
     resolutions: ["720p", "1080p"],
+    supportsFirstLastFrame: true,
     supportsReferenceImage: false,
     supportsAudio: true,
     constraints: [{ when: { resolution: ["1080p"] }, forceDuration: 8, reason: "Veo 3.1 Lite 在 1080p 下固定为 8 秒" }]
