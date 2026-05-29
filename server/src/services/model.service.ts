@@ -211,7 +211,12 @@ function validateAgainstOfficialVideo(input: {
 }) {
   const mode = input.videoMode ?? legacyInputModeToOfficialMode(input.inputMode, input.providerId);
   const capability = getVideoModelCapabilityOrLegacy(input.providerId, input.catalogModelId, input.modelName, mode);
-  if (!capability) return legacyInputModeToOfficialMode(input.inputMode, input.providerId);
+  if (!capability) {
+    if (input.providerId === "google" && /veo/i.test(`${input.catalogModelId ?? ""} ${input.modelName}`)) {
+      throw new Error(`当前 Veo 模型不支持 ${mode} 视频模式，请切换到该分类下支持的 Veo 模型。`);
+    }
+    return legacyInputModeToOfficialMode(input.inputMode, input.providerId);
+  }
   if (capability.runtimeStatus === "not_implemented") {
     throw new Error(`${capability.displayName} 的真实视频 adapter 尚未接入，不能假装生成成功。`);
   }

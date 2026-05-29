@@ -25,6 +25,7 @@ export type ResolvedRemoteAsset = {
   localPath?: string;
   width?: number;
   height?: number;
+  aspectRatio?: string;
   fileSize?: number;
   source?: "publicUrl" | "remoteUrl" | "localPath" | "backendPublicUrl" | "oss";
   wasCompressed?: boolean;
@@ -129,6 +130,11 @@ export function readLocalFileAsStream(localPath: string) {
 function attachLocalMetadata(result: ResolvedRemoteAsset, metadata: Awaited<ReturnType<typeof readGeneratedFileMetadata>>) {
   result.width = metadata.width;
   result.height = metadata.height;
+  if (metadata.width && metadata.height) {
+    const gcd = (a: number, b: number): number => (b ? gcd(b, a % b) : a);
+    const divisor = gcd(metadata.width, metadata.height);
+    result.aspectRatio = `${Math.round(metadata.width / divisor)}:${Math.round(metadata.height / divisor)}`;
+  }
   result.fileSize = metadata.fileSize;
   result.wasCompressed = false;
   return result;
@@ -202,6 +208,7 @@ export async function resolveRemoteAsset(
     resultSource: result?.source,
     width: result?.width,
     height: result?.height,
+    aspectRatio: result?.aspectRatio,
     fileSize: result?.fileSize
   });
 

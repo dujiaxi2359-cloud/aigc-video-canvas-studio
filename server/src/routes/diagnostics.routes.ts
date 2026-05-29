@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { applyProxyConfig, applySmartProxyConfig, getProxyConfig, getProxyEnvironmentInfo, getProxyInfo, type ProxyMode } from "../utils/proxy.js";
+import { listModelConfigs } from "../services/modelConfig.service.js";
 
 export const diagnosticsRouter = Router();
 
@@ -35,13 +36,13 @@ diagnosticsRouter.post("/proxy", async (req, res) => {
   });
 });
 
-function endpointFor(providerId: ProviderId, apiBaseUrl?: string) {
+async function endpointFor(providerId: ProviderId, apiBaseUrl?: string) {
   if (apiBaseUrl) return apiBaseUrl;
   switch (providerId) {
     case "google":
       return "https://generativelanguage.googleapis.com";
     case "azure-openai":
-      return "";
+      return (await listModelConfigs()).find((item) => item.providerId === "azure-openai" && item.apiBaseUrl)?.apiBaseUrl ?? "";
     case "alibaba":
       return "https://dashscope.aliyuncs.com/api/v1";
     case "openai":
@@ -65,7 +66,7 @@ function networkErrorMessage(providerId: ProviderId) {
 
 diagnosticsRouter.post("/network", async (req, res) => {
   const providerId = req.body?.providerId as ProviderId;
-  const endpoint = endpointFor(providerId, req.body?.apiBaseUrl);
+  const endpoint = await endpointFor(providerId, req.body?.apiBaseUrl);
   const proxy = getProxyConfig().mode === "auto" ? await applySmartProxyConfig(getProxyConfig()) : getProxyInfo();
 
   if (!providerId || !endpoint) {
