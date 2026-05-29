@@ -189,7 +189,36 @@ function stripAudit(image: VeoInputImage): Image {
   };
 }
 
-async function assetVideoForExtension(assetId: string) {
+function stringFromUnknown(value: unknown) {
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function storedVeoVideoUri(generationParams: Record<string, unknown> | undefined) {
+  const nested = generationParams?.payloadSummary;
+  if (nested && typeof nested === "object") {
+    const summary = nested as Record<string, unknown>;
+    return stringFromUnknown(summary.googleVideoUri) ?? stringFromUnknown(summary.videoUri);
+  }
+  return stringFromUnknown(generationParams?.googleVideoUri) ?? stringFromUnknown(generationParams?.videoUri);
+}
+
+async function waitForGoogleFileActive(ai: GoogleGenAI, fileName: string) {
+  let file = await ai.files.get({ name: fileName });
+  const startedAt = Date.now();
+  while (file.state === "PROCESSING") {
+    if (Date.now() - startedAt > 2 * 60 * 1000) {
+      throw new ProviderError("VEO_VIDEO_DOWNLOAD_FAILED", "Google Veo 视频延展输入视频上传后处理超时，请稍后重试。");
+    }
+    await sleep(3000);
+    file = await ai.files.get({ name: fileName });
+  }
+  if (file.state === "FAILED") {
+    throw new ProviderError("VEO_VIDEO_DOWNLOAD_FAILED", "Google Veo 视频延展输入视频处理失败，请重新生成上一段视频后再延展。", rawErrorMessage(file.error));
+  }
+  return file;
+}
+
+async function assetVideoForExtension(assetId: string, ai: GoogleGenAI) {
   const asset = await getAsset(assetId);
   if (!asset?.localPath || !fs.existsSync(asset.localPath)) {
     throw new ProviderError("MISSING_VIDEO_INPUT", "Veo 视频延展引用的视频素材不存在或已被删除。");
@@ -200,14 +229,36 @@ async function assetVideoForExtension(assetId: string) {
     throw new ProviderError("MODEL_MODE_UNSUPPORTED", "Veo 视频延展必须使用之前 Veo 生成的视频结果，不能直接使用普通上传视频或本地 mp4。");
   }
   const metadata = await readGeneratedFileMetadata(asset.localPath);
+  const storedUri = storedVeoVideoUri(asset.generationParams);
+  let fileName: string | undefined;
+  let videoUri = storedUri;
+  let source = storedUri ? "stored_google_uri" : "uploaded_google_file";
+  if (!videoUri) {
+    const uploaded = await ai.files.upload({
+      file: asset.localPath,
+      config: {
+        mimeType: asset.mimeType || "video/mp4",
+        displayName: asset.fileName || path.basename(asset.localPath)
+      }
+    });
+    const activeFile = uploaded.name ? await waitForGoogleFileActive(ai, uploaded.name) : uploaded;
+    fileName = activeFile.name ?? uploaded.name;
+    videoUri = activeFile.uri ?? uploaded.uri;
+    if (!videoUri && fileName) videoUri = fileName;
+  }
+  if (!videoUri) {
+    throw new ProviderError("VEO_VIDEO_DOWNLOAD_FAILED", "Google Veo 视频延展输入视频已经准备，但没有获得可传给 Google 的文件 URI。");
+  }
   return {
     video: {
-      videoBytes: fs.readFileSync(asset.localPath).toString("base64"),
+      uri: videoUri,
       mimeType: asset.mimeType || "video/mp4"
     },
     audit: {
       assetId,
-      inputVideoSource: "localPath",
+      inputVideoSource: source,
+      googleFileName: fileName,
+      googleVideoUriExists: Boolean(videoUri),
       inputVideoWidth: metadata.width,
       inputVideoHeight: metadata.height,
       inputVideoDuration: metadata.duration,
@@ -346,7 +397,7 @@ export async function generateVideoWithGoogleVeo(params: VideoProviderParams): P
 
     if (officialMode === "video_extension") {
       if (!params.videoAssetIds?.length) throw new ProviderError("MISSING_VIDEO_INPUT", "视频延展需要连接一个来自 Veo 生成结果的视频。");
-      const extensionVideo = await assetVideoForExtension(params.videoAssetIds[0]);
+      const extensionVideo = await assetVideoForExtension(params.videoAssetIds[0], ai);
       inputAudits.push(extensionVideo.audit);
       request.video = extensionVideo.video;
       delete config.aspectRatio;
@@ -449,6 +500,8 @@ export async function generateVideoWithGoogleVeo(params: VideoProviderParams): P
         operationResponseKeys: parsed.rawSummary.responseKeys,
         parsedVideoUriExists: Boolean(parsed.videoUri),
         parsedSourceShape: parsed.sourceShape,
+        googleVideoUri: parsed.videoUri,
+        googleVideoSourceShape: parsed.sourceShape,
         downloadStatus: "success",
         localFileExists: true,
         output: outputMetadata
