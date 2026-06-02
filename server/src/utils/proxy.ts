@@ -185,3 +185,22 @@ export function setupGlobalProxy() {
   }
   return applyProxyConfig(runtimeProxyConfig);
 }
+
+export async function withTemporaryDirectNetwork<T>(label: string, fn: () => Promise<T>): Promise<T> {
+  const previousConfig = { ...runtimeProxyConfig };
+  console.warn("[proxy] temporary direct fallback", { label, previousMode: previousConfig.mode });
+  setGlobalDispatcher(new Agent());
+  currentProxyInfo = {
+    usingProxy: false,
+    mode: previousConfig.mode,
+    activeMode: "off",
+    noProxy: previousConfig.noProxy,
+    message: "临时直连重试：当前请求绕过本地 HTTP 代理，交给 TUN / 系统路由处理。"
+  };
+
+  try {
+    return await fn();
+  } finally {
+    await applySmartProxyConfig(previousConfig);
+  }
+}

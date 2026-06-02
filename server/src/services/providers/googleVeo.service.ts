@@ -7,6 +7,7 @@ import { saveGeneratedBuffer } from "../../utils/downloadGeneratedFile.js";
 import { buildPayloadSummary, logOfficialPayload } from "../../utils/generationPayload.js";
 import { metadataToQualityAudit, readGeneratedFileMetadata } from "../../utils/mediaMetadata.js";
 import { ProviderError, rawErrorMessage } from "../../utils/providerErrors.js";
+import { withTemporaryDirectNetwork } from "../../utils/proxy.js";
 import { mapVideoParams } from "../../utils/videoParams.js";
 import { legacyInputModeToOfficialMode } from "../../types/videoModes.js";
 import type { OfficialVideoMode } from "../../types/videoModes.js";
@@ -45,6 +46,33 @@ function aspectRatioOf(width?: number, height?: number) {
 
 function isVeoLite(modelName: string) {
   return modelName === "veo-3.1-lite-generate-preview";
+}
+
+function isGoogleNetworkLikeError(error: unknown) {
+  const lower = rawErrorMessage(error).toLowerCase();
+  return (
+    lower.includes("fetch failed") ||
+    lower.includes("terminated") ||
+    lower.includes("und_err") ||
+    lower.includes("socket") ||
+    lower.includes("econn") ||
+    lower.includes("etimedout") ||
+    lower.includes("timeout") ||
+    lower.includes("network")
+  );
+}
+
+async function retryGoogleNetwork<T>(label: string, fn: () => Promise<T>): Promise<T> {
+  try {
+    return await fn();
+  } catch (error) {
+    if (!isGoogleNetworkLikeError(error)) throw error;
+    console.warn("[google-veo-network-retry]", {
+      label,
+      reason: rawErrorMessage(error).slice(0, 240)
+    });
+    return withTemporaryDirectNetwork(`google-veo:${label}`, fn);
+  }
 }
 
 export function normalizeVeoParams(params: VideoProviderParams, officialMode: OfficialVideoMode) {
@@ -203,14 +231,14 @@ function storedVeoVideoUri(generationParams: Record<string, unknown> | undefined
 }
 
 async function waitForGoogleFileActive(ai: GoogleGenAI, fileName: string) {
-  let file = await ai.files.get({ name: fileName });
+  let file = await retryGoogleNetwork("files.get.initial", () => ai.files.get({ name: fileName }));
   const startedAt = Date.now();
   while (file.state === "PROCESSING") {
     if (Date.now() - startedAt > 2 * 60 * 1000) {
       throw new ProviderError("VEO_VIDEO_DOWNLOAD_FAILED", "Google Veo 视频延展输入视频上传后处理超时，请稍后重试。");
     }
     await sleep(3000);
-    file = await ai.files.get({ name: fileName });
+    file = await retryGoogleNetwork("files.get.poll", () => ai.files.get({ name: fileName }));
   }
   if (file.state === "FAILED") {
     throw new ProviderError("VEO_VIDEO_DOWNLOAD_FAILED", "Google Veo 视频延展输入视频处理失败，请重新生成上一段视频后再延展。", rawErrorMessage(file.error));
@@ -234,13 +262,13 @@ async function assetVideoForExtension(assetId: string, ai: GoogleGenAI) {
   let videoUri = storedUri;
   let source = storedUri ? "stored_google_uri" : "uploaded_google_file";
   if (!videoUri) {
-    const uploaded = await ai.files.upload({
+    const uploaded = await retryGoogleNetwork("files.upload.extension-video", () => ai.files.upload({
       file: asset.localPath,
       config: {
         mimeType: asset.mimeType || "video/mp4",
         displayName: asset.fileName || path.basename(asset.localPath)
       }
-    });
+    }));
     const activeFile = uploaded.name ? await waitForGoogleFileActive(ai, uploaded.name) : uploaded;
     fileName = activeFile.name ?? uploaded.name;
     videoUri = activeFile.uri ?? uploaded.uri;
@@ -307,17 +335,22 @@ async function downloadVeoVideoResult(input: {
       JSON.stringify(parsed.rawSummary)
     );
   }
+  const videoUri = parsed.videoUri;
 
   try {
     const target = generatedPath("video_google_veo");
-    await ai.files.download({ file: parsed.videoUri, downloadPath: target.localPath });
+    await withTemporaryDirectNetwork("google-veo:files.download.result", () =>
+      ai.files.download({ file: videoUri, downloadPath: target.localPath })
+    );
     await assertSavedVideo(target.localPath);
     return target;
   } catch (sdkError) {
     try {
-      const response = await fetch(parsed.videoUri, {
-        headers: { "x-goog-api-key": apiKey }
-      });
+      const response = await withTemporaryDirectNetwork("google-veo:fetch.download.result", () =>
+        fetch(videoUri, {
+          headers: { "x-goog-api-key": apiKey }
+        })
+      );
       if (!response.ok) throw new Error(`${response.status} ${await response.text()}`);
       const saved = await saveGeneratedBuffer({
         buffer: Buffer.from(await response.arrayBuffer()),
@@ -334,7 +367,7 @@ async function downloadVeoVideoResult(input: {
         rawErrorMessage({
           sdkError,
           fetchError,
-          uriKind: parsed.videoUri.startsWith("http") ? "http" : "file"
+          uriKind: videoUri.startsWith("http") ? "http" : "file"
         })
       );
     }
@@ -449,14 +482,16 @@ export async function generateVideoWithGoogleVeo(params: VideoProviderParams): P
     });
     logOfficialPayload(payloadSummary);
 
-    let operation = await ai.models.generateVideos(request as unknown as Parameters<typeof ai.models.generateVideos>[0]);
+    let operation = await retryGoogleNetwork("models.generateVideos", () =>
+      ai.models.generateVideos(request as unknown as Parameters<typeof ai.models.generateVideos>[0])
+    );
     const startedAt = Date.now();
     while (!operation.done) {
       if (Date.now() - startedAt > 10 * 60 * 1000) {
         throw new ProviderError("VEO_OPERATION_TIMEOUT", "Google Veo 视频生成任务超时，请稍后重试或检查当前模型负载。");
       }
       await sleep(10000);
-      operation = await ai.operations.getVideosOperation({ operation });
+      operation = await retryGoogleNetwork("operations.getVideosOperation", () => ai.operations.getVideosOperation({ operation }));
     }
 
     const parsed = parseVeoOperationResult(operation);
