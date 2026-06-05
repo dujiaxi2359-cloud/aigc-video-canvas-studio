@@ -102,9 +102,7 @@ function calculateOfficialVideoOptions(
   } else if (isVeo && (selectedMode === "reference_images_to_video" || requestedResolution === "1080p" || requestedResolution === "4k")) {
     availableDurations = [8];
     lockedFields.duration = true;
-    warningMessage = selectedMode === "reference_images_to_video"
-      ? "当前参考图模式官方要求 8 秒，已自动调整。"
-      : "当前分辨率官方要求 8 秒，已自动调整。";
+    warningMessage = "当前模式官方要求 8 秒，已自动调整。";
   }
 
   const normalizedResolution = availableResolutions.includes(nodeContext.selectedResolution ?? "") ? nodeContext.selectedResolution : availableResolutions[0];

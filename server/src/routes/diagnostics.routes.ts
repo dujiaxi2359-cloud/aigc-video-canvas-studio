@@ -1,4 +1,6 @@
-import { Router } from "express";
+import { Router, type Request } from "express";
+import fs from "node:fs";
+import path from "node:path";
 import { applyProxyConfig, applySmartProxyConfig, getProxyConfig, getProxyEnvironmentInfo, getProxyInfo, type ProxyMode } from "../utils/proxy.js";
 import { listModelConfigs } from "../services/modelConfig.service.js";
 
@@ -6,11 +8,69 @@ export const diagnosticsRouter = Router();
 
 type ProviderId = "google" | "azure-openai" | "alibaba" | "openai" | "kling" | "grok" | "seedance";
 
+function isLocalAdminRequest(req: Request) {
+  const ip = req.ip || req.socket.remoteAddress || "";
+  const forwarded = String(req.headers["x-forwarded-for"] ?? "").split(",")[0]?.trim();
+  const candidates = [ip, forwarded].filter(Boolean);
+  return candidates.some((item) =>
+    item === "127.0.0.1" ||
+    item === "::1" ||
+    item === "::ffff:127.0.0.1" ||
+    item === "localhost"
+  );
+}
+
+function veoDebugDir() {
+  return path.resolve(process.cwd(), "data/debug/veo-operations");
+}
+
+function readVeoDebugFiles() {
+  const dir = veoDebugDir();
+  if (!fs.existsSync(dir)) return [];
+  return fs.readdirSync(dir)
+    .filter((file) => file.endsWith(".json"))
+    .map((file) => {
+      const filePath = path.join(dir, file);
+      const stat = fs.statSync(filePath);
+      let parsed: Record<string, unknown> = {};
+      try {
+        parsed = JSON.parse(fs.readFileSync(filePath, "utf8")) as Record<string, unknown>;
+      } catch {
+        parsed = {};
+      }
+      return {
+        file,
+        filePath,
+        createdAt: parsed.createdAt ?? new Date(stat.mtimeMs).toISOString(),
+        reason: parsed.reason,
+        model: parsed.model,
+        request: parsed.request,
+        parsed: parsed.parsed,
+        size: stat.size
+      };
+    })
+    .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)))
+    .slice(0, 20);
+}
+
 diagnosticsRouter.get("/proxy", (_req, res) => {
   res.json({
     config: getProxyConfig(),
     info: getProxyInfo(),
     environment: getProxyEnvironmentInfo()
+  });
+});
+
+diagnosticsRouter.get("/admin/veo-debug", (req, res) => {
+  if (!isLocalAdminRequest(req)) {
+    res.status(403).json({ status: "forbidden", errorMessage: "程序日志仅允许本机管理员通过 localhost 查看。" });
+    return;
+  }
+  res.json({
+    ok: true,
+    localOnly: true,
+    debugDir: veoDebugDir(),
+    items: readVeoDebugFiles()
   });
 });
 

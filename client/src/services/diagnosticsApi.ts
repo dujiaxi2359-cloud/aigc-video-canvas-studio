@@ -45,6 +45,24 @@ export type ShareInfoResult = {
   uploadsUrl: string;
 };
 
+export type VeoDebugLogItem = {
+  file: string;
+  filePath: string;
+  createdAt: string;
+  reason?: string;
+  model?: Record<string, unknown>;
+  request?: Record<string, unknown>;
+  parsed?: Record<string, unknown>;
+  size: number;
+};
+
+export type VeoDebugLogsResult = {
+  ok: boolean;
+  localOnly: boolean;
+  debugDir: string;
+  items: VeoDebugLogItem[];
+};
+
 export type ProxyMode = "off" | "env" | "manual" | "auto";
 
 export type ProxySettingsResult = {
@@ -78,5 +96,6 @@ export const diagnosticsApi = {
     api.post<NetworkDiagnosticResult>("/api/diagnostics/network", data),
   ossHealth: () => api.get<OssHealthResult>("/api/system/oss/health"),
   systemNetworkHealth: () => api.get<SystemNetworkHealthResult>("/api/system/network/health"),
-  shareInfo: () => api.get<ShareInfoResult>("/api/system/share-info")
+  shareInfo: () => api.get<ShareInfoResult>("/api/system/share-info"),
+  veoDebugLogs: () => api.get<VeoDebugLogsResult>("/api/diagnostics/admin/veo-debug")
 };

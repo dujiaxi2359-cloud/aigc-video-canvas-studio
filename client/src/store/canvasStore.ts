@@ -152,7 +152,11 @@ export const useCanvasStore = create<State>((set, get) => ({
       })
     })),
   deleteNode: (id) =>
-    set((state) => ({ nodes: state.nodes.filter((node) => node.id !== id), edges: state.edges.filter((edge) => edge.source !== id && edge.target !== id) })),
+    set((state) => ({
+      nodes: state.nodes.filter((node) => node.id !== id),
+      edges: state.edges.filter((edge) => edge.source !== id && edge.target !== id),
+      selectedNodeId: state.selectedNodeId === id ? undefined : state.selectedNodeId
+    })),
   duplicateNode: (id) =>
     set((state) => {
       const source = state.nodes.find((node) => node.id === id);
@@ -167,7 +171,8 @@ export const useCanvasStore = create<State>((set, get) => ({
       };
       return {
         nodes: [...state.nodes.map((node) => ({ ...node, selected: false })), duplicated],
-        edges: state.edges.map((edge) => ({ ...edge, selected: false }))
+        edges: state.edges.map((edge) => ({ ...edge, selected: false })),
+        selectedNodeId: duplicated.id
       };
     }),
   deleteEdge: (id) => set((state) => ({ edges: state.edges.filter((edge) => edge.id !== id) })),
@@ -179,7 +184,8 @@ export const useCanvasStore = create<State>((set, get) => ({
       if (!selectedNodeIds.size && !selectedEdgeIds.size) return {};
       return {
         nodes: state.nodes.filter((node) => !selectedNodeIds.has(node.id)),
-        edges: state.edges.filter((edge) => !selectedEdgeIds.has(edge.id) && !selectedNodeIds.has(edge.source) && !selectedNodeIds.has(edge.target))
+        edges: state.edges.filter((edge) => !selectedEdgeIds.has(edge.id) && !selectedNodeIds.has(edge.source) && !selectedNodeIds.has(edge.target)),
+        selectedNodeId: selectedNodeIds.has(state.selectedNodeId ?? "") ? undefined : state.selectedNodeId
       };
     }),
   disconnectNode: (id) => set((state) => ({ edges: state.edges.filter((edge) => edge.source !== id && edge.target !== id) })),
@@ -191,14 +197,18 @@ export const useCanvasStore = create<State>((set, get) => ({
       return { nodes: state.nodes.filter((node) => connected.has(node.id)) };
     }),
   clearCanvas: () => set({ nodes: [], edges: [], selectedNodeId: undefined }),
-  selectAll: () => set((state) => ({ nodes: state.nodes.map((node) => ({ ...node, selected: true })), edges: state.edges.map((edge) => ({ ...edge, selected: true })) })),
-  clearSelection: () => set((state) => ({ nodes: state.nodes.map((node) => ({ ...node, selected: false })), edges: state.edges.map((edge) => ({ ...edge, selected: false })) })),
-  selectEdge: (id) => set((state) => ({ nodes: state.nodes.map((node) => ({ ...node, selected: false })), edges: state.edges.map((edge) => ({ ...edge, selected: edge.id === id })) })),
-  selectNode: (id) => set((state) => ({ nodes: state.nodes.map((node) => ({ ...node, selected: node.id === id })), edges: state.edges.map((edge) => ({ ...edge, selected: false })) })),
-  onNodesChange: (changes) => set((state) => ({ nodes: applyNodeChanges(changes, state.nodes) })),
+  selectAll: () => set((state) => ({ selectedNodeId: state.nodes[0]?.id, nodes: state.nodes.map((node) => ({ ...node, selected: true })), edges: state.edges.map((edge) => ({ ...edge, selected: true })) })),
+  clearSelection: () => set((state) => ({ selectedNodeId: undefined, nodes: state.nodes.map((node) => ({ ...node, selected: false })), edges: state.edges.map((edge) => ({ ...edge, selected: false })) })),
+  selectEdge: (id) => set((state) => ({ selectedNodeId: undefined, nodes: state.nodes.map((node) => ({ ...node, selected: false })), edges: state.edges.map((edge) => ({ ...edge, selected: edge.id === id })) })),
+  selectNode: (id) => set((state) => ({ selectedNodeId: id, nodes: state.nodes.map((node) => ({ ...node, selected: node.id === id })), edges: state.edges.map((edge) => ({ ...edge, selected: false })) })),
+  onNodesChange: (changes) => set((state) => {
+    const nodes = applyNodeChanges(changes, state.nodes);
+    const selectedNodeId = nodes.find((node) => node.selected)?.id;
+    return { nodes, selectedNodeId };
+  }),
   onEdgesChange: (changes) => set((state) => ({ edges: applyEdgeChanges(changes, state.edges) })),
   connectNodes: (connection) => set((state) => ({ edges: addEdge({ ...connection, type: "studioEdge", animated: true, style: edgeStyle() }, state.edges) })),
-  loadProject: (nodes, edges) => set({ nodes, edges }),
+  loadProject: (nodes, edges) => set({ nodes, edges, selectedNodeId: nodes.find((node) => node.selected)?.id }),
   getCanvasState: () => {
     const state = get();
     return {
@@ -246,5 +256,3 @@ export const useCanvasStore = create<State>((set, get) => ({
       };
     })
 }));
-
-

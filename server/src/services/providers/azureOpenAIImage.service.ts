@@ -33,7 +33,8 @@ function cleanAzureEndpoint(value?: string) {
 
 function appendApiVersion(endpoint: string, apiVersion: string) {
   const url = new URL(endpoint);
-  if (!url.searchParams.has("api-version")) url.searchParams.set("api-version", apiVersion);
+  const current = url.searchParams.get("api-version");
+  if (!current || /^2024-/i.test(current)) url.searchParams.set("api-version", apiVersion);
   return url.toString();
 }
 
@@ -265,4 +266,3 @@ export async function generateImageWithAzureOpenAI(params: ImageProviderParams):
     throw classifyAzureError(error instanceof Error ? error.message : String(error));
   }
 }
-

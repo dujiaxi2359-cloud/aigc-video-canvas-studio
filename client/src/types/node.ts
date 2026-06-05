@@ -33,7 +33,9 @@ export type ImageGenerateNodeData = {
   status: "idle" | "generating" | "success" | "error";
   outputAssetId?: string;
   outputUrl?: string;
+  errorCode?: string;
   errorMessage?: string;
+  debugMessage?: string;
   qualityMode?: "full_quality" | "balanced" | "fast";
   payloadSummary?: GenerationPayloadSummary;
   referencedInputs?: Array<{ sourceNodeId: string; sourceNodeType: string }>;
@@ -52,7 +54,9 @@ export type VideoNodeData = {
   status: "idle" | "generating" | "success" | "error";
   outputAssetId?: string;
   outputUrl?: string;
+  errorCode?: string;
   errorMessage?: string;
+  debugMessage?: string;
   qualityMode?: "full_quality" | "balanced" | "fast";
   payloadSummary?: GenerationPayloadSummary;
   referencedInputs?: Array<{ sourceNodeId: string; sourceNodeType: string }>;

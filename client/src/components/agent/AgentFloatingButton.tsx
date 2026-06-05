@@ -8,10 +8,10 @@ export function AgentFloatingButton() {
     <button
       type="button"
       onClick={() => openAgent()}
-      className={`nodrag nopan fixed bottom-20 right-5 z-[9997] inline-flex h-11 items-center gap-2 rounded-full border px-4 text-[13px] font-medium backdrop-blur-[18px] transition ${
+      className={`nodrag nopan fixed bottom-20 right-5 z-[9997] inline-flex h-11 items-center gap-2 rounded-full border px-4 text-[13px] font-medium backdrop-blur-[24px] transition duration-200 hover:-translate-y-0.5 ${
         isOpen
-          ? "border-violet-300/35 bg-white/[0.07] text-white shadow-[0_0_24px_rgba(139,92,246,0.22)]"
-          : "border-white/[0.08] bg-white/[0.04] text-white/70 hover:border-violet-400/35 hover:text-white hover:shadow-[0_0_24px_rgba(139,92,246,0.18)]"
+          ? "border-indigo-300/35 bg-white/[0.07] text-white shadow-[0_0_28px_rgba(99,102,241,0.22),inset_0_1px_0_rgba(255,255,255,0.08)]"
+          : "border-white/[0.08] bg-white/[0.04] text-white/72 shadow-[0_16px_42px_rgba(0,0,0,0.30),inset_0_1px_0_rgba(255,255,255,0.05)] hover:border-indigo-300/35 hover:text-white hover:shadow-[0_0_26px_rgba(99,102,241,0.18),0_16px_42px_rgba(0,0,0,0.34)]"
       }`}
     >
       <Sparkles size={16} strokeWidth={1.8} />

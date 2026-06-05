@@ -36,6 +36,29 @@ function humanizeError(error: unknown) {
   return message;
 }
 
+async function copyText(text: string) {
+  if (navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch {
+      // In LAN http contexts, Clipboard API is often blocked. Fall through.
+    }
+  }
+
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.setAttribute("readonly", "true");
+  textarea.style.position = "fixed";
+  textarea.style.left = "-9999px";
+  textarea.style.top = "0";
+  document.body.appendChild(textarea);
+  textarea.select();
+  const ok = document.execCommand("copy");
+  document.body.removeChild(textarea);
+  return ok;
+}
+
 function incomingTextForNode(nodeId: string, nodes: Node[], edges: Edge[]) {
   const sourceNodes = edges
     .filter((edge) => edge.target === nodeId)
@@ -71,6 +94,7 @@ export function TextGenerateNode(props: NodeProps<TextGenerateNodeData>) {
   const upstreamText = useMemo(() => incomingTextForNode(props.id, nodes, edges), [edges, nodes, props.id]);
   const [localPrompt, setLocalPrompt] = useState(props.data.prompt || "");
   const [localError, setLocalError] = useState("");
+  const [copyStatus, setCopyStatus] = useState("");
   const isComposingRef = useRef(false);
 
   useEffect(() => {
@@ -128,6 +152,21 @@ export function TextGenerateNode(props: NodeProps<TextGenerateNodeData>) {
     }
   }
 
+  useEffect(() => {
+    function handleRunNode(event: Event) {
+      const nodeId = (event as CustomEvent<{ nodeId?: string }>).detail?.nodeId;
+      if (nodeId === props.id && props.data.status !== "generating") void generate();
+    }
+    window.addEventListener("studio:run-node", handleRunNode);
+    return () => window.removeEventListener("studio:run-node", handleRunNode);
+  });
+
+  async function copyOutput() {
+    const ok = await copyText(props.data.outputText || "");
+    setCopyStatus(ok ? "已复制" : "复制失败，请手动选中文本复制");
+    window.setTimeout(() => setCopyStatus(""), 1600);
+  }
+
   return (
     <NodeShell
       {...props}
@@ -174,11 +213,11 @@ export function TextGenerateNode(props: NodeProps<TextGenerateNodeData>) {
           onCompositionEnd={handleCompositionEnd}
         />
         {props.data.status === "success" && props.data.outputText && (
-          <div className="max-h-[160px] overflow-auto rounded-xl border border-white/[0.06] bg-[#0f131a] p-3 text-[12px] leading-5 text-[#d8dee8]">
+          <div className="nodrag nopan nowheel max-h-[160px] overflow-auto rounded-xl border border-white/[0.06] bg-[#0f131a] p-3 text-[12px] leading-5 text-[#d8dee8]">
             <div className="mb-2 flex items-center justify-between gap-2">
               <span className="text-[11px] font-medium text-[#7d8796]">输出结果</span>
-              <Button className="h-7 px-2" variant="ghost" onClick={() => navigator.clipboard.writeText(props.data.outputText || "")}>
-                <Copy size={13} /> 复制
+              <Button className="h-7 px-2" variant="ghost" type="button" onClick={copyOutput}>
+                <Copy size={13} /> {copyStatus || "复制"}
               </Button>
             </div>
             <pre className="whitespace-pre-wrap font-sans">{props.data.outputText}</pre>

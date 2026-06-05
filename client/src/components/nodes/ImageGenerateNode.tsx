@@ -5,12 +5,11 @@ import { Button } from "../common/Button";
 import { Select } from "../common/Select";
 import { Textarea } from "../common/Textarea";
 import { NodeShell } from "./NodeShell";
-import { NodeDownloadButton } from "./NodeDownloadButton";
+import { MediaPreview } from "../media/MediaPreview";
 import { generationApi } from "../../services/generationApi";
 import { modelConfigApi } from "../../services/modelConfigApi";
 import { useCanvasStore } from "../../store/canvasStore";
 import { useModelConfigStore } from "../../store/modelConfigStore";
-import { absoluteUploadUrl } from "../../utils/file";
 import { compactAssetIds, resolveImageNodeInputs } from "../../utils/workflowInputs";
 import { AgentAnalyzeErrorButton } from "../agent/AgentAnalyzeErrorButton";
 import type { AvailableImageOptions, ImageInputMode } from "../../types/model";
@@ -202,6 +201,15 @@ export function ImageGenerateNode(props: NodeProps<ImageGenerateNodeData>) {
     }
   }
 
+  useEffect(() => {
+    function handleRunNode(event: Event) {
+      const nodeId = (event as CustomEvent<{ nodeId?: string }>).detail?.nodeId;
+      if (nodeId === props.id && props.data.status !== "generating") void generate();
+    }
+    window.addEventListener("studio:run-node", handleRunNode);
+    return () => window.removeEventListener("studio:run-node", handleRunNode);
+  });
+
   return (
     <NodeShell
       {...props}
@@ -209,11 +217,6 @@ export function ImageGenerateNode(props: NodeProps<ImageGenerateNodeData>) {
       badge="Image AI"
       width={500}
       status={statusText(props.data.status)}
-      headerActions={
-        props.data.status === "success" && props.data.outputUrl ? (
-          <NodeDownloadButton kind="image" url={props.data.outputUrl} assetId={props.data.outputAssetId} title={props.data.title} tooltip="导出图片" label="导出图片" />
-        ) : null
-      }
       footer={
         imageModels.length > 0 ? (
           <div className="nodrag nopan flex h-[44px] items-center gap-1.5 overflow-hidden">
@@ -236,17 +239,15 @@ export function ImageGenerateNode(props: NodeProps<ImageGenerateNodeData>) {
         </div>
       ) : (
         <div className="space-y-2.5">
-          <div className="nodrag nopan mx-auto flex h-[190px] max-w-full items-center justify-center overflow-hidden rounded-xl border border-white/[0.06] bg-[linear-gradient(180deg,#232833_0%,#20242d_100%)]" style={{ aspectRatio: aspectRatioCss(props.data.aspectRatio) }}>
+          <MediaPreview type="image" title={props.data.title} outputUrl={props.data.outputUrl} aspectRatio={aspectRatioCss(props.data.aspectRatio)}>
             {props.data.status === "generating" ? (
               <div className="px-6 text-center text-[12px] text-[#a2acba]">图片生成中...</div>
             ) : props.data.status === "error" ? (
               <div className="px-6 text-center text-[12px] leading-5 text-red-300">{props.data.errorMessage || localError || "图片生成失败"}</div>
-            ) : props.data.status === "success" && props.data.outputUrl ? (
-              <img className="h-full w-full rounded-xl object-contain" src={absoluteUploadUrl(props.data.outputUrl)} alt="生成图片预览" />
             ) : (
               <ImagePlus className="text-[#7b8798]" size={34} />
             )}
-          </div>
+          </MediaPreview>
           <div className="flex h-8 flex-wrap gap-1.5 overflow-hidden">
             {(Object.keys(modeLabels) as ImageInputMode[]).filter((mode) => availableModes.includes(mode)).map((mode) => (
               <button key={mode} type="button" onClick={() => update(props.id, { inputMode: mode })} className={`nodrag nopan h-7 rounded-full border px-2.5 text-[12px] font-medium transition ${props.data.inputMode === mode ? "border-[#7c6cf6]/[0.22] bg-[#7c6cf6]/[0.14] text-[#f3f5f7]" : "border-transparent bg-transparent text-[#8c97a7] hover:bg-white/[0.04] hover:text-[#f3f5f7]"}`}>{modeLabels[mode]}</button>

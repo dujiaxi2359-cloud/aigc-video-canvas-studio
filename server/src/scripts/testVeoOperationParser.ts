@@ -33,9 +33,41 @@ const nested = parseVeoOperationResult({
 });
 assert(Boolean(nested.videoBytes), "prediction videoBytes should parse");
 
+const deeplyNested = parseVeoOperationResult({
+  done: true,
+  name: "operations/not-a-video",
+  response: {
+    metadata: {
+      candidates: [
+        {
+          result: {
+            media: {
+              file: {
+                downloadUri: "https://example.test/generated/video.mp4",
+                mimeType: "video/mp4"
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+});
+assert(deeplyNested.videoUri === "https://example.test/generated/video.mp4", "deep nested video downloadUri should parse");
+
 const empty = parseVeoOperationResult({ done: true, response: { foo: "bar" } });
 assert(!empty.videoUri && !empty.videoBytes, "empty response should not parse a video");
 assert(empty.rawSummary.responseKeys.includes("foo"), "raw summary should keep response keys");
+
+const filtered = parseVeoOperationResult({
+  done: true,
+  response: {
+    raiMediaFilteredCount: 1,
+    raiMediaFilteredReasons: ["Your prompt conflicted with our safety policies."]
+  }
+});
+assert(filtered.raiMediaFilteredCount === 1, "RAI filtered count should parse");
+assert(filtered.raiMediaFilteredReasons?.[0]?.includes("safety policies"), "RAI filtered reasons should parse");
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "veo-parser-"));
 process.env.UPLOAD_DIR = tmp;
@@ -49,4 +81,3 @@ assert(fs.existsSync(saved.localPath), "saved test video should exist");
 assert(fs.statSync(saved.localPath).size > 0, "saved test video should be non-empty");
 
 console.log("test:veo-operation-parser ok");
-

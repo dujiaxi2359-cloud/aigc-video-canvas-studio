@@ -5,7 +5,7 @@ import { Button } from "../common/Button";
 import { Select } from "../common/Select";
 import { Textarea } from "../common/Textarea";
 import { NodeShell } from "./NodeShell";
-import { NodeDownloadButton } from "./NodeDownloadButton";
+import { MediaPreview } from "../media/MediaPreview";
 import { generationApi } from "../../services/generationApi";
 import { modelConfigApi } from "../../services/modelConfigApi";
 import { useCanvasStore } from "../../store/canvasStore";
@@ -37,6 +37,14 @@ const emptyOfficialVideoModes: OfficialVideoMode[] = ["text_to_video"];
 const emptyStrings: string[] = [];
 const emptyNumbers: number[] = [];
 const videoCategories: OfficialVideoCategory[] = ["text_to_video", "image_to_video", "reference_to_video", "first_last_frame_video", "video_edit", "video_extension"];
+const genericCategoryInputModes: Record<OfficialVideoCategory, VideoInputMode[]> = {
+  text_to_video: ["text-to-video"],
+  image_to_video: ["image-to-video"],
+  reference_to_video: ["reference-to-video"],
+  first_last_frame_video: ["first-last-frame"],
+  video_edit: ["video-to-video"],
+  video_extension: []
+};
 
 function isRuntimeUsableVideoModel(model: ModelConfig) {
   if (model.providerId === "google") return /^veo/i.test(model.modelName);
@@ -52,7 +60,11 @@ function isRuntimeUsableVideoModel(model: ModelConfig) {
       "wan2.7-videoedit"
     ].includes(model.modelName);
   }
-  return false;
+  return ["kling", "grok", "seedance"].includes(model.providerId ?? "");
+}
+
+function modelInputModes(model: ModelConfig | undefined) {
+  return model?.capabilities?.inputModes ?? emptyVideoModes;
 }
 
 function modelSupportsVideoCategory(model: ModelConfig, category: OfficialVideoCategory) {
@@ -64,7 +76,7 @@ function modelSupportsVideoCategory(model: ModelConfig, category: OfficialVideoC
     if (category === "video_extension") return model.modelName === "veo-3.1-generate-preview" || model.modelName === "veo-3.1-fast-generate-preview";
     return true;
   }
-  if (model.providerId !== "alibaba") return false;
+  if (model.providerId !== "alibaba") return genericCategoryInputModes[category].some((mode) => modelInputModes(model).includes(mode));
   if (category === "text_to_video") return ["happyhorse-1.0-t2v", "wan2.7-t2v-2026-04-25"].includes(model.modelName);
   if (category === "image_to_video") return ["happyhorse-1.0-i2v", "wan2.7-i2v-2026-04-25"].includes(model.modelName);
   if (category === "reference_to_video") return ["happyhorse-1.0-r2v", "wan2.7-r2v"].includes(model.modelName);
@@ -189,6 +201,10 @@ function PayloadSummary({ data }: { data?: Record<string, unknown> }) {
   );
 }
 
+function stringList(value: unknown) {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string" && Boolean(item.trim())) : [];
+}
+
 export function VideoNode(props: NodeProps<VideoNodeData>) {
   const update = useCanvasStore((state) => state.updateNodeData);
   const edges = useCanvasStore((state) => state.edges);
@@ -295,13 +311,36 @@ export function VideoNode(props: NodeProps<VideoNodeData>) {
     };
   }, [props.data.modelConfigId, inputContext, props.data.aspectRatio, props.data.duration, props.data.inputMode, props.data.resolution, props.id, update]);
 
-  const availableModes = useMemo(() => (dynamicOptions?.availableInputModes ?? selectedModel?.capabilities.inputModes ?? emptyVideoModes) as VideoInputMode[], [dynamicOptions?.availableInputModes, selectedModel?.capabilities.inputModes]);
+  const selectedInputModes = selectedModel?.capabilities?.inputModes;
+  const selectedAspectRatios = selectedModel?.capabilities?.aspectRatios;
+  const selectedResolutions = selectedModel?.capabilities?.resolutions;
+  const availableModes = useMemo(() => (dynamicOptions?.availableInputModes ?? selectedInputModes ?? emptyVideoModes) as VideoInputMode[], [dynamicOptions?.availableInputModes, selectedInputModes]);
   const availableVideoModes = useMemo(() => dynamicOptions?.availableVideoModes ?? availableModes.map((mode) => legacyInputModeToOfficialMode(mode)) ?? emptyOfficialVideoModes, [availableModes, dynamicOptions?.availableVideoModes]);
-  const availableRatios = useMemo(() => dynamicOptions?.availableAspectRatios ?? selectedModel?.capabilities.aspectRatios ?? emptyStrings, [dynamicOptions?.availableAspectRatios, selectedModel?.capabilities.aspectRatios]);
-  const availableResolutions = useMemo(() => dynamicOptions?.availableResolutions ?? selectedModel?.capabilities.resolutions ?? emptyStrings, [dynamicOptions?.availableResolutions, selectedModel?.capabilities.resolutions]);
+  const availableRatios = useMemo(() => dynamicOptions?.availableAspectRatios ?? selectedAspectRatios ?? emptyStrings, [dynamicOptions?.availableAspectRatios, selectedAspectRatios]);
+  const availableResolutions = useMemo(() => dynamicOptions?.availableResolutions ?? selectedResolutions ?? emptyStrings, [dynamicOptions?.availableResolutions, selectedResolutions]);
   const availableDurations = useMemo(() => dynamicOptions?.availableDurations ?? durationOptions(selectedModel) ?? emptyNumbers, [dynamicOptions?.availableDurations, selectedModel]);
   const outputUrl = absoluteUploadUrl(props.data.outputUrl);
   const outputIsVideo = isVideoOutput(props.data.outputUrl);
+  const veoSafetyDetails = (props.data.payloadSummary ?? {}) as Record<string, unknown>;
+  const isVeoRaiFiltered = props.data.errorCode === "VEO_RAI_FILTERED_NO_VIDEO" || veoSafetyDetails.type === "RAI_FILTERED";
+  const veoRaiReasons = stringList(veoSafetyDetails.reasons ?? veoSafetyDetails.raiMediaFilteredReasons);
+  const veoSafePrompt = typeof veoSafetyDetails.suggestion === "string" ? veoSafetyDetails.suggestion : typeof veoSafetyDetails.sanitizedPrompt === "string" ? veoSafetyDetails.sanitizedPrompt : "";
+  const veoProductOnlyPrompt = typeof veoSafetyDetails.productOnlyPrompt === "string" ? veoSafetyDetails.productOnlyPrompt : "clean product-only commercial video, no human face, no voice, no dangerous action, studio lighting, realistic camera movement";
+
+  function retryWithPrompt(prompt: string) {
+    setLocalPrompt(prompt);
+    update(props.id, { prompt, status: "idle", errorCode: undefined, errorMessage: undefined, debugMessage: undefined });
+    void generate(prompt);
+  }
+
+  function switchOtherVideoModel() {
+    const alternative = allModels.find((model) => model.enabled && model.category === "video" && model.providerId !== "google");
+    if (!alternative) {
+      window.alert("当前没有已启用的 Seedance / 可灵 / Wan 视频模型，请先到模型配置中心填写 API。");
+      return;
+    }
+    update(props.id, { modelConfigId: alternative.id, errorCode: undefined, errorMessage: undefined, debugMessage: undefined });
+  }
 
   const inputStatusItems = useMemo(() => {
     const mode = props.data.videoMode ?? legacyInputModeToOfficialMode(props.data.inputMode);
@@ -325,12 +364,13 @@ export function VideoNode(props: NodeProps<VideoNodeData>) {
     ];
   }, [props.data.inputMode, props.data.videoMode, resolvedInputs.audioInputs.length, resolvedInputs.hasFirstFrame, resolvedInputs.hasImageInput, resolvedInputs.hasLastFrame, resolvedInputs.hasReferenceImage, resolvedInputs.hasVideoInput]);
 
-  async function generate() {
+  async function generate(promptOverride?: string) {
     if (!props.data.modelConfigId || !selectedModel) {
       update(props.id, { errorMessage: "暂无可用模型，请先到设置中心配置 API。", status: "error" });
       return;
     }
-    update(props.id, { status: "generating", errorMessage: undefined });
+    const promptForRequest = promptOverride ?? localPrompt ?? props.data.prompt;
+    update(props.id, { status: "generating", errorCode: undefined, errorMessage: undefined, debugMessage: undefined });
     setLocalError("");
     try {
       const videoMode = props.data.videoMode ?? legacyInputModeToOfficialMode(props.data.inputMode);
@@ -348,7 +388,7 @@ export function VideoNode(props: NodeProps<VideoNodeData>) {
         modelConfigId: props.data.modelConfigId,
         inputMode: props.data.inputMode,
         videoMode,
-        prompt: props.data.prompt,
+        prompt: promptForRequest,
         imageAssetIds: compactAssetIds(resolvedInputs.imageInputs),
         videoAssetIds: compactAssetIds(resolvedInputs.videoInputs),
         audioAssetIds: compactAssetIds(resolvedInputs.audioInputs),
@@ -363,8 +403,8 @@ export function VideoNode(props: NodeProps<VideoNodeData>) {
       update(
         props.id,
         result.status === "success"
-          ? { status: "success", outputAssetId: result.outputAssetId, outputUrl: result.outputUrl, payloadSummary: result.payloadSummary }
-          : { status: "error", errorMessage: result.errorMessage, payloadSummary: result.payloadSummary }
+          ? { status: "success", outputAssetId: result.outputAssetId, outputUrl: result.outputUrl, payloadSummary: result.payloadSummary, errorCode: undefined, errorMessage: undefined, debugMessage: undefined }
+          : { status: "error", errorCode: result.errorCode, errorMessage: result.errorMessage, debugMessage: result.debugMessage, payloadSummary: result.payloadSummary }
       );
     } catch (error) {
       const message = humanizeError(error);
@@ -373,6 +413,15 @@ export function VideoNode(props: NodeProps<VideoNodeData>) {
     }
   }
 
+  useEffect(() => {
+    function handleRunNode(event: Event) {
+      const nodeId = (event as CustomEvent<{ nodeId?: string }>).detail?.nodeId;
+      if (nodeId === props.id && props.data.status !== "generating") void generate();
+    }
+    window.addEventListener("studio:run-node", handleRunNode);
+    return () => window.removeEventListener("studio:run-node", handleRunNode);
+  });
+
   return (
     <NodeShell
       {...props}
@@ -380,11 +429,6 @@ export function VideoNode(props: NodeProps<VideoNodeData>) {
       badge="视频生成"
       width={500}
       status={statusText(props.data.status)}
-      headerActions={
-        props.data.status === "success" && props.data.outputUrl ? (
-          <NodeDownloadButton kind="video" url={props.data.outputUrl} assetId={props.data.outputAssetId} title={props.data.title} tooltip="导出视频" label="导出视频" />
-        ) : null
-      }
       footer={
         <div className="nodrag nopan space-y-1.5">
           <div className="flex gap-1 overflow-x-auto">
@@ -418,7 +462,7 @@ export function VideoNode(props: NodeProps<VideoNodeData>) {
             <Select className="h-8 w-[74px]" value={props.data.resolution ?? availableResolutions[0] ?? ""} onChange={(event) => update(props.id, { resolution: event.target.value })}>{availableResolutions.map((item) => <option key={item}>{item}</option>)}</Select>
             <Select className="h-8 w-[62px]" value={props.data.duration ?? availableDurations[0] ?? ""} onChange={(event) => update(props.id, { duration: Number(event.target.value) })}>{availableDurations.map((item) => <option key={item} value={item}>{item}s</option>)}</Select>
             <Select className="h-8 w-[58px]" value={props.data.generateCount} onChange={(event) => update(props.id, { generateCount: Number(event.target.value) })}>{[1, 2, 3, 4].map((item) => <option key={item} value={item}>{item}个</option>)}</Select>
-            <Button className="ml-auto h-[34px] min-w-[86px]" variant="primary" disabled={!selectedModel || availableVideoModes.length === 0 || props.data.status === "generating"} onClick={generate}>
+            <Button className="ml-auto h-[34px] min-w-[86px]" variant="primary" disabled={!selectedModel || availableVideoModes.length === 0 || props.data.status === "generating"} onClick={() => void generate()}>
               <Sparkles size={14} strokeWidth={1.8} /> {generateButtonLabel(props.data.status)}
             </Button>
           </div>
@@ -433,13 +477,13 @@ export function VideoNode(props: NodeProps<VideoNodeData>) {
         </div>
       ) : (
         <div className="space-y-2.5">
-          <div className="nodrag nopan mx-auto flex h-[210px] max-w-full items-center justify-center overflow-hidden rounded-xl border border-white/[0.06] bg-[linear-gradient(180deg,#232833_0%,#20242d_100%)]" style={{ aspectRatio: aspectRatioCss(props.data.aspectRatio) }}>
+          <MediaPreview type="video" title={props.data.title} outputUrl={outputIsVideo ? props.data.outputUrl : undefined} aspectRatio={aspectRatioCss(props.data.aspectRatio)}>
             {props.data.status === "generating" ? (
               <div className="text-center">
                 <div className="mx-auto grid h-11 w-11 place-items-center rounded-full border border-white/[0.08] bg-white/[0.05] text-[#cfd6e1]">
                   <Loader2 className="animate-spin" size={22} strokeWidth={1.8} />
                 </div>
-                <div className="mt-2 text-[13px] font-medium text-[#e8edf3]">正在生成视频...</div>
+                <div className="mt-2 text-[13px] font-medium text-[#e8edf3]">{selectedModel?.providerId === "google" ? "Veo 正在生成视频..." : "正在生成视频..."}</div>
               </div>
             ) : props.data.status === "error" ? (
               <div className="px-6 text-center">
@@ -449,8 +493,6 @@ export function VideoNode(props: NodeProps<VideoNodeData>) {
                 <div className="mt-2 text-[13px] font-semibold text-red-200">生成失败</div>
                 <div className="mt-1 max-w-[360px] text-[12px] leading-5 text-[#a2acba]">{props.data.errorMessage || localError || "请重试生成。"}</div>
               </div>
-            ) : props.data.status === "success" && props.data.outputUrl && outputIsVideo ? (
-              <video className="nodrag nopan h-full w-full rounded-xl object-contain" controls src={outputUrl} />
             ) : props.data.status === "success" && props.data.outputUrl ? (
               <div className="mx-4 w-full max-w-[420px] rounded-xl border border-emerald-300/[0.14] bg-emerald-400/[0.07] p-4">
                 <div className="flex items-center gap-2 text-[14px] font-semibold text-emerald-100">
@@ -474,7 +516,7 @@ export function VideoNode(props: NodeProps<VideoNodeData>) {
                 <div className="mt-2 text-[13px] font-medium text-[#a2acba]">视频预览区</div>
               </div>
             )}
-          </div>
+          </MediaPreview>
 
           <div className="nodrag nopan flex h-8 flex-wrap gap-1.5 overflow-hidden">
             {availableVideoModes.filter((mode) => categoryForOfficialVideoMode(mode) === videoCategory).map((mode) => {
@@ -530,11 +572,32 @@ export function VideoNode(props: NodeProps<VideoNodeData>) {
           <PayloadSummary data={props.data.payloadSummary} />
           {dynamicOptions?.warningMessage && <div className="text-[12px] text-amber-300">{dynamicOptions.warningMessage}</div>}
           {staleModel && <div className="text-[12px] text-red-300">当前模型配置已失效，请重新选择模型。</div>}
+          {selectedModel?.providerId === "google" && <div className="text-[12px] leading-5 text-[#8f9bad]">Veo 仅支持成年虚构人物，不能使用名人脸、未成年人、政治人物或未授权真人肖像。</div>}
           {props.data.inputMode === "image-to-video" && !inputContext.hasImageInput && <div className="text-[12px] text-amber-300">图生视频需要连接一张图片素材。</div>}
           {props.data.inputMode === "reference-to-video" && !inputContext.hasReferenceImage && <div className="text-[12px] text-amber-300">图片参考模式需要至少一张参考图片。</div>}
           {props.data.inputMode === "video-to-video" && !inputContext.hasVideoInput && <div className="text-[12px] text-amber-300">视频参考模式需要连接一个视频素材。</div>}
           {props.data.inputMode === "first-last-frame" && inputContext.hasImageInput && !resolvedInputs.hasLastFrame && <div className="text-[12px] text-amber-300">已连接首帧，还需要一张尾帧图片。</div>}
           {props.data.inputMode === "first-last-frame" && !inputContext.hasImageInput && <div className="text-[12px] text-amber-300">首尾帧模式需要连接起始帧和结束帧图片。</div>}
+          {isVeoRaiFiltered && (
+            <div className="nodrag nopan rounded-xl border border-amber-300/15 bg-amber-300/[0.08] p-3">
+              <div className="text-[12px] font-semibold text-amber-100">Google Veo 安全过滤</div>
+              <p className="mt-1 text-[12px] leading-5 text-amber-100/80">
+                当前画面或提示词可能包含真人肖像、名人相似、未成年人、危险动作、版权或音频风险。系统已为你生成安全改写版本。
+              </p>
+              {veoRaiReasons.length > 0 && <div className="mt-2 text-[11px] leading-5 text-amber-100/64">原因：{veoRaiReasons.join("；")}</div>}
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Button className="h-8 px-2.5" variant="secondary" type="button" onClick={() => retryWithPrompt(veoSafePrompt || props.data.prompt)}>
+                  使用安全改写重试
+                </Button>
+                <Button className="h-8 px-2.5" variant="secondary" type="button" onClick={() => retryWithPrompt(veoProductOnlyPrompt)}>
+                  去掉人物重试
+                </Button>
+                <Button className="h-8 px-2.5" variant="ghost" type="button" onClick={switchOtherVideoModel}>
+                  切换其他视频模型
+                </Button>
+              </div>
+            </div>
+          )}
           {(props.data.errorMessage || localError) && <div className="text-[12px] text-red-300">{props.data.errorMessage || localError}</div>}
           {(props.data.errorMessage || localError) && <AgentAnalyzeErrorButton nodeId={props.id} errorMessage={props.data.errorMessage || localError} nodeData={props.data as unknown as Record<string, unknown>} />}
         </div>

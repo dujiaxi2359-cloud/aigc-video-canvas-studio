@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { GoogleGenAI, VideoGenerationReferenceType, type Image } from "@google/genai";
+import sharp from "sharp";
 import { capabilityForMode, getVideoModelCapabilityOrLegacy } from "../../config/videoModelCapabilities.js";
 import { getAsset } from "../asset.service.js";
 import { saveGeneratedBuffer } from "../../utils/downloadGeneratedFile.js";
@@ -13,6 +14,16 @@ import { legacyInputModeToOfficialMode } from "../../types/videoModes.js";
 import type { OfficialVideoMode } from "../../types/videoModes.js";
 import { parseVeoOperationResult, type VeoOperationParseResult } from "./googleVeo/veoOperationParser.js";
 import type { ProviderGenerateResult, VideoProviderParams } from "./providerTypes.js";
+import {
+  buildAudioSafePrompt,
+  buildNegativePrompt as buildVeoNegativePrompt,
+  buildProductOnlyPrompt,
+  buildRaiSuggestion,
+  detectSensitiveTerms,
+  getPersonGenerationMode,
+  sanitizePrompt,
+  veoPersonGenerationUiHint
+} from "../veo/VeoSafetyGuard.js";
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -28,6 +39,109 @@ function generatedPath(prefix: string, extension = ".mp4") {
     localPath: path.join(outputDir, fileName),
     outputUrl: `/uploads/generated/${fileName}`
   };
+}
+
+function sanitizeDebugValue(value: unknown): unknown {
+  if (typeof value === "string") {
+    if (value.length > 900) return `${value.slice(0, 300)}...[truncated ${value.length} chars]`;
+    return value;
+  }
+  if (Array.isArray(value)) return value.map((item) => sanitizeDebugValue(item));
+  if (value && typeof value === "object") {
+    const output: Record<string, unknown> = {};
+    for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+      const lower = key.toLowerCase();
+      if (lower.includes("apikey") || lower.includes("api_key") || lower === "key") {
+        output[key] = "[redacted]";
+      } else if (lower.includes("inlinedata") || lower.includes("inline_data") || lower === "bytes" || lower.includes("videobytes") || lower.includes("videobytes")) {
+        output[key] = "[redacted binary]";
+      } else {
+        output[key] = sanitizeDebugValue(child);
+      }
+    }
+    return output;
+  }
+  return value;
+}
+
+function writeVeoOperationDebugSnapshot(input: {
+  reason: string;
+  params: VideoProviderParams;
+  officialMode: OfficialVideoMode;
+  operation: unknown;
+  parsed: VeoOperationParseResult;
+}) {
+  const debugDir = path.resolve(process.cwd(), "data/debug/veo-operations");
+  fs.mkdirSync(debugDir, { recursive: true });
+  const fileName = `veo_${Date.now()}_${input.params.nodeId}.json`;
+  const filePath = path.join(debugDir, fileName);
+  const snapshot = {
+    reason: input.reason,
+    createdAt: new Date().toISOString(),
+    model: {
+      providerId: input.params.providerId,
+      catalogModelId: input.params.catalogModelId,
+      modelName: input.params.modelName,
+      officialMode: input.officialMode,
+      inputMode: input.params.inputMode
+    },
+    request: {
+      nodeId: input.params.nodeId,
+      duration: input.params.duration,
+      aspectRatio: input.params.aspectRatio,
+      resolution: input.params.resolution,
+      imageAssetCount: input.params.imageAssetIds?.length ?? 0,
+      videoAssetCount: input.params.videoAssetIds?.length ?? 0,
+      promptPreview: input.params.prompt?.slice(0, 600)
+    },
+    parsed: input.parsed,
+    operation: sanitizeDebugValue(input.operation)
+  };
+  fs.writeFileSync(filePath, JSON.stringify(snapshot, null, 2));
+  console.warn("[veo-operation-debug-snapshot]", filePath);
+  return filePath;
+}
+
+function createVeoRequestId(nodeId: string) {
+  return `veo_${Date.now()}_${nodeId}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function writeVeoRequestLog(input: {
+  requestId: string;
+  modelId: string | undefined;
+  originalPrompt: string;
+  sanitizedPrompt: string;
+  negativePrompt: string;
+  personGeneration: string;
+  aspectRatio: string;
+  duration: number;
+  raiMediaFilteredCount?: number;
+  raiMediaFilteredReasons?: string[];
+  hasVideo: boolean;
+  fallbackUsed?: string;
+}) {
+  const debugDir = path.resolve(process.cwd(), "data/debug/veo-operations");
+  fs.mkdirSync(debugDir, { recursive: true });
+  const createdAt = new Date().toISOString();
+  const snapshot = {
+    requestId: input.requestId,
+    modelId: input.modelId,
+    originalPrompt: input.originalPrompt,
+    sanitizedPrompt: input.sanitizedPrompt,
+    negativePrompt: input.negativePrompt,
+    personGeneration: input.personGeneration,
+    aspectRatio: input.aspectRatio,
+    duration: input.duration,
+    raiMediaFilteredCount: input.raiMediaFilteredCount ?? 0,
+    raiMediaFilteredReasons: input.raiMediaFilteredReasons ?? [],
+    hasVideo: input.hasVideo,
+    fallbackUsed: input.fallbackUsed ?? "none",
+    createdAt
+  };
+  const filePath = path.join(debugDir, `${input.requestId}.request.json`);
+  fs.writeFileSync(filePath, JSON.stringify(snapshot, null, 2));
+  console.warn("[veo-request-log]", filePath);
+  return filePath;
 }
 
 function mimeTypeFromPath(filePath: string) {
@@ -73,6 +187,89 @@ async function retryGoogleNetwork<T>(label: string, fn: () => Promise<T>): Promi
     });
     return withTemporaryDirectNetwork(`google-veo:${label}`, fn);
   }
+}
+
+async function runVeoGenerateOperation(ai: GoogleGenAI, request: Record<string, unknown>) {
+  let operation = await retryGoogleNetwork("models.generateVideos", () =>
+    ai.models.generateVideos(request as unknown as Parameters<typeof ai.models.generateVideos>[0])
+  );
+  const startedAt = Date.now();
+  while (!operation.done) {
+    if (Date.now() - startedAt > 10 * 60 * 1000) {
+      throw new ProviderError("VEO_OPERATION_TIMEOUT", "Google Veo 视频生成任务超时，请稍后重试或检查当前模型负载。");
+    }
+    await sleep(10000);
+    operation = await retryGoogleNetwork("operations.getVideosOperation", () => ai.operations.getVideosOperation({ operation }));
+  }
+  return operation;
+}
+
+function isRaiMediaFiltered(parsed: VeoOperationParseResult) {
+  return (parsed.raiMediaFilteredCount ?? 0) > 0 || Boolean(parsed.raiMediaFilteredReasons?.length);
+}
+
+function hasParsedVideo(parsed: VeoOperationParseResult) {
+  return Boolean(parsed.videoObject || parsed.videoUri || parsed.videoBytes);
+}
+
+function hasAudioSafetyReason(parsed: VeoOperationParseResult) {
+  return /audio|voice|speech|music|lyrics|song|口播|声音|音乐|歌词/i.test(parsed.raiMediaFilteredReasons?.join(" ") ?? "");
+}
+
+function logVeoOperationSummary(input: {
+  params: VideoProviderParams;
+  officialMode: OfficialVideoMode;
+  operation: Awaited<ReturnType<typeof runVeoGenerateOperation>>;
+  parsed: VeoOperationParseResult;
+  fallbackStage?: string;
+}) {
+  const { params, officialMode, operation, parsed, fallbackStage } = input;
+  console.log("[veo-operation-summary]", {
+    modelId: params.catalogModelId,
+    officialMode,
+    fallbackStage,
+    operationName: operation.name,
+    done: operation.done,
+    hasError: Boolean(operation.error),
+    errorCode: (operation.error as { code?: unknown } | undefined)?.code,
+    errorMessage: (operation.error as { message?: unknown } | undefined)?.message,
+    hasResponse: Boolean(operation.response),
+    responseKeys: parsed.rawSummary.responseKeys,
+    generatedVideosCount: parsed.rawSummary.generatedVideosCount,
+    generatedVideosShape: parsed.rawSummary.generatedVideosShape,
+    raiMediaFilteredCount: parsed.raiMediaFilteredCount,
+    parsedVideoUriExists: Boolean(parsed.videoUri),
+    sourceShape: parsed.sourceShape
+  });
+}
+
+function veoRaiFallbackPrompt(originalPrompt: string) {
+  const base = originalPrompt.trim();
+  return [
+    "Create a neutral sportswear product video from the provided first frame.",
+    "Preserve the visible brand logo, logo shape, logo color, logo placement, garment color, fabric texture, waistband structure, side pocket, and product details.",
+    "Use simple natural movement in a gym environment. Keep the framing product-focused and neutral. Do not add new text, graphics, or logo designs.",
+    "Avoid body-focused framing, try-on narrative, glamour posing, or close-ups of body areas.",
+    base ? "Use the original request only as high-level product direction, without copying body-focused or try-on wording." : ""
+  ].filter(Boolean).join("\n");
+}
+
+function shouldUseVeoSafetyPrompt(officialMode: OfficialVideoMode, imageCount: number, prompt: string) {
+  if (process.env.VEO_SAFETY_REWRITE === "off") return false;
+  if (!imageCount) return false;
+  if (officialMode === "image_to_video_first_last_frame" || officialMode === "reference_images_to_video") return true;
+  return /试穿|真人|女生|腰臀|胸前|裤腰|身体|身材|曲线|贴身|镜子|自拍|try.?on|body|waist|hip|chest|mirror|selfie/i.test(prompt);
+}
+
+function veoSafetyPrompt(originalPrompt: string, officialMode: OfficialVideoMode, imageCount: number) {
+  if (!shouldUseVeoSafetyPrompt(officialMode, imageCount, originalPrompt)) return originalPrompt;
+  return [
+    "Create a neutral sportswear product showcase video using the provided image reference.",
+    "Preserve the visible brand logo exactly: logo shape, color, placement, scale, and relationship to the garment. Do not invent new text, symbols, patterns, or logo designs.",
+    "Preserve the garment color, ribbed fabric texture, waistband structure, side pocket, seams, fit, and product details from the reference image.",
+    "Use a premium indoor gym environment, natural handheld social-media footage, realistic lighting, and simple neutral movement.",
+    "Keep the framing product-focused and brand-focused. Avoid body-focused framing, try-on narrative, glamour posing, mirror-body emphasis, or close-ups of body areas."
+  ].join("\n");
 }
 
 export function normalizeVeoParams(params: VideoProviderParams, officialMode: OfficialVideoMode) {
@@ -208,6 +405,95 @@ async function assetImage(assetId: string): Promise<VeoInputImage> {
       inputImageWasCompressed: false
     }
   };
+}
+
+async function assetImageForRaiFallback(assetId: string): Promise<VeoInputImage> {
+  try {
+    const asset = await getAsset(assetId);
+    if (!asset?.localPath || !fs.existsSync(asset.localPath)) {
+      throw new ProviderError("MISSING_INPUT_ASSET", "Google Veo 引用的图片素材不存在或已被删除。");
+    }
+
+    const metadata = await sharp(asset.localPath).metadata();
+    if (!metadata.width || !metadata.height) return assetImage(assetId);
+
+    const cropBoxes = [
+      {
+        label: "upper_garment_logo",
+        left: Math.round(metadata.width * 0.16),
+        top: Math.round(metadata.height * 0.22),
+        width: Math.round(metadata.width * 0.68),
+        height: Math.round(metadata.height * 0.22)
+      },
+      {
+        label: "waistband_logo",
+        left: Math.round(metadata.width * 0.16),
+        top: Math.round(metadata.height * 0.39),
+        width: Math.round(metadata.width * 0.68),
+        height: Math.round(metadata.height * 0.18)
+      },
+      {
+        label: "fabric_pocket_texture",
+        left: Math.round(metadata.width * 0.2),
+        top: Math.round(metadata.height * 0.54),
+        width: Math.round(metadata.width * 0.64),
+        height: Math.round(metadata.height * 0.26)
+      }
+    ].map((box) => ({
+      ...box,
+      left: Math.max(0, Math.min(metadata.width! - 1, box.left)),
+      top: Math.max(0, Math.min(metadata.height! - 1, box.top)),
+      width: Math.max(1, Math.min(metadata.width! - Math.max(0, box.left), box.width)),
+      height: Math.max(1, Math.min(metadata.height! - Math.max(0, box.top), box.height))
+    }));
+    const strips = await Promise.all(cropBoxes.map((box) =>
+      sharp(asset.localPath)
+        .extract({ left: box.left, top: box.top, width: box.width, height: box.height })
+        .resize(900, 260, { fit: "cover", position: "center" })
+        .jpeg({ quality: 92 })
+        .toBuffer()
+    ));
+    const buffer = await sharp({
+      create: {
+        width: 1024,
+        height: 1024,
+        channels: 3,
+        background: { r: 18, g: 18, b: 20 }
+      }
+    })
+      .composite(strips.map((input, index) => ({
+        input,
+        left: 62,
+        top: 64 + index * 310
+      })))
+      .jpeg({ quality: 92 })
+      .toBuffer();
+
+    return {
+      imageBytes: buffer.toString("base64"),
+      mimeType: "image/jpeg",
+      audit: {
+      assetId,
+      inputImageSource: "raiFallbackProductReferenceBoard",
+      inputImageWidth: 1024,
+      inputImageHeight: 1024,
+      inputImageFileSize: buffer.byteLength,
+      originalAspectRatio: aspectRatioOf(metadata.width, metadata.height),
+      modelInputAspectRatio: "1:1",
+      cropBoxes,
+      usesOriginalFile: false,
+      usesPreviewUrl: false,
+        inputImageWasCompressed: true
+      }
+    };
+  } catch (error) {
+    if (error instanceof ProviderError) throw error;
+    throw new ProviderError(
+      "VEO_RAI_MEDIA_FILTERED",
+      "Google Veo 安全降级时生成产品裁切参考图失败，请改用单张商品局部图或上传更偏产品细节的参考图。",
+      rawErrorMessage(error)
+    );
+  }
 }
 
 function stripAudit(image: VeoInputImage): Image {
@@ -387,16 +673,28 @@ export async function generateVideoWithGoogleVeo(params: VideoProviderParams): P
     const veoParams = normalizeVeoParams(params, officialMode);
     const mapped = mapVideoParams("google", params.modelName, officialMode, params.aspectRatio, veoParams.resolution, veoParams.durationSeconds);
     const inputAudits: Array<Record<string, unknown>> = [];
+    const imageCount = params.imageAssetIds?.length ?? 0;
+    const safetyPrompt = veoSafetyPrompt(params.prompt, officialMode, imageCount);
+    const requestPrompt = sanitizePrompt(safetyPrompt);
+    const sensitiveMatches = detectSensitiveTerms(params.prompt);
+    const promptSafetyRewritten = requestPrompt !== params.prompt;
+    const veoNegativePrompt = [params.negativePrompt, buildVeoNegativePrompt("product_ad")].filter(Boolean).join(", ");
+    const supportsNegativePrompt = officialMode === "text_to_video";
+    const requestNegativePrompt = supportsNegativePrompt ? veoNegativePrompt : "";
+    const initialPersonGeneration = getPersonGenerationMode({ prompt: requestPrompt, hasPerson: imageCount > 0 });
 
     const config: Record<string, unknown> = {
       numberOfVideos: Math.max(1, params.generateCount || 1),
       aspectRatio: mapped.aspectRatio,
-      resolution: mapped.resolution
+      resolution: mapped.resolution,
+      personGeneration: initialPersonGeneration
     };
+    if (requestNegativePrompt) config.negativePrompt = requestNegativePrompt;
+    if (params.seed !== undefined) config.seed = params.seed;
     if (officialMode !== "video_extension") config.durationSeconds = mapped.durationSeconds;
     const request: Record<string, unknown> = {
       model: params.modelName,
-      prompt: params.prompt,
+      prompt: requestPrompt,
       config
     };
 
@@ -450,7 +748,7 @@ export async function generateVideoWithGoogleVeo(params: VideoProviderParams): P
       hasImageInput: Boolean(params.imageAssetIds?.length),
       imageInputCount: params.imageAssetIds?.length ?? 0,
       prompt: params.prompt,
-      negativePrompt: params.negativePrompt,
+      negativePrompt: requestNegativePrompt,
       isMock: false,
       qualityAudit: {
         qualityMode: params.qualityMode ?? "full_quality",
@@ -475,51 +773,194 @@ export async function generateVideoWithGoogleVeo(params: VideoProviderParams): P
         configDurationSeconds: config.durationSeconds,
         durationAutoAdjusted: veoParams.durationAutoAdjusted,
         resolutionAutoAdjusted: veoParams.resolutionAutoAdjusted,
+        promptSafetyRewritten,
+        sensitiveTermMatches: sensitiveMatches,
+        safetySuggestion: buildRaiSuggestion({ sanitizedPrompt: requestPrompt }),
+        personGeneration: initialPersonGeneration,
+        personGenerationHint: veoPersonGenerationUiHint(),
+        negativePrompt: requestNegativePrompt,
+        submittedPromptLength: requestPrompt.length,
+        originalPromptLength: params.prompt.length,
         numberOfVideos: config.numberOfVideos,
+        sampleCount: config.numberOfVideos,
+        seed: params.seed,
         hasInlineData: Boolean(request.image || config.lastFrame || config.referenceImages),
         referenceImageCount: Array.isArray(config.referenceImages) ? config.referenceImages.length : 0
       }
     });
     logOfficialPayload(payloadSummary);
 
-    let operation = await retryGoogleNetwork("models.generateVideos", () =>
-      ai.models.generateVideos(request as unknown as Parameters<typeof ai.models.generateVideos>[0])
-    );
-    const startedAt = Date.now();
-    while (!operation.done) {
-      if (Date.now() - startedAt > 10 * 60 * 1000) {
-        throw new ProviderError("VEO_OPERATION_TIMEOUT", "Google Veo 视频生成任务超时，请稍后重试或检查当前模型负载。");
-      }
-      await sleep(10000);
-      operation = await retryGoogleNetwork("operations.getVideosOperation", () => ai.operations.getVideosOperation({ operation }));
+    let operation: Awaited<ReturnType<typeof runVeoGenerateOperation>> | undefined;
+    let parsed: VeoOperationParseResult | undefined;
+    let effectiveOfficialMode = officialMode;
+    let raiFallbackApplied: Record<string, unknown> | undefined;
+    const requestLogs: string[] = [];
+
+    async function executeVeoAttempt(input: {
+      attempt: "sanitized_prompt" | "silent_audio_safe" | "product_only";
+      attemptRequest: Record<string, unknown>;
+      attemptOfficialMode: OfficialVideoMode;
+      sanitizedPrompt: string;
+      personGeneration: string;
+      fallbackUsed?: string;
+    }) {
+      const attemptOperation = await runVeoGenerateOperation(ai, input.attemptRequest);
+      const attemptParsed = parseVeoOperationResult(attemptOperation);
+      logVeoOperationSummary({ params, officialMode: input.attemptOfficialMode, operation: attemptOperation, parsed: attemptParsed, fallbackStage: input.fallbackUsed });
+      const requestLogPath = writeVeoRequestLog({
+        requestId: createVeoRequestId(params.nodeId),
+        modelId: params.catalogModelId ?? params.modelName,
+        originalPrompt: params.prompt,
+        sanitizedPrompt: input.sanitizedPrompt,
+        negativePrompt: requestNegativePrompt,
+        personGeneration: input.personGeneration,
+        aspectRatio: params.aspectRatio,
+        duration: veoParams.durationSeconds,
+        raiMediaFilteredCount: attemptParsed.raiMediaFilteredCount,
+        raiMediaFilteredReasons: attemptParsed.raiMediaFilteredReasons,
+        hasVideo: hasParsedVideo(attemptParsed),
+        fallbackUsed: input.fallbackUsed ?? input.attempt
+      });
+      requestLogs.push(requestLogPath);
+      return { attemptOperation, attemptParsed, requestLogPath };
     }
 
-    const parsed = parseVeoOperationResult(operation);
-    console.log("[veo-operation-summary]", {
-      modelId: params.catalogModelId,
-      officialMode,
-      operationName: operation.name,
-      done: operation.done,
-      hasError: Boolean(operation.error),
-      errorCode: (operation.error as { code?: unknown } | undefined)?.code,
-      errorMessage: (operation.error as { message?: unknown } | undefined)?.message,
-      hasResponse: Boolean(operation.response),
-      responseKeys: parsed.rawSummary.responseKeys,
-      generatedVideosCount: parsed.rawSummary.generatedVideosCount,
-      generatedVideosShape: parsed.rawSummary.generatedVideosShape,
-      parsedVideoUriExists: Boolean(parsed.videoUri),
-      sourceShape: parsed.sourceShape
+    let attempt = await executeVeoAttempt({
+      attempt: "sanitized_prompt",
+      attemptRequest: request,
+      attemptOfficialMode: officialMode,
+      sanitizedPrompt: requestPrompt,
+      personGeneration: initialPersonGeneration
     });
+    operation = attempt.attemptOperation;
+    parsed = attempt.attemptParsed;
 
     if (operation.error) {
-      throw new ProviderError("VEO_OPERATION_FAILED", "Google Veo 生成任务失败。", rawErrorMessage(operation.error));
+      const debugPath = writeVeoOperationDebugSnapshot({ reason: "operation_error", params, officialMode, operation, parsed });
+      throw new ProviderError("VEO_OPERATION_FAILED", "Google Veo 生成任务失败。", `${rawErrorMessage(operation.error)}\nDebug snapshot: ${debugPath}`);
     }
 
-    if (!parsed.videoObject && !parsed.videoUri && !parsed.videoBytes) {
+    if (isRaiMediaFiltered(parsed) && !hasParsedVideo(parsed)) {
+      const initialRaiWasAudioRelated = hasAudioSafetyReason(parsed);
+      const audioSafePrompt = initialRaiWasAudioRelated
+        ? `${requestPrompt}\n\n${buildAudioSafePrompt()}`
+        : `${requestPrompt}\n\nNeutral product-focused commercial scene, no celebrity likeness, no minors, no dangerous action, no audio risk.`;
+      const audioSafeRequest = {
+        ...request,
+        prompt: audioSafePrompt,
+        config: { ...(request.config as Record<string, unknown>), personGeneration: initialPersonGeneration }
+      };
+      if (requestNegativePrompt) (audioSafeRequest.config as Record<string, unknown>).negativePrompt = requestNegativePrompt;
+      attempt = await executeVeoAttempt({
+        attempt: "silent_audio_safe",
+        attemptRequest: audioSafeRequest,
+        attemptOfficialMode: effectiveOfficialMode,
+        sanitizedPrompt: audioSafePrompt,
+        personGeneration: initialPersonGeneration,
+        fallbackUsed: initialRaiWasAudioRelated ? "silent_audio_safe" : "safer_visual_prompt"
+      });
+      operation = attempt.attemptOperation;
+      parsed = attempt.attemptParsed;
+      raiFallbackApplied = {
+        reason: "rai_media_filtered",
+        firstFallback: initialRaiWasAudioRelated ? "silent_audio_safe" : "safer_visual_prompt"
+      };
+    }
+
+    if (operation.error) {
+      const debugPath = writeVeoOperationDebugSnapshot({ reason: "operation_error", params, officialMode: effectiveOfficialMode, operation, parsed });
+      throw new ProviderError("VEO_OPERATION_FAILED", "Google Veo 生成任务失败。", `${rawErrorMessage(operation.error)}\nDebug snapshot: ${debugPath}`);
+    }
+
+    if (isRaiMediaFiltered(parsed) && !hasParsedVideo(parsed)) {
+      const productOnlyPrompt = sanitizePrompt(buildProductOnlyPrompt());
+      const productOnlyConfig: Record<string, unknown> = {
+        numberOfVideos: Math.max(1, params.generateCount || 1),
+        aspectRatio: mapped.aspectRatio,
+        resolution: mapped.resolution
+      };
+      if (requestNegativePrompt) productOnlyConfig.negativePrompt = requestNegativePrompt;
+      if (params.seed !== undefined) productOnlyConfig.seed = params.seed;
+      if (officialMode !== "video_extension") productOnlyConfig.durationSeconds = mapped.durationSeconds;
+      const productOnlyRequest: Record<string, unknown> = {
+        model: params.modelName,
+        prompt: productOnlyPrompt,
+        config: productOnlyConfig
+      };
+      if (params.imageAssetIds?.length) {
+        const croppedImage = await assetImageForRaiFallback(params.imageAssetIds[0]);
+        productOnlyRequest.image = stripAudit(croppedImage);
+        inputAudits.push(croppedImage.audit);
+        effectiveOfficialMode = "image_to_video_first_frame";
+        raiFallbackApplied = {
+          ...(raiFallbackApplied ?? { reason: "rai_media_filtered" }),
+          secondFallback: "product_only_reference_crop",
+          productCropAudit: croppedImage.audit
+        };
+      } else {
+        raiFallbackApplied = {
+          ...(raiFallbackApplied ?? { reason: "rai_media_filtered" }),
+          secondFallback: "product_only_text"
+        };
+      }
+      attempt = await executeVeoAttempt({
+        attempt: "product_only",
+        attemptRequest: productOnlyRequest,
+        attemptOfficialMode: effectiveOfficialMode,
+        sanitizedPrompt: productOnlyPrompt,
+        personGeneration: "omitted",
+        fallbackUsed: String(raiFallbackApplied.secondFallback ?? "product_only")
+      });
+      operation = attempt.attemptOperation;
+      parsed = attempt.attemptParsed;
+    }
+
+    if (operation.error) {
+      const debugPath = writeVeoOperationDebugSnapshot({ reason: "operation_error", params, officialMode: effectiveOfficialMode, operation, parsed });
+      throw new ProviderError("VEO_OPERATION_FAILED", "Google Veo 生成任务失败。", `${rawErrorMessage(operation.error)}\nDebug snapshot: ${debugPath}`);
+    }
+
+    if (isRaiMediaFiltered(parsed) && !hasParsedVideo(parsed)) {
+      const debugPath = writeVeoOperationDebugSnapshot({ reason: "rai_filtered_no_video", params, officialMode: effectiveOfficialMode, operation, parsed });
+      const reasons = parsed.raiMediaFilteredReasons ?? [];
+      const suggestion = buildRaiSuggestion({ sanitizedPrompt: requestPrompt, reasons });
+      const details = {
+        type: "RAI_FILTERED",
+        message: "Veo 安全过滤，未生成视频",
+        reasons,
+        suggestion,
+        sanitizedPrompt: requestPrompt,
+        productOnlyPrompt: buildProductOnlyPrompt(),
+        negativePrompt: requestNegativePrompt,
+        personGeneration: "omitted",
+        raiMediaFilteredCount: parsed.raiMediaFilteredCount ?? 0,
+        raiMediaFilteredReasons: reasons,
+        fallbackUsed: raiFallbackApplied,
+        requestLogs,
+        debugPath,
+        switchModelSuggestion: "切换 Seedance / 可灵 / Wan 重试"
+      };
+      throw new ProviderError(
+        "VEO_RAI_FILTERED_NO_VIDEO",
+        "Google Veo 安全过滤：当前画面或提示词可能包含真人肖像、名人相似、未成年人、危险动作、版权或音频风险。系统已为你生成安全改写版本。",
+        `${reasons.join("；") || "raiMediaFilteredCount > 0"}\nDebug snapshot: ${debugPath}`,
+        details
+      );
+    }
+
+    if (!hasParsedVideo(parsed)) {
+      const debugPath = writeVeoOperationDebugSnapshot({ reason: "empty_result_no_video_no_rai", params, officialMode: effectiveOfficialMode, operation, parsed });
       throw new ProviderError(
         "VEO_OPERATION_NO_VIDEO_IN_RESPONSE",
-        "Google Veo 已完成请求，但返回结构中没有解析到视频文件。请检查 operation 结果结构、模型权限、区域限制或当前模式是否支持。",
-        JSON.stringify(parsed.rawSummary)
+        "Veo 返回空结果，可能是处理失败或模型服务异常",
+        `${JSON.stringify(parsed.rawSummary)}\nDebug snapshot: ${debugPath}`,
+        {
+          type: "EMPTY_RESULT",
+          message: "Veo 返回空结果，可能是处理失败或模型服务异常",
+          rawSummary: parsed.rawSummary,
+          requestLogs,
+          debugPath
+        }
       );
     }
 
@@ -531,6 +972,12 @@ export async function generateVideoWithGoogleVeo(params: VideoProviderParams): P
         ...(payloadSummary.payloadSummary as Record<string, unknown>),
         operationName: operation.name,
         operationDone: operation.done,
+        effectiveOfficialMode,
+        raiFallbackApplied,
+        requestLogs,
+        finalRaiMediaFilteredCount: parsed.raiMediaFilteredCount ?? 0,
+        finalRaiMediaFilteredReasons: parsed.raiMediaFilteredReasons ?? [],
+        finalPersonGeneration: raiFallbackApplied?.secondFallback ? "omitted" : initialPersonGeneration,
         operationHasError: Boolean(operation.error),
         operationResponseKeys: parsed.rawSummary.responseKeys,
         parsedVideoUriExists: Boolean(parsed.videoUri),

@@ -11,7 +11,8 @@ function generationError(error: unknown) {
       status: "error" as const,
       errorCode: error.errorCode,
       errorMessage: error.message,
-      debugMessage: error.debugMessage
+      debugMessage: error.debugMessage,
+      payloadSummary: error.details
     };
   }
   const message = error instanceof Error ? error.message : "生成失败";

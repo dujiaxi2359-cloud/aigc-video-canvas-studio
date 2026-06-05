@@ -10,6 +10,8 @@ export type ParsedVeoVideo = {
 };
 
 export type VeoOperationParseResult = ParsedVeoVideo & {
+  raiMediaFilteredCount?: number;
+  raiMediaFilteredReasons?: string[];
   rawSummary: {
     responseKeys: string[];
     generatedVideosCount: number;
@@ -52,7 +54,7 @@ function extractVideo(candidate: unknown, sourceShape: string): ParsedVeoVideo |
   if (!record) return undefined;
 
   const videoRecord = asRecord(record.video) ?? record;
-  const videoUri = stringField(videoRecord, ["uri", "gcsUri", "gcs_uri", "fileUri", "file_uri", "name"]);
+  const videoUri = stringField(videoRecord, ["uri", "gcsUri", "gcs_uri", "fileUri", "file_uri", "downloadUri", "download_uri", "signedUri", "signed_uri", "name"]);
   const videoBytes = stringField(videoRecord, ["videoBytes", "video_bytes"]);
   const mimeType = stringField(videoRecord, ["mimeType", "mime_type"]) ?? "video/mp4";
   const fileName = stringField(videoRecord, ["displayName", "display_name", "name"]);
@@ -71,8 +73,58 @@ function extractVideo(candidate: unknown, sourceShape: string): ParsedVeoVideo |
   return undefined;
 }
 
+function looksLikeVideoRecord(record: UnknownRecord) {
+  const mimeType = stringField(record, ["mimeType", "mime_type", "contentType", "content_type"]);
+  if (mimeType?.startsWith("video/")) return true;
+  if (stringField(record, ["videoBytes", "video_bytes"])) return true;
+  const uri = stringField(record, ["uri", "gcsUri", "gcs_uri", "fileUri", "file_uri", "downloadUri", "download_uri", "signedUri", "signed_uri"]);
+  return Boolean(uri && (/^gs:\/\//.test(uri) || /^https?:\/\//.test(uri) || /^files\//.test(uri) || /\.(mp4|mov|webm)(\?|$)/i.test(uri)));
+}
+
+function findNestedVideo(candidate: unknown, sourceShape: string, depth = 0, seen = new WeakSet<object>()): ParsedVeoVideo | undefined {
+  if (depth > 8) return undefined;
+  if (Array.isArray(candidate)) {
+    for (let index = 0; index < candidate.length; index += 1) {
+      const parsed = findNestedVideo(candidate[index], `${sourceShape}[${index}]`, depth + 1, seen);
+      if (parsed) return parsed;
+    }
+    return undefined;
+  }
+  const record = asRecord(candidate);
+  if (!record) return undefined;
+  if (seen.has(record)) return undefined;
+  seen.add(record);
+
+  const direct = extractVideo(record, sourceShape);
+  if (direct && looksLikeVideoRecord(asRecord(direct.videoObject) ?? record)) return direct;
+
+  for (const [key, value] of Object.entries(record)) {
+    const parsed = findNestedVideo(value, `${sourceShape}.${key}`, depth + 1, seen);
+    if (parsed) return parsed;
+  }
+  return undefined;
+}
+
 function generatedVideosFrom(response: UnknownRecord) {
   return response.generatedVideos ?? response.generated_videos;
+}
+
+function numberField(record: UnknownRecord | undefined, keys: string[]) {
+  if (!record) return undefined;
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === "number" && Number.isFinite(value)) return value;
+  }
+  return undefined;
+}
+
+function stringArrayField(record: UnknownRecord | undefined, keys: string[]) {
+  if (!record) return undefined;
+  for (const key of keys) {
+    const value = record[key];
+    if (Array.isArray(value)) return value.filter((item): item is string => typeof item === "string" && Boolean(item.trim()));
+  }
+  return undefined;
 }
 
 export function parseVeoOperationResult(operation: unknown): VeoOperationParseResult {
@@ -102,6 +154,7 @@ export function parseVeoOperationResult(operation: unknown): VeoOperationParseRe
     parsed = extractVideo(candidate.value, candidate.shape);
     if (parsed) break;
   }
+  if (!parsed) parsed = findNestedVideo(response, "response");
 
   const generatedVideosArray = Array.isArray(generatedVideos) ? generatedVideos : undefined;
   const predictionsArray = Array.isArray(predictions) ? predictions : undefined;
@@ -109,6 +162,8 @@ export function parseVeoOperationResult(operation: unknown): VeoOperationParseRe
 
   return {
     ...parsed,
+    raiMediaFilteredCount: numberField(response, ["raiMediaFilteredCount", "rai_media_filtered_count"]),
+    raiMediaFilteredReasons: stringArrayField(response, ["raiMediaFilteredReasons", "rai_media_filtered_reasons"]),
     rawSummary: {
       responseKeys: Object.keys(response),
       generatedVideosCount: generatedVideosArray?.length ?? 0,

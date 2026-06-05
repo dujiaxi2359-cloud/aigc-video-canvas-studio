@@ -1,6 +1,7 @@
 import { ModelConfigCenter } from "../components/settings/ModelConfigCenter";
 import { NetworkDiagnosticsPanel } from "../components/settings/NetworkDiagnosticsPanel";
 import { AgentSettingsPanel } from "../components/settings/AgentSettingsPanel";
+import { AdminProgramLogsPanel } from "../components/settings/AdminProgramLogsPanel";
 
 export function SettingsPage() {
   return (
@@ -8,6 +9,7 @@ export function SettingsPage() {
       <div className="mx-auto max-w-[1180px]">
         <AgentSettingsPanel />
         <NetworkDiagnosticsPanel />
+        <AdminProgramLogsPanel />
       </div>
       <ModelConfigCenter />
     </div>

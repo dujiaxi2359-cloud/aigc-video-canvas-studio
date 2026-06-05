@@ -1,42 +1,31 @@
 import { useState } from "react";
-import { BaseEdge, EdgeLabelRenderer, getSmoothStepPath, type EdgeProps } from "reactflow";
+import { EdgeLabelRenderer, type EdgeProps } from "reactflow";
 import { X } from "lucide-react";
 import { useCanvasStore } from "../../store/canvasStore";
+import { getStudioBezierPath } from "./useBezierPath";
 
 export function StudioEdge(props: EdgeProps) {
   const [hovered, setHovered] = useState(false);
   const deleteEdge = useCanvasStore((state) => state.deleteEdge);
-  const [edgePath, labelX, labelY] = getSmoothStepPath({
+  const [edgePath, labelX, labelY] = getStudioBezierPath({
     sourceX: props.sourceX,
     sourceY: props.sourceY,
-    sourcePosition: props.sourcePosition,
     targetX: props.targetX,
-    targetY: props.targetY,
-    targetPosition: props.targetPosition,
-    borderRadius: 18
+    targetY: props.targetY
   });
-
-  const selectedStyle = props.selected
-    ? {
-        stroke: "#a5b4fc",
-        strokeWidth: 3,
-        filter: "drop-shadow(0 0 8px rgba(129,140,248,0.5))"
-      }
-    : {
-        stroke: hovered ? "#7dd3fc" : "rgba(81,199,255,0.58)",
-        strokeWidth: hovered ? 2.6 : 2,
-        filter: hovered ? "drop-shadow(0 0 6px rgba(125,211,252,0.36))" : "drop-shadow(0 0 4px rgba(81,199,255,0.24))"
-      };
+  const stateClass = props.selected ? "is-selected" : hovered ? "is-hovered" : "";
 
   return (
-    <g onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)}>
-      <BaseEdge id={props.id} path={edgePath} style={selectedStyle} />
+    <g className={`studio-edge ${stateClass}`} onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)}>
+      <path className="studio-edge-glow" d={edgePath} fill="none" />
+      <path className="studio-edge-base" d={edgePath} fill="none" />
+      <path className="studio-edge-flow" d={edgePath} fill="none" />
       <path d={edgePath} fill="none" stroke="transparent" strokeWidth={18} className="react-flow__edge-interaction" />
       <EdgeLabelRenderer>
         {(hovered || props.selected) && (
           <button
             type="button"
-            className="nodrag nopan absolute grid h-6 w-6 place-items-center rounded-full border border-white/[0.12] bg-[#11141b]/95 text-white/70 shadow-[0_10px_24px_rgba(0,0,0,0.35)] backdrop-blur-xl transition hover:bg-red-500/90 hover:text-white"
+            className="nodrag nopan absolute grid h-6 w-6 place-items-center rounded-full border border-white/[0.12] bg-[#10131a]/80 text-white/70 shadow-[0_10px_24px_rgba(0,0,0,0.35),inset_0_1px_0_rgba(255,255,255,0.05)] backdrop-blur-2xl transition duration-200 hover:border-red-300/30 hover:bg-red-500/18 hover:text-red-100"
             style={{ transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`, pointerEvents: "all" }}
             onMouseEnter={() => setHovered(true)}
             onMouseLeave={() => setHovered(false)}

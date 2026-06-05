@@ -89,7 +89,8 @@ function providerErrorMeta(providerId: string | undefined, error: unknown) {
     return {
       errorCode: error.errorCode,
       errorMessage: error.message,
-      debugMessage: error.debugMessage
+      debugMessage: error.debugMessage,
+      payloadSummary: error.details
     };
   }
   const message = error instanceof Error ? error.message : "生成失败";
@@ -107,8 +108,8 @@ function providerErrorMeta(providerId: string | undefined, error: unknown) {
   };
 }
 
-function errorResponse(errorMessage: string, errorCode = "PROVIDER_ERROR", debugMessage?: string) {
-  return { status: "error" as const, errorCode, errorMessage, debugMessage };
+function errorResponse(errorMessage: string, errorCode = "PROVIDER_ERROR", debugMessage?: string, payloadSummary?: unknown) {
+  return { status: "error" as const, errorCode, errorMessage, debugMessage, payloadSummary };
 }
 
 function catalogFor(model: NonNullable<InternalModelConfig>) {
@@ -362,7 +363,7 @@ export async function generateText(input: GenerateTextRequest) {
     throw new Error("该文本模型暂未支持真实调用");
   } catch (error) {
     const meta = providerErrorMeta(model.provider_id, error);
-    return errorResponse(meta.errorMessage, meta.errorCode, meta.debugMessage);
+    return errorResponse(meta.errorMessage, meta.errorCode, meta.debugMessage, meta.payloadSummary);
   }
 }
 export async function generateVideo(input: GenerateVideoRequest) {
@@ -526,7 +527,7 @@ export async function generateVideo(input: GenerateVideoRequest) {
       status: "error",
       errorMessage: meta.errorMessage
     });
-    return errorResponse(meta.errorMessage, meta.errorCode, meta.debugMessage);
+    return errorResponse(meta.errorMessage, meta.errorCode, meta.debugMessage, meta.payloadSummary);
   }
 }
 
@@ -665,7 +666,7 @@ export async function generateImage(input: GenerateImageRequest) {
       status: "error",
       errorMessage: meta.errorMessage
     });
-    return errorResponse(meta.errorMessage, meta.errorCode, meta.debugMessage);
+    return errorResponse(meta.errorMessage, meta.errorCode, meta.debugMessage, meta.payloadSummary);
   }
 }
 
@@ -692,4 +693,3 @@ export async function generateWithOpenAICompatible() {
 export async function generateWithCustomApi() {
   throw new Error("自定义 API 真实调用入口尚未接入。");
 }
-

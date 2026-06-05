@@ -27,6 +27,8 @@ export type ProviderErrorCode =
   | "VEO_OPERATION_TIMEOUT"
   | "VEO_OPERATION_FAILED"
   | "VEO_OPERATION_NO_VIDEO_IN_RESPONSE"
+  | "VEO_RAI_MEDIA_FILTERED"
+  | "VEO_RAI_FILTERED_NO_VIDEO"
   | "VEO_VIDEO_DOWNLOAD_FAILED"
   | "VEO_VIDEO_FILE_EMPTY"
   | "MISSING_VIDEO_INPUT"
@@ -35,12 +37,14 @@ export type ProviderErrorCode =
 export class ProviderError extends Error {
   errorCode: ProviderErrorCode;
   debugMessage?: string;
+  details?: unknown;
 
-  constructor(errorCode: ProviderErrorCode, errorMessage: string, debugMessage?: string) {
+  constructor(errorCode: ProviderErrorCode, errorMessage: string, debugMessage?: string, details?: unknown) {
     super(errorMessage);
     this.name = "ProviderError";
     this.errorCode = errorCode;
     this.debugMessage = debugMessage;
+    this.details = details;
   }
 }
 

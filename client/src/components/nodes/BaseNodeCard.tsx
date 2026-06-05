@@ -31,6 +31,14 @@ function openCreateMenu(event: React.MouseEvent | React.PointerEvent, id: string
   );
 }
 
+function statusTone(status?: string) {
+  if (!status) return "idle";
+  if (/生成中|合成中|运行|处理中|loading/i.test(status)) return "running";
+  if (/完成|成功|已完成|success/i.test(status)) return "success";
+  if (/失败|错误|error/i.test(status)) return "error";
+  return "idle";
+}
+
 export function BaseNodeCard({
   id,
   type,
@@ -47,16 +55,16 @@ export function BaseNodeCard({
 }: BaseNodeCardProps) {
   const deleteNode = useCanvasStore((state) => state.deleteNode);
   const inputPositions = Array.from({ length: inputHandles }, (_, index) => `${((index + 1) / (inputHandles + 1)) * 100}%`);
+  const tone = statusTone(status);
 
   return (
     <div
       style={{ width }}
-      className={`group relative overflow-visible rounded-2xl border bg-[#151922]/[0.94] text-[#f3f5f7] shadow-[0_16px_36px_rgba(0,0,0,0.32)] transition duration-150 hover:border-white/[0.12] ${
-        selected
-          ? "border-[#7c6cf6]/[0.66] shadow-[0_0_0_1px_rgba(124,108,246,0.18),0_18px_38px_rgba(0,0,0,0.38)]"
-          : "border-white/[0.08]"
-      }`}
+      className={`studio-node-card group relative overflow-visible text-[#f3f5f7] transition duration-200 ${selected ? "is-selected" : ""} ${tone === "running" ? "is-running" : ""}`}
     >
+      <div className="pointer-events-none absolute inset-0 rounded-[22px] opacity-0 transition duration-200 group-hover:opacity-100">
+        <div className="absolute inset-x-8 -top-px h-px bg-[linear-gradient(90deg,transparent,rgba(125,211,252,0.34),transparent)]" />
+      </div>
       {inputPositions.map((top, index) => (
         <Handle
           key={index}
@@ -78,13 +86,13 @@ export function BaseNodeCard({
         />
       )}
 
-      <div className="node-drag-handle flex h-[42px] cursor-grab items-center justify-between border-b border-white/[0.05] px-3 active:cursor-grabbing">
+      <div className="node-drag-handle flex h-[42px] cursor-grab items-center justify-between border-b border-white/[0.055] px-3 active:cursor-grabbing">
         <div className="flex min-w-0 items-center gap-2">
           <div className="truncate text-[14px] font-semibold text-[#f3f5f7]">{title}</div>
           <Badge>{badge}</Badge>
         </div>
         <div className="nodrag nopan flex items-center gap-2">
-          {status && <span className="rounded-full border border-white/[0.06] bg-white/[0.04] px-2 py-0.5 text-[11px] text-[#8b95a5]">{status}</span>}
+          {status && <span className={`studio-status-badge is-${tone}`}>{status}</span>}
           {headerActions}
           <Button variant="ghost" className="nodrag nopan h-7 w-7 px-0 text-[#8b95a5]" onClick={() => deleteNode(id)} title="删除节点">
             <Trash2 size={14} strokeWidth={1.8} />
@@ -99,4 +107,3 @@ export function BaseNodeCard({
 }
 
 export const NodeShell = BaseNodeCard;
-

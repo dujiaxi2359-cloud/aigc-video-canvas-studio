@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ReactFlow, { Background, BackgroundVariant, ConnectionLineType, Panel, useReactFlow, type ReactFlowInstance } from "reactflow";
-import { Image, Layers3, Minus, Plus, Scan, Sparkles, Wand2 } from "lucide-react";
-import { motion } from "framer-motion";
+import { Minus, Plus, Scan } from "lucide-react";
 import { CanvasContextMenu, type CanvasMenuState } from "./CanvasContextMenu";
 import { ConnectionCreateMenu, type ConnectionCreateMenuState } from "./ConnectionCreateMenu";
 import { nodeTypes } from "./nodeTypes";
 import { StudioEdge } from "./StudioEdge";
+import { StudioConnectionLine } from "./StudioConnectionLine";
 import { useCanvasHotkeys } from "./useCanvasHotkeys";
 import { useCanvasStore } from "../../store/canvasStore";
 import { AgentFloatingButton } from "../agent/AgentFloatingButton";
@@ -33,53 +33,16 @@ function ZoomControls() {
   const { zoomIn, zoomOut, fitView } = useReactFlow();
   return (
     <Panel position="bottom-right" className="!m-5">
-      <div className="flex overflow-hidden rounded-2xl border border-white/[0.08] bg-[#11141b]/[0.88] shadow-[0_10px_30px_rgba(0,0,0,0.28)] backdrop-blur-xl">
-        <button className="grid h-10 w-10 place-items-center text-[#d2d9e3] hover:bg-white/[0.05] hover:text-white" onClick={() => zoomOut()}>
+      <div className="canvas-glass-pill flex overflow-hidden">
+        <button className="grid h-10 w-10 place-items-center text-[#d2d9e3] transition hover:bg-white/[0.045] hover:text-white" onClick={() => zoomOut()}>
           <Minus size={16} strokeWidth={1.8} />
         </button>
-        <button className="grid h-10 w-10 place-items-center border-x border-white/[0.08] text-[#d2d9e3] hover:bg-white/[0.05] hover:text-white" onClick={() => fitView({ padding: 0.28 })}>
+        <button className="grid h-10 w-10 place-items-center border-x border-white/[0.08] text-[#d2d9e3] transition hover:bg-white/[0.045] hover:text-white" onClick={() => fitView({ padding: 0.28 })}>
           <Scan size={16} strokeWidth={1.8} />
         </button>
-        <button className="grid h-10 w-10 place-items-center text-[#d2d9e3] hover:bg-white/[0.05] hover:text-white" onClick={() => zoomIn()}>
+        <button className="grid h-10 w-10 place-items-center text-[#d2d9e3] transition hover:bg-white/[0.045] hover:text-white" onClick={() => zoomIn()}>
           <Plus size={16} strokeWidth={1.8} />
         </button>
-      </div>
-    </Panel>
-  );
-}
-
-function QuickGenerateBar() {
-  return (
-    <Panel position="top-center" className="!mt-[88px]">
-      <div className="relative">
-        <div className="pointer-events-none absolute left-1/2 top-1/2 h-[460px] w-[460px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[radial-gradient(circle,rgba(99,102,241,0.08)_0%,transparent_70%)] blur-[70px]" />
-        <motion.div
-          layoutId="portal-bar"
-          className="pointer-events-auto relative z-10 flex h-[42px] items-center gap-1 rounded-full border border-white/[0.08] bg-white/[0.035] p-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] backdrop-blur-3xl"
-        >
-          {[
-            { icon: Sparkles, label: "智能生成" },
-            { icon: Image, label: "引用素材" },
-            { icon: Wand2, label: "反推提示词" },
-            { icon: Layers3, label: "合成视频" }
-          ].map((item, index) => {
-            const Icon = item.icon;
-            return (
-              <button
-                key={item.label}
-                type="button"
-                className={`inline-flex h-8 items-center gap-2 rounded-full border px-3.5 text-[12px] transition ${
-                  index === 0
-                    ? "border-violet-400/28 bg-violet-500/[0.18] text-white shadow-[inset_0_0_20px_rgba(139,92,246,0.10)]"
-                    : "border-transparent bg-transparent text-white/52 hover:bg-white/[0.06] hover:text-white/88"
-                }`}
-              >
-                <Icon size={15} strokeWidth={1.7} />
-                {item.label}
-              </button>
-            );
-          })}
-        </motion.div>
       </div>
     </Panel>
   );
@@ -93,6 +56,28 @@ function getEventPoint(event: MouseEvent | TouchEvent) {
   return { x: mouseEvent.clientX, y: mouseEvent.clientY };
 }
 
+type SnappedHandle = { nodeId: string; handleId: string | null; distance: number };
+
+function nearestTargetHandle(point: { x: number; y: number }, sourceNodeId: string, zoom: number): SnappedHandle | null {
+  const snapRadius = zoom < 0.5 ? 48 : zoom < 0.75 ? 42 : 34;
+  let nearest: { nodeId: string; handleId: string | null; distance: number } | null = null;
+  document.querySelectorAll<HTMLElement>(".react-flow__handle.target").forEach((handle) => {
+    const nodeId = handle.getAttribute("data-nodeid");
+    if (!nodeId || nodeId === sourceNodeId) return;
+    const rect = handle.getBoundingClientRect();
+    const centerX = rect.left + rect.width / 2;
+    const centerY = rect.top + rect.height / 2;
+    const distance = Math.hypot(point.x - centerX, point.y - centerY);
+    if (distance > snapRadius || (nearest && nearest.distance <= distance)) return;
+    nearest = {
+      nodeId,
+      handleId: handle.getAttribute("data-handleid"),
+      distance
+    };
+  });
+  return nearest;
+}
+
 export function WorkflowCanvas() {
   const { nodes, edges, onNodesChange, onEdgesChange, connectNodes, addConnectedNode, addAssetNode, selectEdge, selectNode, clearSelection } = useCanvasStore();
   const reactFlowWrapper = useRef<HTMLDivElement | null>(null);
@@ -102,17 +87,13 @@ export function WorkflowCanvas() {
   const [reactFlow, setReactFlow] = useState<ReactFlowInstance | null>(null);
   const [pendingConnection, setPendingConnection] = useState<PendingConnection | null>(null);
   const [connectionMenuOpen, setConnectionMenuOpen] = useState(false);
+  const [isConnecting, setIsConnecting] = useState(false);
   const [contextMenu, setContextMenu] = useState<CanvasMenuState | null>(null);
   useCanvasHotkeys();
   const defaultEdgeOptions = useMemo(
     () => ({
       type: "studioEdge",
-      animated: true,
-      style: {
-        stroke: "rgba(81,199,255,0.62)",
-        strokeWidth: 2,
-        filter: "drop-shadow(0 0 4px rgba(81,199,255,0.24))"
-      }
+      animated: true
     }),
     []
   );
@@ -174,6 +155,7 @@ export function WorkflowCanvas() {
       handleId: params.handleId ?? null
     };
     didConnectRef.current = false;
+    setIsConnecting(true);
     closeConnectionMenu();
   }, [closeConnectionMenu]);
 
@@ -183,6 +165,7 @@ export function WorkflowCanvas() {
       connectNodes(connection);
       closeConnectionMenu();
       connectingNodeRef.current = { nodeId: null, handleId: null };
+      setIsConnecting(false);
     },
     [closeConnectionMenu, connectNodes]
   );
@@ -192,7 +175,10 @@ export function WorkflowCanvas() {
       const sourceNodeId = connectingNodeRef.current.nodeId;
       const sourceHandleId = connectingNodeRef.current.handleId;
 
-      if (!sourceNodeId) return;
+      if (!sourceNodeId) {
+        setIsConnecting(false);
+        return;
+      }
 
       const target = event.target as HTMLElement | null;
       const isHandle = Boolean(target?.closest?.(".react-flow__handle"));
@@ -200,10 +186,26 @@ export function WorkflowCanvas() {
       if (didConnectRef.current || isHandle) {
         connectingNodeRef.current = { nodeId: null, handleId: null };
         didConnectRef.current = false;
+        setIsConnecting(false);
         return;
       }
 
       const point = getEventPoint(event);
+      const snapped = nearestTargetHandle(point, sourceNodeId, reactFlow?.getZoom?.() ?? 1);
+      if (snapped) {
+        connectNodes({
+          source: sourceNodeId,
+          sourceHandle: sourceHandleId ?? "out",
+          target: snapped.nodeId,
+          targetHandle: snapped.handleId
+        });
+        closeConnectionMenu();
+        connectingNodeRef.current = { nodeId: null, handleId: null };
+        didConnectRef.current = false;
+        setIsConnecting(false);
+        return;
+      }
+
       const flowPosition = screenToFlow(point);
 
       setPendingConnection({
@@ -217,8 +219,9 @@ export function WorkflowCanvas() {
 
       connectingNodeRef.current = { nodeId: null, handleId: null };
       didConnectRef.current = false;
+      setIsConnecting(false);
     },
-    [screenToFlow]
+    [closeConnectionMenu, connectNodes, reactFlow, screenToFlow]
   );
 
   const menuSourceType = pendingConnection
@@ -244,7 +247,7 @@ export function WorkflowCanvas() {
   return (
     <div
       ref={reactFlowWrapper}
-      className="relative h-full w-full bg-[#020203]"
+      className={`canvas-space relative h-full w-full bg-[#020203] ${isConnecting ? "is-connecting" : ""}`}
       onDragOver={(event) => {
         if (event.dataTransfer.types.includes("application/aigc-asset")) event.preventDefault();
       }}
@@ -281,6 +284,7 @@ export function WorkflowCanvas() {
           setContextMenu(null);
         }}
         onEdgeContextMenu={(event: MouseEvent, edge: any) => {
+          if (isConnecting) return;
           event.preventDefault();
           event.stopPropagation();
           selectEdge(edge.id);
@@ -289,6 +293,7 @@ export function WorkflowCanvas() {
           closeConnectionMenu();
         }}
         onNodeContextMenu={(event: MouseEvent, node: any) => {
+          if (isConnecting) return;
           event.preventDefault();
           event.stopPropagation();
           selectNode(node.id);
@@ -296,6 +301,7 @@ export function WorkflowCanvas() {
           closeConnectionMenu();
         }}
         onPaneContextMenu={(event: MouseEvent) => {
+          if (isConnecting) return;
           event.preventDefault();
           setContextMenu({ type: "pane", position: { x: event.clientX, y: event.clientY } });
           closeConnectionMenu();
@@ -316,12 +322,13 @@ export function WorkflowCanvas() {
         defaultViewport={{ x: 120, y: 80, zoom: 0.85 }}
         minZoom={0.3}
         maxZoom={1.4}
-        connectionLineType={ConnectionLineType.SmoothStep}
+        connectionLineType={ConnectionLineType.Bezier}
+        connectionLineComponent={StudioConnectionLine}
+        connectionRadius={44}
         proOptions={{ hideAttribution: true }}
         defaultEdgeOptions={defaultEdgeOptions}
       >
         <Background color="rgba(255,255,255,0.03)" gap={40} size={1} variant={BackgroundVariant.Dots} />
-        <QuickGenerateBar />
         <ZoomControls />
       </ReactFlowWithExtras>
       <AgentFloatingButton />

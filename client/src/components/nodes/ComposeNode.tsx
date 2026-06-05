@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import type { NodeProps } from "reactflow";
 import { Clapperboard } from "lucide-react";
 import { Button } from "../common/Button";
@@ -14,6 +15,16 @@ export function ComposeNode(props: NodeProps<ComposeNodeData>) {
   const videoCount = incoming.filter((node) => node?.type === "video").length;
   const hasAudio = incoming.some((node) => node?.type === "audio");
   const hasSubtitle = incoming.some((node) => node?.type === "text" || node?.type === "textGenerate" || node?.type === "script");
+  const compose = () => update(props.id, { status: "success", outputUrl: "/uploads/exports/mock-compose.json" });
+
+  useEffect(() => {
+    function handleRunNode(event: Event) {
+      const nodeId = (event as CustomEvent<{ nodeId?: string }>).detail?.nodeId;
+      if (nodeId === props.id) compose();
+    }
+    window.addEventListener("studio:run-node", handleRunNode);
+    return () => window.removeEventListener("studio:run-node", handleRunNode);
+  });
 
   return (
     <NodeShell
@@ -44,7 +55,7 @@ export function ComposeNode(props: NodeProps<ComposeNodeData>) {
           <div className="flex justify-between rounded-[10px] border border-white/[0.05] bg-black/[0.14] px-3 py-1.5 text-[#cfd6e1]"><span>音频</span><span>{hasAudio ? "已连接" : "未连接"}</span></div>
           <div className="flex justify-between rounded-[10px] border border-white/[0.05] bg-black/[0.14] px-3 py-1.5 text-[#cfd6e1]"><span>字幕</span><span>{hasSubtitle ? "已连接" : "未连接"}</span></div>
         </div>
-        <Button className="nodrag nopan mt-3 h-9 w-full" variant="primary" onClick={() => update(props.id, { status: "success", outputUrl: "/uploads/exports/mock-compose.json" })}>
+        <Button className="nodrag nopan mt-3 h-9 w-full" variant="primary" onClick={compose}>
           模拟合成
         </Button>
         {props.data.status === "success" && <div className="mt-2 text-[12px] text-emerald-300">输出状态：合成完成</div>}
