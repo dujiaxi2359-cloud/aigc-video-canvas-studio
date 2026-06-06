@@ -1,9 +1,26 @@
-import { Router } from "express";
+import { Router, type Request, type Response, type NextFunction } from "express";
 import { testOssConnection } from "../services/assets/ossUpload.service.js";
 import { getProxyInfo } from "../utils/proxy.js";
 import { ProviderError } from "../utils/providerErrors.js";
 
 export const ossDiagnosticsRouter = Router();
+
+function isLoopback(value: string) {
+  return value === "127.0.0.1" || value === "::1" || value === "::ffff:127.0.0.1" || value === "localhost";
+}
+
+function isLocalRequest(req: Request) {
+  const ip = req.ip || req.socket.remoteAddress || "";
+  const forwarded = String(req.headers["x-forwarded-for"] ?? "").split(",")[0]?.trim();
+  const candidates = [ip, forwarded].filter(Boolean);
+  if (!candidates.length) return false;
+  return candidates.every(isLoopback);
+}
+
+function productionLocalOnly(req: Request, res: Response, next: NextFunction) {
+  if (process.env.NODE_ENV !== "production" || isLocalRequest(req)) return next();
+  res.status(404).json({ status: "not_found", errorMessage: "Not found" });
+}
 
 function ossSuggestion(code: string) {
   switch (code) {
@@ -52,6 +69,8 @@ async function handleOssHealth(_req: unknown, res: any) {
     });
   }
 }
+
+ossDiagnosticsRouter.use(productionLocalOnly);
 
 ossDiagnosticsRouter.get("/oss/health", handleOssHealth);
 ossDiagnosticsRouter.get("/oss", handleOssHealth);
