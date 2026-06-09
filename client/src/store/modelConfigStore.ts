@@ -9,7 +9,7 @@ type State = {
   createModelConfig: (data: Partial<ModelConfig> & { apiKey?: string }) => Promise<void>;
   updateModelConfig: (id: string, data: Partial<ModelConfig> & { apiKey?: string }) => Promise<void>;
   deleteModelConfig: (id: string) => Promise<void>;
-  testModelConfig: (id: string) => Promise<string>;
+  testModelConfig: (id: string, data?: Partial<ModelConfig> & { apiKey?: string }) => Promise<string>;
 };
 
 export const useModelConfigStore = create<State>((set, get) => ({
@@ -27,8 +27,8 @@ export const useModelConfigStore = create<State>((set, get) => ({
     await modelConfigApi.remove(id);
     await get().fetchModelConfigs();
   },
-  testModelConfig: async (id) => {
-    const result = await modelConfigApi.test(id);
+  testModelConfig: async (id, data) => {
+    const result = await modelConfigApi.test(id, data);
     return result.message;
   }
 }));

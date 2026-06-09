@@ -129,12 +129,33 @@ export async function deleteModelConfig(id: string) {
   await db.run("DELETE FROM model_configs WHERE id = ?", id);
 }
 
-export async function testModelConfig(id: string) {
+export async function testModelConfig(id: string, input: Partial<ModelConfig> & { apiKey?: string } = {}) {
   const row = await getInternalModelConfig(id);
   if (!row) throw new Error("Model config not found");
-  const apiKey = row.encrypted_api_key ? decryptApiKey(row.encrypted_api_key) : "";
+  const apiKey = submittedApiKey(input.apiKey) ?? (row.encrypted_api_key ? decryptApiKey(row.encrypted_api_key) : "");
+  const apiBaseUrl = input.apiBaseUrl?.trim() || row.api_base_url;
+  const modelName = input.modelName?.trim() || row.model_name;
+  const category = input.category ?? row.category ?? inferCategory(input.modelType ?? row.model_type);
+
+  if (!apiBaseUrl || !modelName || !apiKey) {
+    return { success: false, message: "请填写 API Base URL、Model Name 和 API Key。" };
+  }
+  if (category === "text" && /\/v1\/videos\/?$/i.test(apiBaseUrl)) {
+    return {
+      success: false,
+      message: "当前是文字模型，但 Base URL 指向 /v1/videos 图片/视频任务接口。Gemini 文字模型需要中转商提供 /v1beta/models/{model}:generateContent 或 /v1/chat/completions。"
+    };
+  }
+  if (row.provider_id === "google" && !/generativelanguage\.googleapis\.com/i.test(apiBaseUrl)) {
+    return {
+      success: true,
+      message: category === "video"
+        ? "中转配置格式有效：Veo 将使用 Bearer Key 调用 /v1/videos。请通过一次实际生成验证账户余额和模型权限。"
+        : "中转配置格式有效：Gemini 将使用 Bearer Key 调用 /v1beta/models/{model}:generateContent。请通过一次实际生成验证该中转是否开放当前模型。"
+    };
+  }
   return {
-    success: Boolean(row.api_base_url && row.model_name && apiKey),
-    message: row.api_base_url && row.model_name && apiKey ? "模拟连接成功" : "请填写 API Base URL、Model Name 和 API Key"
+    success: true,
+    message: "官方 API 配置格式有效。请通过一次实际生成验证模型权限和额度。"
   };
 }

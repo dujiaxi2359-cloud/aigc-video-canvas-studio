@@ -8,6 +8,7 @@ import { aspectRatioToGoogleSize, normalizeImageAspectRatio } from "../../utils/
 import { readGeneratedFileMetadata } from "../../utils/mediaMetadata.js";
 import { ProviderError, rawErrorMessage } from "../../utils/providerErrors.js";
 import { googleGenAIOptions } from "./providerBaseUrl.js";
+import { generateImageWithGoogleRelay, isGoogleRelayEndpoint } from "./googleRelay.service.js";
 import type { ImageProviderParams, ProviderGenerateResult } from "./providerTypes.js";
 
 function mimeFromPath(filePath: string) {
@@ -121,6 +122,7 @@ async function callGeminiImage(ai: any, params: ImageProviderParams, parts: Arra
 export async function generateImageWithGoogle(params: ImageProviderParams): Promise<ProviderGenerateResult> {
   if (!params.apiKey) throw new ProviderError("API_KEY_INVALID", "请先在设置中心配置该模型 API Key。");
   if (params.apiKey.includes("*")) throw new ProviderError("API_KEY_INVALID", "Google API Key 读取到的是 maskedKey，请在设置中心重新填写完整 API Key。");
+  if (isGoogleRelayEndpoint(params.apiBaseUrl)) return generateImageWithGoogleRelay(params);
   if ((params.inputMode === "image-edit" || params.inputMode === "image-to-image") && !params.imageAssetIds?.length) {
     throw new ProviderError("MISSING_INPUT_ASSET", params.inputMode === "image-edit" ? "图片编辑需要连接一张图片素材。" : "图生图需要连接一张图片素材。");
   }

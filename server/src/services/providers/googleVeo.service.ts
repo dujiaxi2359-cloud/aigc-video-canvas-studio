@@ -15,6 +15,7 @@ import type { OfficialVideoMode } from "../../types/videoModes.js";
 import { parseVeoOperationResult, type VeoOperationParseResult } from "./googleVeo/veoOperationParser.js";
 import { googleGenAIOptions } from "./providerBaseUrl.js";
 import type { ProviderGenerateResult, VideoProviderParams } from "./providerTypes.js";
+import { generateVideoWithVeoProxy, isVeoProxyEndpoint } from "./veoProxyVideo.service.js";
 import {
   buildAudioSafePrompt,
   buildNegativePrompt as buildVeoNegativePrompt,
@@ -664,6 +665,7 @@ async function downloadVeoVideoResult(input: {
 export async function generateVideoWithGoogleVeo(params: VideoProviderParams): Promise<ProviderGenerateResult> {
   if (!params.apiKey) throw new ProviderError("API_KEY_INVALID", "请先在设置中心配置该模型 API Key。");
   if (params.apiKey.includes("*")) throw new ProviderError("API_KEY_INVALID", "Google API Key 读取到的是 maskedKey，请在设置中心重新填写完整 API Key。");
+  if (isVeoProxyEndpoint(params.apiBaseUrl)) return generateVideoWithVeoProxy(params);
   if (params.inputMode === "video-to-video" && params.videoMode !== "video_extension") {
     throw new ProviderError("ADAPTER_NOT_IMPLEMENTED", "Google Veo 当前 video-to-video 的视频输入参数尚未接入。");
   }

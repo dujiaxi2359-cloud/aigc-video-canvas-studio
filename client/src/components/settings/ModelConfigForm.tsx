@@ -65,7 +65,7 @@ export function ModelConfigForm({
   model?: ModelConfig;
   onSubmit: (data: Partial<ModelConfig> & { apiKey?: string }) => Promise<void>;
   onCancel: () => void;
-  onTest?: () => Promise<string>;
+  onTest?: (data: Partial<ModelConfig> & { apiKey?: string }) => Promise<string>;
   saving?: boolean;
 }) {
   const [catalog, setCatalog] = useState<ModelCatalogItem[]>([]);
@@ -262,7 +262,7 @@ export function ModelConfigForm({
             {isAzureOpenAI && <div className="mt-1 text-[12px] leading-5 text-[#7d8796]">可填写资源根地址，例如 https://你的资源名.openai.azure.com；也支持粘贴完整 images/generations endpoint。</div>}
           </Field>
           <Field label="API Key">
-            <ApiKeyInput value={form.apiKey} maskedValue={model?.maskedApiKey} onChange={(apiKey) => setForm((current) => ({ ...current, apiKey }))} onTest={async () => setMessage(onTest ? await onTest() : "请先保存后再测试连接")} />
+            <ApiKeyInput value={form.apiKey} maskedValue={model?.maskedApiKey} onChange={(apiKey) => setForm((current) => ({ ...current, apiKey }))} onTest={async () => setMessage(onTest ? await onTest(form) : "请先保存后再测试连接")} />
           </Field>
           {message && <div className="text-[12px] text-[#7d8796]">{message}</div>}
         </div>

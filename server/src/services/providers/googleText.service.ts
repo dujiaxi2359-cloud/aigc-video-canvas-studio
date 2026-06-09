@@ -4,6 +4,7 @@ import { GoogleGenAI } from "@google/genai";
 import { getAsset } from "../asset.service.js";
 import { ProviderError, rawErrorMessage } from "../../utils/providerErrors.js";
 import { googleGenAIOptions } from "./providerBaseUrl.js";
+import { generateTextWithGoogleRelay, isGoogleRelayEndpoint } from "./googleRelay.service.js";
 import type { ProviderGenerateResult, TextProviderParams } from "./providerTypes.js";
 
 function mimeFromPath(filePath: string) {
@@ -68,6 +69,7 @@ function classifyGoogleTextError(error: unknown): ProviderError {
 
 export async function generateTextWithGoogle(params: TextProviderParams): Promise<ProviderGenerateResult> {
   if (!params.apiKey) throw new ProviderError("API_KEY_INVALID", "请先在设置中心配置该模型 API Key。");
+  if (isGoogleRelayEndpoint(params.apiBaseUrl)) return generateTextWithGoogleRelay(params);
 
   try {
     const ai: any = new GoogleGenAI(googleGenAIOptions(params.apiKey, params.apiBaseUrl));

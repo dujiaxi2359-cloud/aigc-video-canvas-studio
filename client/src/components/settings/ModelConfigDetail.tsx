@@ -19,7 +19,7 @@ export function ModelConfigDetail({
   onCancel: () => void;
   onSubmit: (data: Partial<ModelConfig> & { apiKey?: string }) => Promise<void>;
   onDelete?: () => void;
-  onTest?: () => Promise<string>;
+  onTest?: (data: Partial<ModelConfig> & { apiKey?: string }) => Promise<string>;
   saving?: boolean;
   errorMessage?: string;
   successMessage?: string;

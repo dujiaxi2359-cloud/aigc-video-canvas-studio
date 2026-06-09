@@ -44,7 +44,7 @@ modelConfigRouter.delete("/:id", async (req, res, next) => {
 
 modelConfigRouter.post("/:id/test", async (req, res, next) => {
   try {
-    res.json(await testModelConfig(req.params.id));
+    res.json(await testModelConfig(req.params.id, req.body));
   } catch (error) {
     next(error);
   }

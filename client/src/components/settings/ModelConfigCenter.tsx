@@ -85,9 +85,9 @@ export function ModelConfigCenter() {
             setErrorMessage(errorText(error));
           }
         } : undefined}
-        onTest={selected ? async () => {
+        onTest={selected ? async (data) => {
           try {
-            return await testModelConfig(selected.id);
+            return await testModelConfig(selected.id, data);
           } catch (error) {
             const message = errorText(error);
             setErrorMessage(message);
