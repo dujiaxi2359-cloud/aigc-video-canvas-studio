@@ -7,6 +7,7 @@ import { buildPayloadSummary, logOfficialPayload } from "../../utils/generationP
 import { aspectRatioToGoogleSize, normalizeImageAspectRatio } from "../../utils/imageAspectRatio.js";
 import { readGeneratedFileMetadata } from "../../utils/mediaMetadata.js";
 import { ProviderError, rawErrorMessage } from "../../utils/providerErrors.js";
+import { googleGenAIOptions } from "./providerBaseUrl.js";
 import type { ImageProviderParams, ProviderGenerateResult } from "./providerTypes.js";
 
 function mimeFromPath(filePath: string) {
@@ -135,7 +136,7 @@ export async function generateImageWithGoogle(params: ImageProviderParams): Prom
   });
 
   try {
-    const ai: any = new GoogleGenAI({ apiKey: params.apiKey });
+    const ai: any = new GoogleGenAI(googleGenAIOptions(params.apiKey, params.apiBaseUrl));
     const inputParts = await imagePartsFromAssets(params.imageAssetIds);
     const parts = [{ text: params.prompt }, ...inputParts.parts];
     const mappedSize = aspectRatioToGoogleSize(params.aspectRatio);

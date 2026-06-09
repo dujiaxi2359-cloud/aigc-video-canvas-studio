@@ -4,7 +4,9 @@ const googleBase = "https://generativelanguage.googleapis.com/v1beta";
 const openaiBase = "https://api.openai.com/v1";
 const alibabaBase = "https://dashscope.aliyuncs.com/api/v1";
 const deepseekBase = "https://api.deepseek.com";
+const klingBase = "https://api.klingai.com";
 const grokBase = "https://api.x.ai/v1";
+const seedanceBase = "https://ark.cn-beijing.volces.com/api/v3";
 
 function model(input: Omit<ModelCatalogItem, "requiresApiKey">): ModelCatalogItem {
   return { ...input, requiresApiKey: true };
@@ -70,7 +72,7 @@ function video(
     grok: "Grok 视频",
     seedance: "Seedance / 火山方舟"
   }[providerId];
-  const base = { google: googleBase, alibaba: alibabaBase, kling: "", grok: grokBase, seedance: "" }[providerId];
+  const base = { google: googleBase, alibaba: alibabaBase, kling: klingBase, grok: grokBase, seedance: seedanceBase }[providerId];
 
   return model({
     id,
@@ -81,7 +83,7 @@ function video(
     name,
     displayName,
     defaultApiBaseUrl: base,
-    requiresApiBaseUrl: providerId === "kling" || providerId === "seedance",
+    requiresApiBaseUrl: false,
     capabilities
   });
 }

@@ -19,6 +19,7 @@ import { generateVideoWithGrok } from "./providers/grokVideo.service.js";
 import { generateVideoWithKling } from "./providers/klingVideo.service.js";
 import { generateImageWithOpenAI } from "./providers/openaiImage.service.js";
 import { generateVideoWithSeedance } from "./providers/seedanceVideo.service.js";
+import { resolveProviderApiBaseUrl } from "./providers/providerBaseUrl.js";
 import type { ImageInputMode, ModelCapabilities, ModelCatalogItem, VideoNodeContext } from "../types/model.js";
 import type { OfficialVideoMode } from "../types/videoModes.js";
 import { legacyInputModeToOfficialMode } from "../types/videoModes.js";
@@ -145,6 +146,10 @@ function logGenerate(input: {
     apiBaseUrl: input.model.api_base_url,
     forceMock: process.env.FORCE_MOCK_GENERATION
   });
+}
+
+function apiBaseUrlFor(model: NonNullable<InternalModelConfig>) {
+  return resolveProviderApiBaseUrl(model.provider_id, model.api_base_url);
 }
 
 function validateVideoRequest(capabilities: ModelCapabilities, input: GenerateVideoRequest) {
@@ -352,7 +357,7 @@ export async function generateText(input: GenerateTextRequest) {
     const providerParams = {
       ...input,
       apiKey,
-      apiBaseUrl: model.api_base_url,
+      apiBaseUrl: apiBaseUrlFor(model),
       modelName: model.model_name,
       providerId: model.provider_id,
       catalogModelId: catalogItem?.id
@@ -432,7 +437,7 @@ export async function generateVideo(input: GenerateVideoRequest) {
     const providerParams = {
       ...inputForGeneration,
       apiKey,
-      apiBaseUrl: model.api_base_url ?? "",
+      apiBaseUrl: apiBaseUrlFor(model),
       modelName,
       providerId,
       catalogModelId: catalogItem?.id,
@@ -581,7 +586,7 @@ export async function generateImage(input: GenerateImageRequest) {
     const providerParams = {
       ...input,
       apiKey,
-      apiBaseUrl: model.api_base_url ?? "",
+      apiBaseUrl: apiBaseUrlFor(model),
       modelName,
       providerId,
       catalogModelId: catalogItem?.id,

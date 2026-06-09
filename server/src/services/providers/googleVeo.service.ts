@@ -13,6 +13,7 @@ import { mapVideoParams } from "../../utils/videoParams.js";
 import { legacyInputModeToOfficialMode } from "../../types/videoModes.js";
 import type { OfficialVideoMode } from "../../types/videoModes.js";
 import { parseVeoOperationResult, type VeoOperationParseResult } from "./googleVeo/veoOperationParser.js";
+import { googleGenAIOptions } from "./providerBaseUrl.js";
 import type { ProviderGenerateResult, VideoProviderParams } from "./providerTypes.js";
 import {
   buildAudioSafePrompt,
@@ -668,7 +669,7 @@ export async function generateVideoWithGoogleVeo(params: VideoProviderParams): P
   }
 
   try {
-    const ai = new GoogleGenAI({ apiKey: params.apiKey });
+    const ai = new GoogleGenAI(googleGenAIOptions(params.apiKey, params.apiBaseUrl));
     const officialMode = params.videoMode ?? legacyInputModeToOfficialMode(params.inputMode, "google");
     const veoParams = normalizeVeoParams(params, officialMode);
     const mapped = mapVideoParams("google", params.modelName, officialMode, params.aspectRatio, veoParams.resolution, veoParams.durationSeconds);

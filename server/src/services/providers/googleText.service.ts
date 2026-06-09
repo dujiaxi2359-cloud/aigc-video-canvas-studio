@@ -3,6 +3,7 @@ import path from "node:path";
 import { GoogleGenAI } from "@google/genai";
 import { getAsset } from "../asset.service.js";
 import { ProviderError, rawErrorMessage } from "../../utils/providerErrors.js";
+import { googleGenAIOptions } from "./providerBaseUrl.js";
 import type { ProviderGenerateResult, TextProviderParams } from "./providerTypes.js";
 
 function mimeFromPath(filePath: string) {
@@ -69,7 +70,7 @@ export async function generateTextWithGoogle(params: TextProviderParams): Promis
   if (!params.apiKey) throw new ProviderError("API_KEY_INVALID", "请先在设置中心配置该模型 API Key。");
 
   try {
-    const ai: any = new GoogleGenAI({ apiKey: params.apiKey });
+    const ai: any = new GoogleGenAI(googleGenAIOptions(params.apiKey, params.apiBaseUrl));
     const imageParts = await imagePartsFromAssets(params.imageAssetIds);
     const response = await ai.models.generateContent({
       model: params.modelName,

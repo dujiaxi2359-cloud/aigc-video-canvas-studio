@@ -49,6 +49,12 @@ function categoryOf(model?: ModelCatalogItem | ModelConfig): CategoryFilter {
   return "video";
 }
 
+function defaultApiBaseUrlFor(model: ModelConfig | undefined, catalog: ModelCatalogItem[]) {
+  if (!model) return "";
+  const catalogItem = catalog.find((item) => item.providerId === model.providerId && item.name === model.modelName) ?? fallbackModelCatalog.find((item) => item.providerId === model.providerId && item.name === model.modelName);
+  return catalogItem?.defaultApiBaseUrl ?? providerCatalog.find((provider) => provider.id === model.providerId)?.defaultApiBaseUrl ?? "";
+}
+
 export function ModelConfigForm({
   model,
   onSubmit,
@@ -72,7 +78,7 @@ export function ModelConfigForm({
     provider: model?.provider ?? "",
     category: model?.category ?? "video",
     displayName: model?.displayName ?? "",
-    apiBaseUrl: model?.apiBaseUrl ?? "",
+    apiBaseUrl: model?.apiBaseUrl || defaultApiBaseUrlFor(model, fallbackModelCatalog),
     requiresApiBaseUrl: model?.requiresApiBaseUrl ?? false,
     apiKey: "",
     modelName: model?.modelName ?? "",
@@ -110,6 +116,7 @@ export function ModelConfigForm({
     }
 
     const matchedCatalogItem = catalog.find((item) => item.providerId === model.providerId && item.name === model.modelName) ?? fallbackModelCatalog.find((item) => item.providerId === model.providerId && item.name === model.modelName);
+    const fallbackApiBaseUrl = matchedCatalogItem?.defaultApiBaseUrl ?? providerCatalog.find((provider) => provider.id === model.providerId)?.defaultApiBaseUrl ?? "";
     setCatalogId(matchedCatalogItem?.id ?? "");
     setCategoryFilter(categoryOf(model));
     setProviderFilter((model.providerId as ProviderFilter | undefined) ?? "all");
@@ -118,7 +125,7 @@ export function ModelConfigForm({
       provider: model.provider,
       category: model.category ?? "video",
       displayName: model.displayName,
-      apiBaseUrl: model.apiBaseUrl,
+      apiBaseUrl: model.apiBaseUrl || fallbackApiBaseUrl,
       requiresApiBaseUrl: model.requiresApiBaseUrl ?? false,
       apiKey: "",
       modelName: model.modelName,

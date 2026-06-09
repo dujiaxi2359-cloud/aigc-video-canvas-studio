@@ -64,8 +64,8 @@ export const providerCatalog: ProviderCatalogItem[] = [
     id: "kling",
     name: "Kling",
     displayName: "可灵 / Kling",
-    defaultApiBaseUrl: "",
-    requiresApiBaseUrl: true,
+    defaultApiBaseUrl: "https://api.klingai.com",
+    requiresApiBaseUrl: false,
     apiKeyLabel: "Kling API Key",
     authType: "bearer",
     categories: ["video"]
@@ -84,8 +84,8 @@ export const providerCatalog: ProviderCatalogItem[] = [
     id: "seedance",
     name: "Seedance",
     displayName: "Seedance / 火山方舟",
-    defaultApiBaseUrl: "",
-    requiresApiBaseUrl: true,
+    defaultApiBaseUrl: "https://ark.cn-beijing.volces.com/api/v3",
+    requiresApiBaseUrl: false,
     apiKeyLabel: "火山方舟 API Key",
     authType: "bearer",
     categories: ["video"]
