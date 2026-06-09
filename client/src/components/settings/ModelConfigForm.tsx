@@ -256,9 +256,8 @@ export function ModelConfigForm({
           <Field label="API Base URL">
             <Input
               value={form.apiBaseUrl}
-              placeholder={isAzureOpenAI ? "https://你的资源名.openai.azure.com" : form.requiresApiBaseUrl ? "请输入该服务商的 API Base URL" : undefined}
+              placeholder={isAzureOpenAI ? "https://你的资源名.openai.azure.com" : "默认使用官方地址，也可以填写自定义中转地址"}
               onChange={(event) => setForm((current) => ({ ...current, apiBaseUrl: event.target.value }))}
-              readOnly={!form.requiresApiBaseUrl}
             />
             {isAzureOpenAI && <div className="mt-1 text-[12px] leading-5 text-[#7d8796]">可填写资源根地址，例如 https://你的资源名.openai.azure.com；也支持粘贴完整 images/generations endpoint。</div>}
           </Field>
@@ -270,7 +269,7 @@ export function ModelConfigForm({
       </Section>
 
       <div className="rounded-2xl border border-white/[0.08] bg-[#13171f]/[0.72] p-4 text-[12px] leading-5 text-[#7d8796]">
-        模型能力由系统内置 modelCatalog 决定。用户只需要选择模型并填写自己的 API Key，画布节点不会出现 API Key 或 API Base URL。
+        模型能力由系统内置 modelCatalog 决定。API Base URL 默认使用官方地址，也可以在这里改成自己的中转地址；画布节点不会出现 API Key 或 API Base URL。
       </div>
 
       <div className="flex justify-end gap-2">
