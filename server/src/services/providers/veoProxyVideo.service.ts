@@ -13,9 +13,9 @@ function sleep(ms: number) {
 export function isVeoProxyEndpoint(apiBaseUrl?: string) {
   if (!apiBaseUrl) return false;
   try {
-    return /\/v1\/videos\/?$/i.test(new URL(apiBaseUrl).pathname);
+    return /\/v1\/videos\/?$/i.test(new URL(apiBaseUrl).pathname) || /\/v1\/video\/create\/?$/i.test(new URL(apiBaseUrl).pathname);
   } catch {
-    return /\/v1\/videos\/?$/i.test(apiBaseUrl);
+    return /\/v1\/videos\/?$/i.test(apiBaseUrl) || /\/v1\/video\/create\/?$/i.test(apiBaseUrl);
   }
 }
 
@@ -39,8 +39,50 @@ async function imageDataUris(assetIds?: string[]) {
   return images;
 }
 
-function proxyModelName(mode: OfficialVideoMode) {
+function proxyModelName(params: VideoProviderParams, mode: OfficialVideoMode) {
+  if (params.modelName === "omni_flash-10s") return params.modelName;
   return mode === "image_to_video_first_last_frame" ? "veo_3_1-fast-fl" : "veo_3_1-fast";
+}
+
+function relayProtocol(endpoint: string) {
+  return /\/v1\/video\/create\/?$/i.test(new URL(endpoint).pathname) ? "unified-create-query" : "openai-videos";
+}
+
+function configuredRelayModelName(params: VideoProviderParams, mode: OfficialVideoMode, protocol: ReturnType<typeof relayProtocol>) {
+  if (protocol === "unified-create-query") return params.modelName;
+  return proxyModelName(params, mode);
+}
+
+function unifiedQueryEndpoint(endpoint: string, taskId: string) {
+  const parsed = new URL(endpoint);
+  parsed.pathname = parsed.pathname.replace(/\/create\/?$/i, "/query");
+  parsed.search = "";
+  parsed.searchParams.set("id", taskId);
+  return parsed.toString();
+}
+
+function taskIdFromResponse(payload: Record<string, unknown>): string | undefined {
+  for (const key of ["id", "task_id", "taskId"]) {
+    if (typeof payload[key] === "string" && payload[key]) return payload[key] as string;
+  }
+  const data = payload.data;
+  return data && typeof data === "object" ? taskIdFromResponse(data as Record<string, unknown>) : undefined;
+}
+
+function taskStatus(payload: Record<string, unknown>) {
+  const data = payload.data;
+  const value = payload.status
+    ?? payload.state
+    ?? (data && typeof data === "object" ? (data as Record<string, unknown>).status ?? (data as Record<string, unknown>).state : undefined);
+  return typeof value === "string" ? value.toLowerCase() : "";
+}
+
+function isCompletedStatus(status: string) {
+  return ["completed", "success", "succeeded", "done", "finished"].includes(status);
+}
+
+function isFailedStatus(status: string) {
+  return ["failed", "failure", "error", "cancelled", "canceled"].includes(status);
 }
 
 function proxySize(aspectRatio: string, resolution: string) {
@@ -97,47 +139,67 @@ function findVideoUrl(value: unknown): string | undefined {
 
 export async function generateVideoWithVeoProxy(params: VideoProviderParams): Promise<ProviderGenerateResult> {
   const endpoint = params.apiBaseUrl.replace(/\/$/, "");
+  const protocol = relayProtocol(endpoint);
   const mode = params.videoMode ?? legacyInputModeToOfficialMode(params.inputMode, "google");
+  const isOmni = params.modelName === "omni_flash-10s";
   if (!["text_to_video", "image_to_video_first_frame", "image_to_video_first_last_frame", "reference_images_to_video"].includes(mode)) {
-    throw new ProviderError("MODEL_MODE_UNSUPPORTED", "当前 Veo 中转接口只支持文生视频、首帧/首尾帧和参考图生视频。");
+    throw new ProviderError("MODEL_MODE_UNSUPPORTED", "当前 Google 中转视频接口只支持文生视频、图生视频和参考图生视频。");
+  }
+  if (isOmni && mode === "image_to_video_first_last_frame") {
+    throw new ProviderError("MODEL_MODE_UNSUPPORTED", "Google Omni Flash 10s 暂不支持首尾帧模式。");
   }
 
   try {
     const images = await imageDataUris(params.imageAssetIds);
+    const relayModel = configuredRelayModelName(params, mode, protocol);
+    const body = protocol === "unified-create-query"
+      ? {
+          model: relayModel,
+          prompt: params.prompt,
+          images,
+          aspect_ratio: params.aspectRatio,
+          size: params.resolution,
+          enhance_prompt: params.promptExtend ?? true,
+          enable_upsample: params.resolution.toLowerCase() !== "720p"
+        }
+      : {
+          model: relayModel,
+          prompt: params.prompt,
+          size: proxySize(params.aspectRatio, params.resolution),
+          images
+        };
     const response = await fetch(endpoint, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${params.apiKey}`,
         "Content-Type": "application/json"
       },
-      body: JSON.stringify({
-        model: proxyModelName(mode),
-        prompt: params.prompt,
-        size: proxySize(params.aspectRatio, params.resolution),
-        images
-      })
+      body: JSON.stringify(body)
     });
     const created = await responseJson(response);
     if (!response.ok) {
       throw new ProviderError("PROVIDER_ERROR", `Veo 中转接口创建任务失败：${errorMessage(created)}`, JSON.stringify(created));
     }
 
-    const taskId = typeof created.id === "string" ? created.id : undefined;
+    const taskId = taskIdFromResponse(created);
     if (!taskId) {
       throw new ProviderError("PROVIDER_ERROR", "Veo 中转接口没有返回任务 id。", JSON.stringify(created));
     }
 
     let task = created;
     const startedAt = Date.now();
-    while (task.status !== "completed") {
-      if (task.status === "failed") {
+    while (!isCompletedStatus(taskStatus(task))) {
+      if (isFailedStatus(taskStatus(task))) {
         throw new ProviderError("VEO_OPERATION_FAILED", `Veo 中转任务失败：${errorMessage(task)}`, JSON.stringify(task));
       }
       if (Date.now() - startedAt > 15 * 60 * 1000) {
         throw new ProviderError("VEO_OPERATION_TIMEOUT", "Veo 中转任务超过 15 分钟仍未完成，请稍后重试。");
       }
       await sleep(5000);
-      const pollResponse = await fetch(`${endpoint}/${encodeURIComponent(taskId)}`, {
+      const pollUrl = protocol === "unified-create-query"
+        ? unifiedQueryEndpoint(endpoint, taskId)
+        : `${endpoint}/${encodeURIComponent(taskId)}`;
+      const pollResponse = await fetch(pollUrl, {
         headers: { Authorization: `Bearer ${params.apiKey}` }
       });
       task = await responseJson(pollResponse);
@@ -158,9 +220,10 @@ export async function generateVideoWithVeoProxy(params: VideoProviderParams): Pr
       rawResponse: task,
       payloadSummary: {
         endpointType: "openai-compatible.videos",
+        relayProtocol: protocol,
         proxyEndpoint: endpoint,
         proxyTaskId: taskId,
-        proxyModel: proxyModelName(mode)
+        proxyModel: relayModel
       }
     };
   } catch (error) {

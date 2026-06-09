@@ -172,7 +172,7 @@ function validateVideoRequest(capabilities: ModelCapabilities, input: GenerateVi
 function assertFullQualityModel(input: { qualityMode?: string; providerId: string; catalogModelId?: string; modelName: string }) {
   const mode = input.qualityMode ?? "full_quality";
   const tier = qualityTierFor(input.providerId, input.catalogModelId, input.modelName);
-  const explicitlySelectedFastTier = /(?:fast|lite|turbo)/i.test(`${input.catalogModelId ?? ""} ${input.modelName}`);
+  const explicitlySelectedFastTier = /(?:fast|flash|lite|turbo)/i.test(`${input.catalogModelId ?? ""} ${input.modelName}`);
   if (mode === "full_quality" && ["fast", "lite", "turbo"].includes(tier) && !explicitlySelectedFastTier) {
     throw new Error(`当前选择的是 ${tier} 质量档模型。如需满血质量，请切换到非 Fast/Lite/Turbo 模型。`);
   }

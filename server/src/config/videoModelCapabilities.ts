@@ -2,7 +2,7 @@ import type { OfficialVideoCategory, OfficialVideoMode } from "../types/videoMod
 import { categoryForOfficialVideoMode } from "../types/videoModes.js";
 
 export type VideoProviderId = "alibaba" | "google" | "seedance" | "kling" | "grok";
-export type VideoFamily = "happyhorse" | "wan2.7" | "veo" | "seedance" | "kling" | "grok";
+export type VideoFamily = "happyhorse" | "wan2.7" | "veo" | "omni" | "seedance" | "kling" | "grok";
 
 export type VideoInputRequirement =
   | "prompt"
@@ -281,6 +281,36 @@ export const videoModelCapabilities: VideoModelCapability[] = [
   veoCapability({ modelId: "google-veo-3-1-extension", modelName: "veo-3.1-generate-preview", displayName: "Veo 3.1 视频延展", officialMode: "video_extension", qualityTier: "standard", maxReferenceImages: 3 }),
   veoCapability({ modelId: "google-veo-3-1-fast", modelName: "veo-3.1-fast-generate-preview", displayName: "Veo 3.1 Fast 文生视频", officialMode: "text_to_video", qualityTier: "fast", defaultResolution: "720p", maxReferenceImages: 3 }),
   veoCapability({ modelId: "google-veo-3-1-lite", modelName: "veo-3.1-lite-generate-preview", displayName: "Veo 3.1 Lite 文生视频", officialMode: "text_to_video", qualityTier: "lite", defaultResolution: "720p", supportedModes: [veoText, veoI2v, veoFirstLast], supportedResolutions: ["720p", "1080p"], supportsReferenceImages: false }),
+  capability({
+    providerId: "google",
+    family: "omni",
+    modelId: "google-omni-flash-10s",
+    modelName: "omni_flash-10s",
+    displayName: "Google Omni Flash 10s",
+    officialMode: "text_to_video",
+    adapterName: "googleRelayVideo",
+    runtimeStatus: "verified",
+    qualityTier: "fast",
+    supportedModes: [
+      mode({ mode: "text_to_video", label: "文生视频", requiredInputs: ["prompt"] }),
+      mode({ mode: "image_to_video_first_frame", label: "图生视频", requiredInputs: ["prompt", "first_frame"], minImages: 1, maxImages: 1 }),
+      mode({ mode: "reference_images_to_video", label: "参考图生视频", requiredInputs: ["prompt", "reference_images"], minImages: 1, maxImages: 7 })
+    ],
+    supportedAspectRatios: ["16:9", "9:16"],
+    supportedDurations: [10],
+    supportedResolutions: ["720p"],
+    defaultAspectRatio: "16:9",
+    defaultDuration: 10,
+    defaultResolution: "720p",
+    supportsAudio: false,
+    supportsNegativePrompt: false,
+    supportsPromptExtend: false,
+    supportsSeed: false,
+    supportsReferenceImages: true,
+    maxReferenceImages: 7,
+    maxImages: 7,
+    resultType: "async_task"
+  }),
   capability({
     providerId: "seedance",
     family: "seedance",

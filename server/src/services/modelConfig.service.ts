@@ -140,17 +140,23 @@ export async function testModelConfig(id: string, input: Partial<ModelConfig> & 
   if (!apiBaseUrl || !modelName || !apiKey) {
     return { success: false, message: "请填写 API Base URL、Model Name 和 API Key。" };
   }
-  if (category === "text" && /\/v1\/videos\/?$/i.test(apiBaseUrl)) {
+  const isVideoRelay = /\/v1\/videos\/?$/i.test(apiBaseUrl) || /\/v1\/video\/create\/?$/i.test(apiBaseUrl);
+  if (category === "text" && isVideoRelay) {
     return {
       success: false,
-      message: "当前是文字模型，但 Base URL 指向 /v1/videos 图片/视频任务接口。Gemini 文字模型需要中转商提供 /v1beta/models/{model}:generateContent 或 /v1/chat/completions。"
+      message: "当前是文字模型，但 Base URL 指向视频任务接口。Gemini 文字模型需要中转商提供 /v1beta/models/{model}:generateContent 或 /v1/chat/completions。"
     };
   }
   if (row.provider_id === "google" && !/generativelanguage\.googleapis\.com/i.test(apiBaseUrl)) {
+    const videoProtocol = /\/v1\/video\/create\/?$/i.test(apiBaseUrl)
+      ? "/v1/video/create + /v1/video/query"
+      : /\/v1\/videos\/?$/i.test(apiBaseUrl)
+        ? "/v1/videos"
+        : "自定义视频协议";
     return {
       success: true,
       message: category === "video"
-        ? "中转配置格式有效：Veo 将使用 Bearer Key 调用 /v1/videos。请通过一次实际生成验证账户余额和模型权限。"
+        ? `中转配置格式有效：Google 视频模型将使用 Bearer Key 调用 ${videoProtocol}。Model Name 会原样传给中转商，请通过实际生成验证模型名、余额和权限。`
         : "中转配置格式有效：Gemini 将使用 Bearer Key 调用 /v1beta/models/{model}:generateContent。请通过一次实际生成验证该中转是否开放当前模型。"
     };
   }

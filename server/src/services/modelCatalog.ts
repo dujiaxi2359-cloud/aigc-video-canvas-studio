@@ -223,6 +223,16 @@ const rawModelCatalog: ModelCatalogItem[] = [
     supportsReferenceImage: true,
     supportsAudio: false
   }),
+  video("google-omni-flash-10s", "google", "omni_flash-10s", "Google Omni Flash 10s", "text-to-video", {
+    inputModes: ["text-to-video", "image-to-video", "reference-to-video"],
+    duration: { type: "fixed", value: 10 },
+    aspectRatios: ["16:9", "9:16"],
+    resolutions: ["720p"],
+    supportsReferenceImage: true,
+    supportsMultiImageInput: true,
+    supportsVideoInput: false,
+    supportsAudio: false
+  }),
 
   video("alibaba-wan-2-7-t2v", "alibaba", "wan2.7-t2v", "Wan 2.7 文生视频", "text-to-video", { duration: { type: "range", min: 2, max: 15, step: 1 }, aspectRatios: wanRatios, resolutions: wanResolutions, inputModes: ["text-to-video"] }),
   video("alibaba-wan-2-7-i2v", "alibaba", "wan2.7-i2v", "Wan 2.7 图生视频", "image-to-video", { duration: { type: "range", min: 2, max: 15, step: 1 }, aspectRatios: wanRatios, resolutions: wanResolutions, inputModes: ["image-to-video", "first-last-frame", "reference-to-video"], supportsReferenceImage: true, supportsFirstLastFrame: true }),

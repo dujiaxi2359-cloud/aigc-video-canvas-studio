@@ -47,7 +47,7 @@ const genericCategoryInputModes: Record<OfficialVideoCategory, VideoInputMode[]>
 };
 
 function isRuntimeUsableVideoModel(model: ModelConfig) {
-  if (model.providerId === "google") return /^veo/i.test(model.modelName);
+  if (model.providerId === "google") return /^(veo|omni)/i.test(model.modelName);
   if (model.providerId === "alibaba") {
     return [
       "happyhorse-1.0-t2v",
@@ -107,6 +107,7 @@ function defaultModeForCategory(category: OfficialVideoCategory): OfficialVideoM
 function maxImagesForMode(model: ModelConfig | undefined, mode: OfficialVideoMode) {
   if (!model) return undefined;
   if (mode === "reference_images_to_video") {
+    if (model.modelName === "omni_flash-10s") return 7;
     if (model.providerId === "google") return 3;
     if (model.modelName === "happyhorse-1.0-r2v" || model.modelName === "wan2.7-r2v") return 5;
   }

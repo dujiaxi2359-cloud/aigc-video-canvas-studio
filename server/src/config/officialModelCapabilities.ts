@@ -72,6 +72,22 @@ export const officialModelCapabilities: OfficialModelCapability[] = [
     parameterMapping: { aspectRatio: "config.aspectRatio", duration: "config.durationSeconds", resolution: "config.resolution" }
   },
   {
+    providerId: "google",
+    modelId: "google-omni-flash-10s",
+    modelName: "omni_flash-10s",
+    displayName: "Google Omni Flash 10s",
+    officialEndpointType: "relay.videos",
+    adapterName: "googleRelayVideo",
+    runtimeStatus: "verified",
+    qualityTier: "fast",
+    supportedInputModes: ["text-to-video", "image-to-video", "reference-to-video"],
+    supportedAspectRatios: googleVeoRatios,
+    supportedDurations: [10],
+    supportedResolutions: ["720p"],
+    defaultResolution: "720p",
+    parameterMapping: { model: "omni_flash-10s", size: "size", images: "images" }
+  },
+  {
     providerId: "alibaba",
     modelId: "alibaba-wan-2-7-t2v",
     modelName: "wan2.7-t2v",

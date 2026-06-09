@@ -1,6 +1,7 @@
 import { capabilityForMode, getVideoModelCapabilityOrLegacy } from "../config/videoModelCapabilities.js";
 import { normalizeVeoParams } from "../services/providers/googleVeo.service.js";
 import { parseVeoOperationResult } from "../services/providers/googleVeo/veoOperationParser.js";
+import { isVeoProxyEndpoint } from "../services/providers/veoProxyVideo.service.js";
 import type { VideoProviderParams } from "../services/providers/providerTypes.js";
 import type { OfficialVideoMode } from "../types/videoModes.js";
 
@@ -87,6 +88,9 @@ assert(parsed.videoUri === "files/video-1", "generatedVideos[0].video should par
 
 const image = normalizeVeoParams(params({ videoMode: "image_to_video_first_frame", inputMode: "image-to-video", imageAssetIds: ["img"] }), "image_to_video_first_frame");
 assert(image.supportsCurrentMode, "image mode should be supported without previewUrl");
+assert(isVeoProxyEndpoint("https://otuapi.com/v1/videos"), "OpenAI-style video relay endpoint should be recognized");
+assert(isVeoProxyEndpoint("https://yunwu.ai/v1/video/create"), "Unified create/query relay endpoint should be recognized");
+assert(!isVeoProxyEndpoint("https://generativelanguage.googleapis.com/v1beta"), "Google native endpoint should not be treated as a relay");
 assert(process.env.ALLOW_MOCK_GENERATION !== "true" && process.env.FORCE_MOCK_GENERATION !== "true", "mock/fallback must not be enabled for capability tests");
 
 console.log("test:veo-capabilities ok");
