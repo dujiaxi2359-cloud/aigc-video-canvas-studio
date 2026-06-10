@@ -58,11 +58,6 @@ function isOmniVideoEndpoint(endpoint: string) {
   return /\/omni-video\/?$/i.test(new URL(endpoint).pathname);
 }
 
-function normalizedDuration(params: VideoProviderParams, endpoint: string) {
-  if (!isOmniVideoEndpoint(endpoint)) return String(params.duration);
-  return String(params.duration <= 5 ? 5 : 10);
-}
-
 function record(value: unknown) {
   return value && typeof value === "object" ? value as Record<string, unknown> : {};
 }
@@ -123,7 +118,7 @@ export async function generateVideoWithKling(params: VideoProviderParams): Promi
       model_name: params.modelName,
       prompt: params.prompt,
       negative_prompt: params.negativePrompt,
-      duration: normalizedDuration(params, endpoint),
+      duration: String(params.duration),
       aspect_ratio: params.aspectRatio,
       mode: params.resolution.toLowerCase() === "1080p" ? "pro" : "std"
     };

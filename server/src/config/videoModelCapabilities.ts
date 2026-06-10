@@ -96,13 +96,17 @@ const veoI2v = mode({ mode: "image_to_video_first_frame", label: "图生视频",
 const veoRef = mode({ mode: "reference_images_to_video", label: "参考图生视频", requiredInputs: ["prompt", "reference_images"], minImages: 1, maxImages: 3 });
 const veoFirstLast = mode({ mode: "image_to_video_first_last_frame", label: "首尾帧视频", requiredInputs: ["prompt", "first_frame", "last_frame"], minImages: 2, maxImages: 2 });
 const veoExtension = mode({ mode: "video_extension", label: "视频延展", requiredInputs: ["prompt", "video"], minVideos: 1, maxVideos: 1, adapterName: "googleVeoVideoExtension" });
-const klingDurations = [5, 10];
-const klingModes = [
-  mode({ mode: "text_to_video", label: "文生视频", requiredInputs: ["prompt"], supportedDurations: klingDurations, optionalInputs: ["negative_prompt", "camera_motion"] }),
-  mode({ mode: "image_to_video_first_frame", label: "首帧图生视频", requiredInputs: ["prompt", "first_frame"], supportedDurations: klingDurations, minImages: 1, maxImages: 1 }),
-  mode({ mode: "image_to_video_first_last_frame", label: "首尾帧视频", requiredInputs: ["prompt", "first_frame", "last_frame"], supportedDurations: klingDurations, minImages: 2, maxImages: 2 }),
-  mode({ mode: "reference_images_to_video", label: "多图参考生视频", requiredInputs: ["prompt", "reference_images"], supportedDurations: klingDurations, minImages: 1, maxImages: 4 })
-];
+const klingStandardDurations = [5, 10];
+const klingLongDurations = [5, 10, 15];
+
+function klingModesForDurations(supportedDurations: number[]) {
+  return [
+    mode({ mode: "text_to_video", label: "文生视频", requiredInputs: ["prompt"], supportedDurations, optionalInputs: ["negative_prompt", "camera_motion"] }),
+    mode({ mode: "image_to_video_first_frame", label: "首帧图生视频", requiredInputs: ["prompt", "first_frame"], supportedDurations, minImages: 1, maxImages: 1 }),
+    mode({ mode: "image_to_video_first_last_frame", label: "首尾帧视频", requiredInputs: ["prompt", "first_frame", "last_frame"], supportedDurations, minImages: 2, maxImages: 2 }),
+    mode({ mode: "reference_images_to_video", label: "多图参考生视频", requiredInputs: ["prompt", "reference_images"], supportedDurations, minImages: 1, maxImages: 4 })
+  ];
+}
 
 function klingCapability(input: {
   modelId: string;
@@ -110,10 +114,12 @@ function klingCapability(input: {
   displayName: string;
   qualityTier?: "standard" | "full" | "fast" | "lite" | "turbo";
   supportedModes?: VideoModeCapability[];
+  supportedDurations?: number[];
   supportsReferenceImages?: boolean;
   maxReferenceImages?: number;
   maxImages?: number;
 }) {
+  const supportedDurations = input.supportedDurations ?? klingStandardDurations;
   return capability({
     providerId: "kling",
     family: "kling",
@@ -124,9 +130,9 @@ function klingCapability(input: {
     adapterName: "klingVideo",
     runtimeStatus: "experimental",
     qualityTier: input.qualityTier ?? "full",
-    supportedModes: input.supportedModes ?? klingModes,
+    supportedModes: input.supportedModes ?? klingModesForDurations(supportedDurations),
     supportedAspectRatios: ["16:9", "9:16", "1:1"],
-    supportedDurations: klingDurations,
+    supportedDurations,
     supportedResolutions: ["720P", "1080P"],
     defaultAspectRatio: "16:9",
     defaultDuration: 5,
@@ -391,15 +397,15 @@ export const videoModelCapabilities: VideoModelCapability[] = [
     maxVideos: 1,
     resultType: "async_task"
   }),
-  klingCapability({ modelId: "kling-3-0", modelName: "kling-v3-omni", displayName: "可灵 Kling 3.0 Omni" }),
-  klingCapability({ modelId: "kling-2-6", modelName: "kling-v2-6", displayName: "可灵 Kling 2.6" }),
-  klingCapability({ modelId: "kling-2-5", modelName: "kling-v2-5-turbo", displayName: "可灵 Kling 2.5 Turbo", qualityTier: "turbo", supportedModes: klingModes.filter((item) => item.mode !== "reference_images_to_video"), supportsReferenceImages: false, maxImages: 2 }),
-  klingCapability({ modelId: "kling-2-1-master", modelName: "kling-v2-1-master", displayName: "可灵 Kling 2.1 Master" }),
-  klingCapability({ modelId: "kling-2-1", modelName: "kling-v2-1", displayName: "可灵 Kling 2.1" }),
-  klingCapability({ modelId: "kling-2-master", modelName: "kling-v2-master", displayName: "可灵 Kling 2.0 Master" }),
+  klingCapability({ modelId: "kling-3-0", modelName: "kling-v3-omni", displayName: "可灵 Kling 3.0 Omni", supportedDurations: klingLongDurations }),
+  klingCapability({ modelId: "kling-2-6", modelName: "kling-v2-6", displayName: "可灵 Kling 2.6", supportedDurations: klingLongDurations }),
+  klingCapability({ modelId: "kling-2-5", modelName: "kling-v2-5-turbo", displayName: "可灵 Kling 2.5 Turbo", qualityTier: "turbo", supportedModes: klingModesForDurations(klingStandardDurations).filter((item) => item.mode !== "reference_images_to_video"), supportsReferenceImages: false, maxImages: 2 }),
+  klingCapability({ modelId: "kling-2-1-master", modelName: "kling-v2-1-master", displayName: "可灵 Kling 2.1 Master", supportedDurations: klingLongDurations }),
+  klingCapability({ modelId: "kling-2-1", modelName: "kling-v2-1", displayName: "可灵 Kling 2.1", supportedDurations: klingLongDurations }),
+  klingCapability({ modelId: "kling-2-master", modelName: "kling-v2-master", displayName: "可灵 Kling 2.0 Master", supportedDurations: klingLongDurations }),
   klingCapability({ modelId: "kling-1-6", modelName: "kling-v1-6", displayName: "可灵 Kling 1.6" }),
-  klingCapability({ modelId: "kling-1-5", modelName: "kling-v1-5", displayName: "可灵 Kling 1.5", supportedModes: klingModes.filter((item) => item.mode !== "reference_images_to_video"), supportsReferenceImages: false, maxImages: 2 }),
-  klingCapability({ modelId: "kling-1", modelName: "kling-v1", displayName: "可灵 Kling 1.0", supportedModes: klingModes.filter((item) => item.mode !== "reference_images_to_video"), supportsReferenceImages: false, maxImages: 2 }),
+  klingCapability({ modelId: "kling-1-5", modelName: "kling-v1-5", displayName: "可灵 Kling 1.5", supportedModes: klingModesForDurations(klingStandardDurations).filter((item) => item.mode !== "reference_images_to_video"), supportsReferenceImages: false, maxImages: 2 }),
+  klingCapability({ modelId: "kling-1", modelName: "kling-v1", displayName: "可灵 Kling 1.0", supportedModes: klingModesForDurations(klingStandardDurations).filter((item) => item.mode !== "reference_images_to_video"), supportsReferenceImages: false, maxImages: 2 }),
   capability({
     providerId: "seedance",
     family: "seedance",

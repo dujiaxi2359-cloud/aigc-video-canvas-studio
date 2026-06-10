@@ -21,10 +21,11 @@ export type OfficialModelCapability = {
 const commonVideoRatios = ["16:9", "9:16", "1:1"];
 const googleVeoRatios = ["16:9", "9:16"];
 const imageRatios = ["1:1", "3:4", "4:3", "9:16", "16:9"];
-const klingDurations = [5, 10];
+const klingStandardDurations = [5, 10];
+const klingLongDurations = [5, 10, 15];
 const klingInputModes = ["text-to-video", "image-to-video", "first-last-frame", "reference-to-video"];
 
-function klingCapability(input: { modelId: string; modelName: string; displayName: string; qualityTier?: QualityTier; supportedInputModes?: string[] }): OfficialModelCapability {
+function klingCapability(input: { modelId: string; modelName: string; displayName: string; qualityTier?: QualityTier; supportedInputModes?: string[]; supportedDurations?: number[] }): OfficialModelCapability {
   return {
     providerId: "kling",
     modelId: input.modelId,
@@ -36,7 +37,7 @@ function klingCapability(input: { modelId: string; modelName: string; displayNam
     qualityTier: input.qualityTier ?? "full",
     supportedInputModes: input.supportedInputModes ?? klingInputModes,
     supportedAspectRatios: commonVideoRatios,
-    supportedDurations: klingDurations,
+    supportedDurations: input.supportedDurations ?? klingStandardDurations,
     supportedResolutions: ["720P", "1080P"],
     defaultResolution: "1080P",
     parameterMapping: { model: "model_name", firstFrame: "image", lastFrame: "image_tail", references: "image_list" }
@@ -124,12 +125,12 @@ export const officialModelCapabilities: OfficialModelCapability[] = [
     defaultResolution: "720p",
     parameterMapping: { prompt: "prompt", duration: "duration", aspectRatio: "aspect_ratio", resolution: "resolution" }
   },
-  klingCapability({ modelId: "kling-3-0", modelName: "kling-v3-omni", displayName: "可灵 Kling 3.0 Omni" }),
-  klingCapability({ modelId: "kling-2-6", modelName: "kling-v2-6", displayName: "可灵 Kling 2.6" }),
+  klingCapability({ modelId: "kling-3-0", modelName: "kling-v3-omni", displayName: "可灵 Kling 3.0 Omni", supportedDurations: klingLongDurations }),
+  klingCapability({ modelId: "kling-2-6", modelName: "kling-v2-6", displayName: "可灵 Kling 2.6", supportedDurations: klingLongDurations }),
   klingCapability({ modelId: "kling-2-5", modelName: "kling-v2-5-turbo", displayName: "可灵 Kling 2.5 Turbo", qualityTier: "turbo", supportedInputModes: ["text-to-video", "image-to-video", "first-last-frame"] }),
-  klingCapability({ modelId: "kling-2-1-master", modelName: "kling-v2-1-master", displayName: "可灵 Kling 2.1 Master" }),
-  klingCapability({ modelId: "kling-2-1", modelName: "kling-v2-1", displayName: "可灵 Kling 2.1" }),
-  klingCapability({ modelId: "kling-2-master", modelName: "kling-v2-master", displayName: "可灵 Kling 2.0 Master" }),
+  klingCapability({ modelId: "kling-2-1-master", modelName: "kling-v2-1-master", displayName: "可灵 Kling 2.1 Master", supportedDurations: klingLongDurations }),
+  klingCapability({ modelId: "kling-2-1", modelName: "kling-v2-1", displayName: "可灵 Kling 2.1", supportedDurations: klingLongDurations }),
+  klingCapability({ modelId: "kling-2-master", modelName: "kling-v2-master", displayName: "可灵 Kling 2.0 Master", supportedDurations: klingLongDurations }),
   klingCapability({ modelId: "kling-1-6", modelName: "kling-v1-6", displayName: "可灵 Kling 1.6" }),
   klingCapability({ modelId: "kling-1-5", modelName: "kling-v1-5", displayName: "可灵 Kling 1.5", supportedInputModes: ["text-to-video", "image-to-video", "first-last-frame"] }),
   klingCapability({ modelId: "kling-1", modelName: "kling-v1", displayName: "可灵 Kling 1.0", supportedInputModes: ["text-to-video", "image-to-video", "first-last-frame"] }),

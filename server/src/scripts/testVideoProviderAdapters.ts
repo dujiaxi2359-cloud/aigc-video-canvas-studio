@@ -48,12 +48,14 @@ assert(grokReference?.supportedModes.some((mode) => mode.mode === "video_extensi
 const klingReference = getVideoModelCapability("kling", "kling-3-0", "kling-v3-omni", "reference_images_to_video");
 assert(klingReference?.supportedModes.some((mode) => mode.mode === "image_to_video_first_last_frame"), "Kling should expose first/last frame mode");
 assert(klingReference?.maxReferenceImages === 4, "Kling reference mode should allow up to four images");
-assert(klingReference?.supportedDurations.join(",") === "5,10", "Kling should only expose official 5s and 10s durations");
+assert(klingReference?.supportedDurations.join(",") === "5,10,15", "Kling 3.0 should expose 5s, 10s, and 15s durations");
 
 const klingLegacy = getVideoModelCapability("kling", "kling-1-6", "kling-v1-6", "image_to_video_first_frame");
 assert(klingLegacy?.supportedDurations.join(",") === "5,10", "Kling 1.6 should be available with official durations");
 
 const klingTurbo = getVideoModelCapability("kling", "kling-2-5", "kling-v2-5-turbo", "reference_images_to_video");
 assert(!klingTurbo, "Kling 2.5 Turbo should not advertise reference-image mode");
+const klingTurboText = getVideoModelCapability("kling", "kling-2-5", "kling-v2-5-turbo", "text_to_video");
+assert(klingTurboText?.supportedDurations.join(",") === "5,10", "Kling 2.5 Turbo should stay on 5s and 10s durations");
 
 console.log("[test:video-provider-adapters] ok");
