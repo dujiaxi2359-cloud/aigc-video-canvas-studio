@@ -33,6 +33,14 @@ assert(
   "Seedance full relay endpoint should be used as-is"
 );
 assert(
+  seedanceCreateEndpoint("https://relay.example/v1/videos") === "https://relay.example/v1/videos",
+  "Seedance unified relay videos endpoint should be used as-is"
+);
+assert(
+  seedancePollEndpoint("https://relay.example/v1/videos", "task/1") === "https://relay.example/v1/videos/task%2F1",
+  "Seedance unified relay videos endpoint should also be the polling base"
+);
+assert(
   seedanceCreateEndpoint("https://relay.example/v1") === "https://relay.example/v1/video/generations",
   "Seedance relay base should append the compatible create path"
 );
