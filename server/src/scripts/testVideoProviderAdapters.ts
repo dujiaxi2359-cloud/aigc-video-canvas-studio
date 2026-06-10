@@ -1,5 +1,5 @@
 import { grokCreateEndpoint, grokPollEndpoint } from "../services/providers/grokVideo.service.js";
-import { klingBearerToken, klingCreateEndpoint, klingPollEndpoint } from "../services/providers/klingVideo.service.js";
+import { klingBearerToken, klingCreateEndpoint, klingPollEndpoint, normalizeKlingPrompt } from "../services/providers/klingVideo.service.js";
 import { getVideoModelCapability } from "../config/videoModelCapabilities.js";
 import { modelCatalog } from "../services/modelCatalog.js";
 
@@ -38,6 +38,8 @@ assert(parts.length === 3, "Kling AK/SK should produce a JWT");
 const payload = JSON.parse(Buffer.from(parts[1]!, "base64url").toString("utf8")) as Record<string, unknown>;
 assert(payload.iss === "access-key", "Kling JWT issuer should use AccessKey");
 assert(klingBearerToken("relay-token") === "relay-token", "Kling relay Bearer token should pass through");
+assert(normalizeKlingPrompt("  a\n\n b  ") === "a b", "Kling prompt should collapse whitespace");
+assert(Array.from(normalizeKlingPrompt("汉".repeat(2600))).length === 2500, "Kling prompt should stay within official 2500 character limit");
 assert(!modelCatalog.some((item) => item.name === "grok-imagine-fast"), "Unpublished Grok Imagine Fast entry should be removed");
 
 const grokReference = getVideoModelCapability("grok", "grok-imagine-video", "grok-imagine-video", "reference_images_to_video");

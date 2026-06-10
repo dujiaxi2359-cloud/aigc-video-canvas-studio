@@ -58,6 +58,14 @@ function isOmniVideoEndpoint(endpoint: string) {
   return /\/omni-video\/?$/i.test(new URL(endpoint).pathname);
 }
 
+const KLING_PROMPT_LIMIT = 2500;
+
+export function normalizeKlingPrompt(prompt: string) {
+  const normalized = prompt.replace(/\s+/g, " ").trim();
+  const chars = Array.from(normalized);
+  return chars.length > KLING_PROMPT_LIMIT ? chars.slice(0, KLING_PROMPT_LIMIT).join("") : normalized;
+}
+
 function record(value: unknown) {
   return value && typeof value === "object" ? value as Record<string, unknown> : {};
 }
@@ -114,9 +122,10 @@ export async function generateVideoWithKling(params: VideoProviderParams): Promi
     if (mode === "reference_images_to_video" && !images.length) throw new ProviderError("MISSING_INPUT_ASSET", "可灵多图参考模式需要连接 1 至 4 张参考图片。");
     const endpoint = klingCreateEndpoint(params.apiBaseUrl, mode);
     const omniVideo = isOmniVideoEndpoint(endpoint);
+    const prompt = normalizeKlingPrompt(params.prompt);
     const body: Record<string, unknown> = {
       model_name: params.modelName,
-      prompt: params.prompt,
+      prompt,
       negative_prompt: params.negativePrompt,
       duration: String(params.duration),
       aspect_ratio: params.aspectRatio,
@@ -167,7 +176,7 @@ export async function generateVideoWithKling(params: VideoProviderParams): Promi
       outputUrl: saved.outputUrl,
       localPath: saved.localPath,
       rawResponse: task,
-      payloadSummary: { endpoint, taskId: id, model: params.modelName, mode }
+      payloadSummary: { endpoint, taskId: id, model: params.modelName, mode, promptTruncated: prompt !== params.prompt }
     };
   } catch (error) {
     if (error instanceof ProviderError) throw error;
