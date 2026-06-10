@@ -1,5 +1,6 @@
 import { grokCreateEndpoint, grokPollEndpoint } from "../services/providers/grokVideo.service.js";
 import { klingBearerToken, klingCreateEndpoint, klingPollEndpoint, normalizeKlingPrompt } from "../services/providers/klingVideo.service.js";
+import { seedanceCreateEndpoint, seedancePollEndpoint } from "../services/providers/seedanceVideo.service.js";
 import { getVideoModelCapability } from "../config/videoModelCapabilities.js";
 import { modelCatalog } from "../services/modelCatalog.js";
 
@@ -14,6 +15,18 @@ assert(
 assert(
   grokPollEndpoint("https://api.x.ai/v1", "request/1") === "https://api.x.ai/v1/videos/request%2F1",
   "Grok poll endpoint should encode request id"
+);
+assert(
+  seedanceCreateEndpoint("https://relay.example/v1/video/generations") === "https://relay.example/v1/video/generations",
+  "Seedance full relay endpoint should be used as-is"
+);
+assert(
+  seedanceCreateEndpoint("https://relay.example/v1") === "https://relay.example/v1/video/generations",
+  "Seedance relay base should append the compatible create path"
+);
+assert(
+  seedancePollEndpoint("https://relay.example/v1/video/generations", "task/1") === "https://relay.example/v1/video/generations/task%2F1",
+  "Seedance relay poll endpoint should append encoded task id"
 );
 assert(
   klingCreateEndpoint("https://api.klingai.com", "text_to_video") === "https://api.klingai.com/v1/videos/text2video",
