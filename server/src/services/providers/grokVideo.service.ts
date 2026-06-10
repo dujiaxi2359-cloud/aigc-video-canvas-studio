@@ -34,6 +34,21 @@ async function assetDataUrls(assetIds?: string[]) {
   return urls;
 }
 
+async function assetFiles(assetIds?: string[]) {
+  const files: Array<{ blob: Blob; filename: string }> = [];
+  for (const assetId of assetIds ?? []) {
+    const asset = await getAsset(assetId);
+    if (!asset?.localPath || !fs.existsSync(asset.localPath)) {
+      throw new ProviderError("MISSING_INPUT_ASSET", "Grok 引用的图片或视频素材不存在。");
+    }
+    files.push({
+      blob: new Blob([fs.readFileSync(asset.localPath)], { type: mimeType(asset.localPath, asset.mimeType) }),
+      filename: path.basename(asset.localPath)
+    });
+  }
+  return files;
+}
+
 function baseUrl(value: string) {
   return value.trim().replace(/^(?:POST|GET|PUT|PATCH|DELETE)\s+/i, "").replace(/\/$/, "");
 }
@@ -50,6 +65,14 @@ export function grokPollEndpoint(apiBaseUrl: string, requestId: string) {
     return `${createEndpoint.replace(/\/videos\/generations$/i, "")}/videos/${encodeURIComponent(requestId)}`;
   }
   return `${createEndpoint}/${encodeURIComponent(requestId)}`;
+}
+
+export function isOfficialGrokEndpoint(apiBaseUrl: string) {
+  try {
+    return new URL(baseUrl(apiBaseUrl)).hostname === "api.x.ai";
+  } catch {
+    return /api\.x\.ai/i.test(apiBaseUrl);
+  }
 }
 
 function record(value: unknown) {
@@ -107,11 +130,16 @@ export async function generateVideoWithGrok(params: VideoProviderParams): Promis
   }
 
   try {
-    const images = await assetDataUrls(params.imageAssetIds);
-    const videos = await assetDataUrls(params.videoAssetIds);
-    if (mode === "image_to_video_first_frame" && !images[0]) throw new ProviderError("MISSING_INPUT_ASSET", "Grok 图生视频需要连接一张首帧图片。");
-    if (mode === "reference_images_to_video" && !images.length) throw new ProviderError("MISSING_INPUT_ASSET", "Grok 参考图生视频需要连接 1 至 7 张参考图片。");
-    if (["video_edit", "video_extension"].includes(mode) && !videos[0]) throw new ProviderError("MISSING_VIDEO_INPUT", "Grok 视频编辑或延展需要连接一个视频素材。");
+    const officialEndpoint = isOfficialGrokEndpoint(params.apiBaseUrl);
+    const images = officialEndpoint ? await assetDataUrls(params.imageAssetIds) : [];
+    const videos = officialEndpoint ? await assetDataUrls(params.videoAssetIds) : [];
+    const relayImages = officialEndpoint ? [] : await assetFiles(params.imageAssetIds);
+    const relayVideos = officialEndpoint ? [] : await assetFiles(params.videoAssetIds);
+    const imageCount = officialEndpoint ? images.length : relayImages.length;
+    const videoCount = officialEndpoint ? videos.length : relayVideos.length;
+    if (mode === "image_to_video_first_frame" && !imageCount) throw new ProviderError("MISSING_INPUT_ASSET", "Grok 图生视频需要连接一张首帧图片。");
+    if (mode === "reference_images_to_video" && !imageCount) throw new ProviderError("MISSING_INPUT_ASSET", "Grok 参考图生视频需要连接 1 至 7 张参考图片。");
+    if (["video_edit", "video_extension"].includes(mode) && !videoCount) throw new ProviderError("MISSING_VIDEO_INPUT", "Grok 视频编辑或延展需要连接一个视频素材。");
     const body: Record<string, unknown> = {
       model: params.modelName,
       prompt: params.prompt,
@@ -128,11 +156,24 @@ export async function generateVideoWithGrok(params: VideoProviderParams): Promis
     }
 
     const endpoint = grokCreateEndpoint(params.apiBaseUrl);
-    const response = await fetch(endpoint, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${params.apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify(body)
-    });
+    let requestBody: BodyInit;
+    const headers: Record<string, string> = { Authorization: `Bearer ${params.apiKey}` };
+    if (officialEndpoint) {
+      headers["Content-Type"] = "application/json";
+      requestBody = JSON.stringify(body);
+    } else {
+      const form = new FormData();
+      form.set("model", params.modelName);
+      form.set("prompt", params.prompt);
+      form.set("aspect_ratio", params.aspectRatio);
+      form.set("seconds", String(params.duration));
+      form.set("size", params.resolution.toUpperCase());
+      for (const file of relayImages) form.append("input_reference", file.blob, file.filename);
+      for (const file of relayVideos) form.append("input_video", file.blob, file.filename);
+      if (mode === "video_extension") form.set("mode", "extend");
+      requestBody = form;
+    }
+    const response = await fetch(endpoint, { method: "POST", headers, body: requestBody });
     let task = await responseJson(response);
     if (!response.ok) throw new ProviderError("PROVIDER_ERROR", `Grok 视频任务创建失败：${errorMessage(task)}`, JSON.stringify(task));
     const id = requestId(task);
@@ -172,7 +213,7 @@ export async function generateVideoWithGrok(params: VideoProviderParams): Promis
       outputUrl: saved.outputUrl,
       localPath: saved.localPath,
       rawResponse: task,
-      payloadSummary: { endpoint, requestId: id, model: params.modelName, mode }
+      payloadSummary: { endpoint, requestId: id, model: params.modelName, mode, protocol: officialEndpoint ? "xai-official-json" : "relay-multipart" }
     };
   } catch (error) {
     if (error instanceof ProviderError) throw error;
