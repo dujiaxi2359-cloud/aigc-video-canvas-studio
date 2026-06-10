@@ -48,6 +48,11 @@ generationRouter.post("/text", async (req, res) => {
   }
 });
 
-generationRouter.get("/tasks/:id", (req, res) => {
-  res.json(getGenerationTask(req.params.id));
+generationRouter.get("/tasks/:id", async (req, res) => {
+  const task = await getGenerationTask(req.params.id);
+  if (!task) {
+    res.status(404).json({ status: "error", errorMessage: "未找到该生成任务。" });
+    return;
+  }
+  res.json(task);
 });

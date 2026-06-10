@@ -4,6 +4,7 @@ import { legacyInputModeToOfficialMode, type OfficialVideoMode } from "../../typ
 import { downloadGeneratedFile } from "../../utils/downloadGeneratedFile.js";
 import { ProviderError, rawErrorMessage } from "../../utils/providerErrors.js";
 import { getAsset } from "../asset.service.js";
+import { saveGenerationTask } from "../generationTask.service.js";
 import type { ProviderGenerateResult, VideoProviderParams } from "./providerTypes.js";
 
 function sleep(ms: number) {
@@ -161,23 +162,32 @@ export async function generateVideoWithKling(params: VideoProviderParams): Promi
     const id = taskId(task);
     if (!id) throw new ProviderError("PROVIDER_ERROR", "可灵接口没有返回 task_id。", JSON.stringify(task));
     const pollEndpoint = klingPollEndpoint(endpoint, id);
+    await saveGenerationTask({
+      id,
+      status: taskStatus(task) || "submitted",
+      result: { provider: "kling", endpoint, pollEndpoint, nodeId: params.nodeId, modelName: params.modelName, response: task }
+    });
 
     const startedAt = Date.now();
     while (!["succeed", "succeeded", "success", "completed", "done"].includes(taskStatus(task))) {
       if (["failed", "error", "cancelled", "canceled"].includes(taskStatus(task))) {
+        await saveGenerationTask({ id, status: "failed", result: task, errorMessage: errorMessage(task) });
         throw new ProviderError("VEO_OPERATION_FAILED", `可灵视频任务失败：${errorMessage(task)}`, JSON.stringify(task));
       }
       if (Date.now() - startedAt > 20 * 60 * 1000) {
+        await saveGenerationTask({ id, status: "timeout", result: task, errorMessage: "可灵视频任务超过 20 分钟仍未完成。" });
         throw new ProviderError("VEO_OPERATION_TIMEOUT", "可灵视频任务超过 20 分钟仍未完成。");
       }
       await sleep(5000);
       const pollResponse = await fetch(pollEndpoint, { headers: { Authorization: `Bearer ${klingBearerToken(params.apiKey)}`, Accept: "application/json" } });
       task = await responseJson(pollResponse);
+      await saveGenerationTask({ id, status: taskStatus(task) || "processing", result: task });
       if (!pollResponse.ok) throw new ProviderError("PROVIDER_ERROR", `可灵视频任务查询失败：${errorMessage(task)}`, JSON.stringify(task));
     }
 
     const remoteUrl = resultVideoUrl(task);
     if (!remoteUrl) throw new ProviderError("VEO_OPERATION_NO_VIDEO_IN_RESPONSE", "可灵任务已完成，但响应中没有视频 URL。", JSON.stringify(task));
+    await saveGenerationTask({ id, status: "success", progress: 100, result: task });
     const saved = await downloadGeneratedFile(remoteUrl, "video_kling");
     return {
       status: "success",
