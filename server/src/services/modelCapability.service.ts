@@ -85,8 +85,9 @@ function calculateOfficialVideoOptions(
   const selectedMode = nodeContext.videoMode && availableVideoModes.includes(nodeContext.videoMode)
     ? nodeContext.videoMode
     : availableVideoModes[0];
+  const selectedModeCapability = capability.supportedModes.find((mode) => mode.mode === selectedMode);
   const availableInputModes = Array.from(new Set(availableVideoModes.map(officialModeToLegacyInputMode)));
-  let availableDurations = capability.supportedDurations;
+  let availableDurations = selectedModeCapability?.supportedDurations ?? capability.supportedDurations;
   let availableResolutions = capability.supportedResolutions;
   const lockedFields: AvailableVideoOptions["lockedFields"] = {};
   let warningMessage = capability.runtimeStatus === "not_implemented" ? "当前视频模型 adapter 尚未接入，不能生成。" : undefined;

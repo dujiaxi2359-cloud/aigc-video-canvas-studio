@@ -1,5 +1,5 @@
 import { grokCreateEndpoint, grokPollEndpoint } from "../services/providers/grokVideo.service.js";
-import { klingBearerToken, klingCreateEndpoint } from "../services/providers/klingVideo.service.js";
+import { klingBearerToken, klingCreateEndpoint, klingPollEndpoint } from "../services/providers/klingVideo.service.js";
 import { getVideoModelCapability } from "../config/videoModelCapabilities.js";
 import { modelCatalog } from "../services/modelCatalog.js";
 
@@ -23,6 +23,14 @@ assert(
   klingCreateEndpoint("https://relay.example/v1", "reference_images_to_video") === "https://relay.example/v1/videos/multi-image2video",
   "Kling relay base ending in /v1 should not duplicate version"
 );
+assert(
+  klingCreateEndpoint("https://yunwu.ai/kling/v1/videos/omni-video", "reference_images_to_video") === "https://yunwu.ai/kling/v1/videos/omni-video",
+  "Kling full relay endpoint should be used as-is"
+);
+assert(
+  klingPollEndpoint("https://yunwu.ai/kling/v1/videos/omni-video", "task/1") === "https://yunwu.ai/kling/v1/videos/omni-video/task%2F1",
+  "Kling full relay poll endpoint should append encoded task id"
+);
 
 const token = klingBearerToken("access-key:secret-key", 1_700_000_000);
 const parts = token.split(".");
@@ -40,5 +48,12 @@ assert(grokReference?.supportedModes.some((mode) => mode.mode === "video_extensi
 const klingReference = getVideoModelCapability("kling", "kling-3-0", "kling-v3-omni", "reference_images_to_video");
 assert(klingReference?.supportedModes.some((mode) => mode.mode === "image_to_video_first_last_frame"), "Kling should expose first/last frame mode");
 assert(klingReference?.maxReferenceImages === 4, "Kling reference mode should allow up to four images");
+assert(klingReference?.supportedDurations.join(",") === "5,10", "Kling should only expose official 5s and 10s durations");
+
+const klingLegacy = getVideoModelCapability("kling", "kling-1-6", "kling-v1-6", "image_to_video_first_frame");
+assert(klingLegacy?.supportedDurations.join(",") === "5,10", "Kling 1.6 should be available with official durations");
+
+const klingTurbo = getVideoModelCapability("kling", "kling-2-5", "kling-v2-5-turbo", "reference_images_to_video");
+assert(!klingTurbo, "Kling 2.5 Turbo should not advertise reference-image mode");
 
 console.log("[test:video-provider-adapters] ok");

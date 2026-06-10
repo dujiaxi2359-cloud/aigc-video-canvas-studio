@@ -230,7 +230,8 @@ function validateAgainstOfficialVideo(input: {
   if (!modeCapability) throw new Error(`当前官方模型不支持 ${mode} 视频模式。`);
   if ((modeCapability.runtimeStatus ?? capability.runtimeStatus) === "not_implemented") throw new Error(`${modeCapability.label} adapter 尚未接入，不能假装生成成功。`);
   if (input.aspectRatio && !capability.supportedAspectRatios.includes(input.aspectRatio)) throw new Error(`当前官方模型不支持 ${input.aspectRatio} 比例。`);
-  if (input.duration && !capability.supportedDurations.includes(input.duration)) throw new Error(`当前官方模型不支持 ${input.duration}s 时长。`);
+  const supportedDurations = modeCapability.supportedDurations ?? capability.supportedDurations;
+  if (input.duration && !supportedDurations.includes(input.duration)) throw new Error(`当前官方模型不支持 ${input.duration}s 时长。`);
   if (input.resolution && !capability.supportedResolutions.includes(input.resolution)) throw new Error(`当前官方模型不支持 ${input.resolution} 分辨率。`);
   const imageCount = input.imageCount ?? 0;
   if (modeCapability.requiredInputs.includes("first_frame") && imageCount < 1) throw new Error("当前模式需要连接首帧图片。");

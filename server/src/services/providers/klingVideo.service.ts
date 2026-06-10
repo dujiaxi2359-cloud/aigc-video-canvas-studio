@@ -46,8 +46,21 @@ function routeForMode(mode: OfficialVideoMode) {
 
 export function klingCreateEndpoint(apiBaseUrl: string, mode: OfficialVideoMode) {
   const base = apiBaseUrl.replace(/\/$/, "");
-  if (/\/v1\/videos\/(?:text2video|image2video|multi-image2video)$/i.test(base)) return base;
+  if (/\/videos\/[^/]+$/i.test(new URL(base).pathname)) return base;
   return `${base}${/\/v1$/i.test(base) ? "" : "/v1"}/videos/${routeForMode(mode)}`;
+}
+
+export function klingPollEndpoint(createEndpoint: string, taskId: string) {
+  return `${createEndpoint.replace(/\/$/, "")}/${encodeURIComponent(taskId)}`;
+}
+
+function isOmniVideoEndpoint(endpoint: string) {
+  return /\/omni-video\/?$/i.test(new URL(endpoint).pathname);
+}
+
+function normalizedDuration(params: VideoProviderParams, endpoint: string) {
+  if (!isOmniVideoEndpoint(endpoint)) return String(params.duration);
+  return String(params.duration <= 5 ? 5 : 10);
 }
 
 function record(value: unknown) {
@@ -59,7 +72,11 @@ async function responseJson(response: Response) {
   try {
     return JSON.parse(text) as Record<string, unknown>;
   } catch {
-    throw new ProviderError("PROVIDER_ERROR", `可灵接口返回了无法解析的响应（HTTP ${response.status}）。`, text.slice(0, 1000));
+    const looksLikeHtml = /^\s*<!doctype html|^\s*<html/i.test(text);
+    const message = looksLikeHtml
+      ? `可灵接口返回了网页 HTML（HTTP ${response.status}），不是 API JSON。请检查 Base URL 是否为中转 API 完整地址，或该接口是否需要不同路径。`
+      : `可灵接口返回了无法解析的响应（HTTP ${response.status}）。`;
+    throw new ProviderError("PROVIDER_ERROR", message, text.slice(0, 1000));
   }
 }
 
@@ -101,27 +118,28 @@ export async function generateVideoWithKling(params: VideoProviderParams): Promi
     if (mode === "image_to_video_first_last_frame" && images.length < 2) throw new ProviderError("MISSING_INPUT_ASSET", "可灵首尾帧模式需要连接首帧和尾帧两张图片。");
     if (mode === "reference_images_to_video" && !images.length) throw new ProviderError("MISSING_INPUT_ASSET", "可灵多图参考模式需要连接 1 至 4 张参考图片。");
     const endpoint = klingCreateEndpoint(params.apiBaseUrl, mode);
+    const omniVideo = isOmniVideoEndpoint(endpoint);
     const body: Record<string, unknown> = {
       model_name: params.modelName,
       prompt: params.prompt,
       negative_prompt: params.negativePrompt,
-      duration: String(params.duration),
+      duration: normalizedDuration(params, endpoint),
       aspect_ratio: params.aspectRatio,
       mode: params.resolution.toLowerCase() === "1080p" ? "pro" : "std"
     };
-    if (mode === "image_to_video_first_frame") body.image = images[0];
+    if (mode === "image_to_video_first_frame" || (omniVideo && mode === "reference_images_to_video")) body.image = images[0];
     if (mode === "image_to_video_first_last_frame") {
       body.image = images[0];
       body.image_tail = images[1];
     }
-    if (mode === "reference_images_to_video") {
+    if (mode === "reference_images_to_video" && !omniVideo) {
       body.image_list = images.map((image) => ({ image }));
     }
 
     const token = klingBearerToken(params.apiKey);
     const response = await fetch(endpoint, {
       method: "POST",
-      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", Accept: "application/json" },
       body: JSON.stringify(body)
     });
     let task = await responseJson(response);
@@ -130,7 +148,7 @@ export async function generateVideoWithKling(params: VideoProviderParams): Promi
     }
     const id = taskId(task);
     if (!id) throw new ProviderError("PROVIDER_ERROR", "可灵接口没有返回 task_id。", JSON.stringify(task));
-    const pollEndpoint = `${endpoint}/${encodeURIComponent(id)}`;
+    const pollEndpoint = klingPollEndpoint(endpoint, id);
 
     const startedAt = Date.now();
     while (!["succeed", "succeeded", "success", "completed", "done"].includes(taskStatus(task))) {
@@ -141,7 +159,7 @@ export async function generateVideoWithKling(params: VideoProviderParams): Promi
         throw new ProviderError("VEO_OPERATION_TIMEOUT", "可灵视频任务超过 20 分钟仍未完成。");
       }
       await sleep(5000);
-      const pollResponse = await fetch(pollEndpoint, { headers: { Authorization: `Bearer ${klingBearerToken(params.apiKey)}` } });
+      const pollResponse = await fetch(pollEndpoint, { headers: { Authorization: `Bearer ${klingBearerToken(params.apiKey)}`, Accept: "application/json" } });
       task = await responseJson(pollResponse);
       if (!pollResponse.ok) throw new ProviderError("PROVIDER_ERROR", `可灵视频任务查询失败：${errorMessage(task)}`, JSON.stringify(task));
     }

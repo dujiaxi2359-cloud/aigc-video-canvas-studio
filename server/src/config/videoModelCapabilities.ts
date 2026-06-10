@@ -20,6 +20,7 @@ export type VideoModeCapability = {
   label: string;
   category: OfficialVideoCategory;
   requiredInputs: VideoInputRequirement[];
+  supportedDurations?: number[];
   optionalInputs?: Array<"negative_prompt" | "seed" | "audio" | "style" | "camera_motion" | "cfg_scale" | "motion_strength">;
   minImages?: number;
   maxImages?: number;
@@ -95,6 +96,51 @@ const veoI2v = mode({ mode: "image_to_video_first_frame", label: "图生视频",
 const veoRef = mode({ mode: "reference_images_to_video", label: "参考图生视频", requiredInputs: ["prompt", "reference_images"], minImages: 1, maxImages: 3 });
 const veoFirstLast = mode({ mode: "image_to_video_first_last_frame", label: "首尾帧视频", requiredInputs: ["prompt", "first_frame", "last_frame"], minImages: 2, maxImages: 2 });
 const veoExtension = mode({ mode: "video_extension", label: "视频延展", requiredInputs: ["prompt", "video"], minVideos: 1, maxVideos: 1, adapterName: "googleVeoVideoExtension" });
+const klingDurations = [5, 10];
+const klingModes = [
+  mode({ mode: "text_to_video", label: "文生视频", requiredInputs: ["prompt"], supportedDurations: klingDurations, optionalInputs: ["negative_prompt", "camera_motion"] }),
+  mode({ mode: "image_to_video_first_frame", label: "首帧图生视频", requiredInputs: ["prompt", "first_frame"], supportedDurations: klingDurations, minImages: 1, maxImages: 1 }),
+  mode({ mode: "image_to_video_first_last_frame", label: "首尾帧视频", requiredInputs: ["prompt", "first_frame", "last_frame"], supportedDurations: klingDurations, minImages: 2, maxImages: 2 }),
+  mode({ mode: "reference_images_to_video", label: "多图参考生视频", requiredInputs: ["prompt", "reference_images"], supportedDurations: klingDurations, minImages: 1, maxImages: 4 })
+];
+
+function klingCapability(input: {
+  modelId: string;
+  modelName: string;
+  displayName: string;
+  qualityTier?: "standard" | "full" | "fast" | "lite" | "turbo";
+  supportedModes?: VideoModeCapability[];
+  supportsReferenceImages?: boolean;
+  maxReferenceImages?: number;
+  maxImages?: number;
+}) {
+  return capability({
+    providerId: "kling",
+    family: "kling",
+    modelId: input.modelId,
+    modelName: input.modelName,
+    displayName: input.displayName,
+    officialMode: "text_to_video",
+    adapterName: "klingVideo",
+    runtimeStatus: "experimental",
+    qualityTier: input.qualityTier ?? "full",
+    supportedModes: input.supportedModes ?? klingModes,
+    supportedAspectRatios: ["16:9", "9:16", "1:1"],
+    supportedDurations: klingDurations,
+    supportedResolutions: ["720P", "1080P"],
+    defaultAspectRatio: "16:9",
+    defaultDuration: 5,
+    defaultResolution: "1080P",
+    supportsAudio: false,
+    supportsNegativePrompt: true,
+    supportsPromptExtend: false,
+    supportsSeed: false,
+    supportsReferenceImages: input.supportsReferenceImages ?? true,
+    maxReferenceImages: input.maxReferenceImages ?? (input.supportsReferenceImages === false ? undefined : 4),
+    maxImages: input.maxImages ?? (input.supportsReferenceImages === false ? 2 : 4),
+    resultType: "async_task"
+  });
+}
 
 function veoCapability(input: {
   modelId: string;
@@ -345,97 +391,15 @@ export const videoModelCapabilities: VideoModelCapability[] = [
     maxVideos: 1,
     resultType: "async_task"
   }),
-  capability({
-    providerId: "kling",
-    family: "kling",
-    modelId: "kling-3-0",
-    modelName: "kling-v3-omni",
-    displayName: "可灵 Kling 3.0 Omni",
-    officialMode: "text_to_video",
-    adapterName: "klingVideo",
-    runtimeStatus: "experimental",
-    qualityTier: "full",
-    supportedModes: [
-      mode({ mode: "text_to_video", label: "文生视频", requiredInputs: ["prompt"], optionalInputs: ["negative_prompt", "camera_motion"] }),
-      mode({ mode: "image_to_video_first_frame", label: "首帧图生视频", requiredInputs: ["prompt", "first_frame"], minImages: 1, maxImages: 1 }),
-      mode({ mode: "image_to_video_first_last_frame", label: "首尾帧视频", requiredInputs: ["prompt", "first_frame", "last_frame"], minImages: 2, maxImages: 2 }),
-      mode({ mode: "reference_images_to_video", label: "多图参考生视频", requiredInputs: ["prompt", "reference_images"], minImages: 1, maxImages: 4 })
-    ],
-    supportedAspectRatios: ["16:9", "9:16", "1:1"],
-    supportedDurations: range(3, 15),
-    supportedResolutions: ["720P", "1080P"],
-    defaultAspectRatio: "16:9",
-    defaultDuration: 10,
-    defaultResolution: "1080P",
-    supportsAudio: false,
-    supportsNegativePrompt: true,
-    supportsPromptExtend: false,
-    supportsSeed: false,
-    supportsReferenceImages: true,
-    maxReferenceImages: 4,
-    maxImages: 4,
-    resultType: "async_task"
-  }),
-  capability({
-    providerId: "kling",
-    family: "kling",
-    modelId: "kling-2-6",
-    modelName: "kling-v2-6",
-    displayName: "可灵 Kling 2.6",
-    officialMode: "text_to_video",
-    adapterName: "klingVideo",
-    runtimeStatus: "experimental",
-    qualityTier: "full",
-    supportedModes: [
-      mode({ mode: "text_to_video", label: "文生视频", requiredInputs: ["prompt"], optionalInputs: ["negative_prompt", "camera_motion"] }),
-      mode({ mode: "image_to_video_first_frame", label: "首帧图生视频", requiredInputs: ["prompt", "first_frame"], minImages: 1, maxImages: 1 }),
-      mode({ mode: "image_to_video_first_last_frame", label: "首尾帧视频", requiredInputs: ["prompt", "first_frame", "last_frame"], minImages: 2, maxImages: 2 }),
-      mode({ mode: "reference_images_to_video", label: "多图参考生视频", requiredInputs: ["prompt", "reference_images"], minImages: 1, maxImages: 4 })
-    ],
-    supportedAspectRatios: ["16:9", "9:16", "1:1"],
-    supportedDurations: range(3, 15),
-    supportedResolutions: ["720P", "1080P"],
-    defaultAspectRatio: "16:9",
-    defaultDuration: 10,
-    defaultResolution: "1080P",
-    supportsAudio: false,
-    supportsNegativePrompt: true,
-    supportsPromptExtend: false,
-    supportsSeed: false,
-    supportsReferenceImages: true,
-    maxReferenceImages: 4,
-    maxImages: 4,
-    resultType: "async_task"
-  }),
-  capability({
-    providerId: "kling",
-    family: "kling",
-    modelId: "kling-2-5",
-    modelName: "kling-v2-5-turbo",
-    displayName: "可灵 Kling 2.5 Turbo",
-    officialMode: "text_to_video",
-    adapterName: "klingVideo",
-    runtimeStatus: "experimental",
-    qualityTier: "full",
-    supportedModes: [
-      mode({ mode: "text_to_video", label: "文生视频", requiredInputs: ["prompt"], optionalInputs: ["negative_prompt", "camera_motion"] }),
-      mode({ mode: "image_to_video_first_frame", label: "首帧图生视频", requiredInputs: ["prompt", "first_frame"], minImages: 1, maxImages: 1 }),
-      mode({ mode: "image_to_video_first_last_frame", label: "首尾帧视频", requiredInputs: ["prompt", "first_frame", "last_frame"], minImages: 2, maxImages: 2 })
-    ],
-    supportedAspectRatios: ["16:9", "9:16", "1:1"],
-    supportedDurations: range(3, 10),
-    supportedResolutions: ["720P", "1080P"],
-    defaultAspectRatio: "16:9",
-    defaultDuration: 10,
-    defaultResolution: "1080P",
-    supportsAudio: false,
-    supportsNegativePrompt: true,
-    supportsPromptExtend: false,
-    supportsSeed: false,
-    supportsReferenceImages: false,
-    maxImages: 2,
-    resultType: "async_task"
-  }),
+  klingCapability({ modelId: "kling-3-0", modelName: "kling-v3-omni", displayName: "可灵 Kling 3.0 Omni" }),
+  klingCapability({ modelId: "kling-2-6", modelName: "kling-v2-6", displayName: "可灵 Kling 2.6" }),
+  klingCapability({ modelId: "kling-2-5", modelName: "kling-v2-5-turbo", displayName: "可灵 Kling 2.5 Turbo", qualityTier: "turbo", supportedModes: klingModes.filter((item) => item.mode !== "reference_images_to_video"), supportsReferenceImages: false, maxImages: 2 }),
+  klingCapability({ modelId: "kling-2-1-master", modelName: "kling-v2-1-master", displayName: "可灵 Kling 2.1 Master" }),
+  klingCapability({ modelId: "kling-2-1", modelName: "kling-v2-1", displayName: "可灵 Kling 2.1" }),
+  klingCapability({ modelId: "kling-2-master", modelName: "kling-v2-master", displayName: "可灵 Kling 2.0 Master" }),
+  klingCapability({ modelId: "kling-1-6", modelName: "kling-v1-6", displayName: "可灵 Kling 1.6" }),
+  klingCapability({ modelId: "kling-1-5", modelName: "kling-v1-5", displayName: "可灵 Kling 1.5", supportedModes: klingModes.filter((item) => item.mode !== "reference_images_to_video"), supportsReferenceImages: false, maxImages: 2 }),
+  klingCapability({ modelId: "kling-1", modelName: "kling-v1", displayName: "可灵 Kling 1.0", supportedModes: klingModes.filter((item) => item.mode !== "reference_images_to_video"), supportsReferenceImages: false, maxImages: 2 }),
   capability({
     providerId: "seedance",
     family: "seedance",
