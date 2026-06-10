@@ -404,8 +404,7 @@ export const videoModelCapabilities: VideoModelCapability[] = [
     resultType: "async_task"
   }),
   grokCapability({ modelId: "grok-imagine-video", modelName: "grok-imagine-video", displayName: "Grok Imagine Video（官方）", defaultDuration: 10 }),
-  grokCapability({ modelId: "grok-video-3-pro-relay", modelName: "grok-video-3-pro", displayName: "Grok Video 3 Pro（中转）", supportedDurations: [10], defaultDuration: 10 }),
-  grokCapability({ modelId: "grok-video-3-max-relay", modelName: "grok-video-3-max", displayName: "Grok Video 3 Max（中转）", defaultDuration: 10 }),
+  grokCapability({ modelId: "grok-video-3", modelName: "grok-video-3", displayName: "Grok Video 3", defaultDuration: 10 }),
   klingCapability({ modelId: "kling-3-0", modelName: "kling-v3-omni", displayName: "可灵 Kling 3.0 Omni", supportedDurations: klingLongDurations }),
   klingCapability({ modelId: "kling-2-6", modelName: "kling-v2-6", displayName: "可灵 Kling 2.6", supportedDurations: klingLongDurations }),
   klingCapability({ modelId: "kling-2-5", modelName: "kling-v2-5-turbo", displayName: "可灵 Kling 2.5 Turbo", qualityTier: "turbo", supportedModes: klingModesForDurations(klingStandardDurations).filter((item) => item.mode !== "reference_images_to_video"), supportsReferenceImages: false, maxImages: 2 }),
