@@ -78,11 +78,17 @@ assert(klingBearerToken("relay-token") === "relay-token", "Kling relay Bearer to
 assert(normalizeKlingPrompt("  a\n\n b  ") === "a b", "Kling prompt should collapse whitespace");
 assert(Buffer.byteLength(normalizeKlingPrompt("汉".repeat(2600)), "utf8") <= 2400, "Kling prompt should stay within relay-safe UTF-8 byte limit");
 assert(!modelCatalog.some((item) => item.name === "grok-imagine-fast"), "Unpublished Grok Imagine Fast entry should be removed");
+assert(modelCatalog.some((item) => item.name === "grok-1.5-video-10s"), "Relay-compatible Grok 1.5 10s model should be available");
+assert(modelCatalog.some((item) => item.name === "grok-video-3-15s"), "Relay-compatible Grok Video 3 15s model should be available");
 
 const grokReference = getVideoModelCapability("grok", "grok-imagine-video", "grok-imagine-video", "reference_images_to_video");
 assert(grokReference?.supportedResolutions.join(",") === "480p,720p", "Grok should expose official 480p and 720p resolutions");
 assert(grokReference?.supportedModes.some((mode) => mode.mode === "video_edit"), "Grok should support video editing");
 assert(grokReference?.supportedModes.some((mode) => mode.mode === "video_extension"), "Grok should support video extension");
+const grokRelay10s = getVideoModelCapability("grok", "grok-1-5-video-10s", "grok-1.5-video-10s", "reference_images_to_video");
+assert(grokRelay10s?.supportedDurations.join(",") === "10", "Grok relay 10s model should only expose 10s duration");
+const grokRelay15s = getVideoModelCapability("grok", "grok-video-3-15s", "grok-video-3-15s", "reference_images_to_video");
+assert(grokRelay15s?.supportedDurations.join(",") === "15", "Grok Video 3 15s relay model should only expose 15s duration");
 
 const klingReference = getVideoModelCapability("kling", "kling-3-0", "kling-v3-omni", "reference_images_to_video");
 assert(klingReference?.supportedModes.some((mode) => mode.mode === "image_to_video_first_last_frame"), "Kling should expose first/last frame mode");

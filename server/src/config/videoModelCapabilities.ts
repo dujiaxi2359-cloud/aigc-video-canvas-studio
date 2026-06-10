@@ -148,6 +148,46 @@ function klingCapability(input: {
   });
 }
 
+const grokModes = [
+  mode({ mode: "text_to_video", label: "文生视频", requiredInputs: ["prompt"] }),
+  mode({ mode: "image_to_video_first_frame", label: "首帧图生视频", requiredInputs: ["prompt", "first_frame"], minImages: 1, maxImages: 1 }),
+  mode({ mode: "reference_images_to_video", label: "参考图生视频", requiredInputs: ["prompt", "reference_images"], minImages: 1, maxImages: 7 }),
+  mode({ mode: "video_edit", label: "视频编辑", requiredInputs: ["prompt", "video"], minVideos: 1, maxVideos: 1 }),
+  mode({ mode: "video_extension", label: "视频延展", requiredInputs: ["prompt", "video"], minVideos: 1, maxVideos: 1 })
+];
+
+function grokCapability(input: { modelId: string; modelName: string; displayName: string; supportedDurations?: number[]; defaultDuration?: number; qualityTier?: "standard" | "full" | "fast" | "lite" | "turbo" }) {
+  const supportedDurations = input.supportedDurations ?? range(1, 15);
+  return capability({
+    providerId: "grok",
+    family: "grok",
+    modelId: input.modelId,
+    modelName: input.modelName,
+    displayName: input.displayName,
+    officialMode: "text_to_video",
+    officialDocsUrl: "https://docs.x.ai/developers/model-capabilities/imagine",
+    adapterName: "grokVideo",
+    runtimeStatus: "verified",
+    qualityTier: input.qualityTier ?? "standard",
+    supportedModes: grokModes.map((item) => ({ ...item, supportedDurations })),
+    supportedAspectRatios: ["16:9", "9:16", "1:1", "2:3", "3:2", "3:4", "4:3"],
+    supportedDurations,
+    supportedResolutions: ["480p", "720p"],
+    defaultAspectRatio: "16:9",
+    defaultDuration: input.defaultDuration ?? supportedDurations[Math.min(9, supportedDurations.length - 1)] ?? 10,
+    defaultResolution: "720p",
+    supportsAudio: true,
+    supportsNegativePrompt: false,
+    supportsPromptExtend: false,
+    supportsSeed: false,
+    supportsReferenceImages: true,
+    maxReferenceImages: 7,
+    maxImages: 7,
+    maxVideos: 1,
+    resultType: "async_task"
+  });
+}
+
 function veoCapability(input: {
   modelId: string;
   modelName: string;
@@ -363,40 +403,13 @@ export const videoModelCapabilities: VideoModelCapability[] = [
     maxImages: 7,
     resultType: "async_task"
   }),
-  capability({
-    providerId: "grok",
-    family: "grok",
-    modelId: "grok-imagine-video",
-    modelName: "grok-imagine-video",
-    displayName: "Grok Imagine Video",
-    officialMode: "text_to_video",
-    officialDocsUrl: "https://docs.x.ai/developers/model-capabilities/video",
-    adapterName: "grokVideo",
-    runtimeStatus: "verified",
-    qualityTier: "standard",
-    supportedModes: [
-      mode({ mode: "text_to_video", label: "文生视频", requiredInputs: ["prompt"] }),
-      mode({ mode: "image_to_video_first_frame", label: "首帧图生视频", requiredInputs: ["prompt", "first_frame"], minImages: 1, maxImages: 1 }),
-      mode({ mode: "reference_images_to_video", label: "参考图生视频", requiredInputs: ["prompt", "reference_images"], minImages: 1, maxImages: 7 }),
-      mode({ mode: "video_edit", label: "视频编辑", requiredInputs: ["prompt", "video"], minVideos: 1, maxVideos: 1 }),
-      mode({ mode: "video_extension", label: "视频延展", requiredInputs: ["prompt", "video"], minVideos: 1, maxVideos: 1 })
-    ],
-    supportedAspectRatios: ["16:9", "9:16", "1:1", "2:3", "3:2", "3:4", "4:3"],
-    supportedDurations: range(1, 15),
-    supportedResolutions: ["480p", "720p"],
-    defaultAspectRatio: "16:9",
-    defaultDuration: 10,
-    defaultResolution: "720p",
-    supportsAudio: true,
-    supportsNegativePrompt: false,
-    supportsPromptExtend: false,
-    supportsSeed: false,
-    supportsReferenceImages: true,
-    maxReferenceImages: 7,
-    maxImages: 7,
-    maxVideos: 1,
-    resultType: "async_task"
-  }),
+  grokCapability({ modelId: "grok-1-5-video-6s", modelName: "grok-1.5-video-6s", displayName: "Grok 1.5 Video 6s", supportedDurations: [6], defaultDuration: 6 }),
+  grokCapability({ modelId: "grok-1-5-video-10s", modelName: "grok-1.5-video-10s", displayName: "Grok 1.5 Video 10s", supportedDurations: [10], defaultDuration: 10 }),
+  grokCapability({ modelId: "grok-1-5-video-15s", modelName: "grok-1.5-video-15s", displayName: "Grok 1.5 Video 15s", supportedDurations: [15], defaultDuration: 15 }),
+  grokCapability({ modelId: "grok-video-3", modelName: "grok-video-3", displayName: "Grok Video 3", defaultDuration: 10 }),
+  grokCapability({ modelId: "grok-video-3-10s", modelName: "grok-video-3-10s", displayName: "Grok Video 3 10s", supportedDurations: [10], defaultDuration: 10 }),
+  grokCapability({ modelId: "grok-video-3-15s", modelName: "grok-video-3-15s", displayName: "Grok Video 3 15s", supportedDurations: [15], defaultDuration: 15 }),
+  grokCapability({ modelId: "grok-imagine-video", modelName: "grok-imagine-video", displayName: "Grok Imagine Video 官方", defaultDuration: 10 }),
   klingCapability({ modelId: "kling-3-0", modelName: "kling-v3-omni", displayName: "可灵 Kling 3.0 Omni", supportedDurations: klingLongDurations }),
   klingCapability({ modelId: "kling-2-6", modelName: "kling-v2-6", displayName: "可灵 Kling 2.6", supportedDurations: klingLongDurations }),
   klingCapability({ modelId: "kling-2-5", modelName: "kling-v2-5-turbo", displayName: "可灵 Kling 2.5 Turbo", qualityTier: "turbo", supportedModes: klingModesForDurations(klingStandardDurations).filter((item) => item.mode !== "reference_images_to_video"), supportsReferenceImages: false, maxImages: 2 }),
