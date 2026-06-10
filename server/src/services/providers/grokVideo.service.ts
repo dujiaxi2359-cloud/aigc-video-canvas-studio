@@ -4,6 +4,7 @@ import { legacyInputModeToOfficialMode } from "../../types/videoModes.js";
 import { downloadGeneratedFile } from "../../utils/downloadGeneratedFile.js";
 import { ProviderError, rawErrorMessage } from "../../utils/providerErrors.js";
 import { getAsset } from "../asset.service.js";
+import { saveGenerationTask } from "../generationTask.service.js";
 import type { ProviderGenerateResult, VideoProviderParams } from "./providerTypes.js";
 
 function sleep(ms: number) {
@@ -34,17 +35,21 @@ async function assetDataUrls(assetIds?: string[]) {
 }
 
 function baseUrl(value: string) {
-  return value.replace(/\/$/, "");
+  return value.trim().replace(/^(?:POST|GET|PUT|PATCH|DELETE)\s+/i, "").replace(/\/$/, "");
 }
 
 export function grokCreateEndpoint(apiBaseUrl: string) {
   const base = baseUrl(apiBaseUrl);
-  return /\/videos\/generations$/i.test(base) ? base : `${base}/videos/generations`;
+  if (/\/(?:video\/generations|videos\/generations|videos)$/i.test(base)) return base;
+  return `${base}/videos/generations`;
 }
 
 export function grokPollEndpoint(apiBaseUrl: string, requestId: string) {
-  const base = baseUrl(apiBaseUrl).replace(/\/videos\/generations$/i, "");
-  return `${base}/videos/${encodeURIComponent(requestId)}`;
+  const createEndpoint = grokCreateEndpoint(apiBaseUrl);
+  if (/\/videos\/generations$/i.test(createEndpoint)) {
+    return `${createEndpoint.replace(/\/videos\/generations$/i, "")}/videos/${encodeURIComponent(requestId)}`;
+  }
+  return `${createEndpoint}/${encodeURIComponent(requestId)}`;
 }
 
 function record(value: unknown) {
@@ -132,25 +137,35 @@ export async function generateVideoWithGrok(params: VideoProviderParams): Promis
     if (!response.ok) throw new ProviderError("PROVIDER_ERROR", `Grok 视频任务创建失败：${errorMessage(task)}`, JSON.stringify(task));
     const id = requestId(task);
     if (!id) throw new ProviderError("PROVIDER_ERROR", "Grok 视频接口没有返回 request_id。", JSON.stringify(task));
+    const pollEndpoint = grokPollEndpoint(params.apiBaseUrl, id);
+    await saveGenerationTask({
+      id,
+      status: status(task) || "submitted",
+      result: { provider: "grok", endpoint, pollEndpoint, nodeId: params.nodeId, modelName: params.modelName, response: task }
+    });
 
     const startedAt = Date.now();
     while (!["completed", "succeeded", "success", "done"].includes(status(task))) {
       if (["failed", "error", "cancelled", "canceled"].includes(status(task))) {
+        await saveGenerationTask({ id, status: "failed", result: task, errorMessage: errorMessage(task) });
         throw new ProviderError("VEO_OPERATION_FAILED", `Grok 视频任务失败：${errorMessage(task)}`, JSON.stringify(task));
       }
       if (Date.now() - startedAt > 20 * 60 * 1000) {
+        await saveGenerationTask({ id, status: "timeout", result: task, errorMessage: "Grok 视频任务超过 20 分钟仍未完成。" });
         throw new ProviderError("VEO_OPERATION_TIMEOUT", "Grok 视频任务超过 20 分钟仍未完成。");
       }
       await sleep(5000);
-      const pollResponse = await fetch(grokPollEndpoint(params.apiBaseUrl, id), {
+      const pollResponse = await fetch(pollEndpoint, {
         headers: { Authorization: `Bearer ${params.apiKey}` }
       });
       task = await responseJson(pollResponse);
+      await saveGenerationTask({ id, status: status(task) || "processing", result: task });
       if (!pollResponse.ok) throw new ProviderError("PROVIDER_ERROR", `Grok 视频任务查询失败：${errorMessage(task)}`, JSON.stringify(task));
     }
 
     const remoteUrl = videoUrl(task);
     if (!remoteUrl) throw new ProviderError("VEO_OPERATION_NO_VIDEO_IN_RESPONSE", "Grok 任务已完成，但响应中没有视频 URL。", JSON.stringify(task));
+    await saveGenerationTask({ id, status: "success", progress: 100, result: task });
     const saved = await downloadGeneratedFile(remoteUrl, "video_grok");
     return {
       status: "success",

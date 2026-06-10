@@ -39,7 +39,7 @@ async function assetDataUrls(assetIds?: string[]) {
 }
 
 export function seedanceCreateEndpoint(apiBaseUrl: string) {
-  const base = apiBaseUrl.replace(/\/$/, "");
+  const base = apiBaseUrl.trim().replace(/^(?:POST|GET|PUT|PATCH|DELETE)\s+/i, "").replace(/\/$/, "");
   if (/\/video\/generations$/i.test(base) || /\/videos\/generations$/i.test(base)) return base;
   return `${base}/video/generations`;
 }
