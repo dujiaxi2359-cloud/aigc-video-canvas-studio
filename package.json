@@ -12,6 +12,7 @@
     "test:quality-parity": "npm run test:quality-parity --workspace server",
     "test:official-video-categories": "npm run test:official-video-categories --workspace server",
     "test:veo-operation-parser": "npm run test:veo-operation-parser --workspace server",
+    "test:video-provider-adapters": "npm run test:video-provider-adapters --workspace server",
     "test:azure-gpt-image-config": "npm run test:azure-gpt-image-config --workspace server",
     "test:image-asset-compat": "npm run test:image-asset-compat --workspace server",
     "test:veo-capabilities": "npm run test:veo-capabilities --workspace server"

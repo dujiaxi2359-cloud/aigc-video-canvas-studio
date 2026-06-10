@@ -11,6 +11,7 @@
     "test:quality-parity": "node ../node_modules/tsx/dist/cli.mjs src/scripts/testQualityParity.ts",
     "test:official-video-categories": "node ../node_modules/tsx/dist/cli.mjs src/scripts/testOfficialVideoCategories.ts",
     "test:veo-operation-parser": "node ../node_modules/tsx/dist/cli.mjs src/scripts/testVeoOperationParser.ts",
+    "test:video-provider-adapters": "node ../node_modules/tsx/dist/cli.mjs src/scripts/testVideoProviderAdapters.ts",
     "test:azure-gpt-image-config": "node ../node_modules/tsx/dist/cli.mjs src/scripts/testAzureGptImageConfig.ts",
     "test:image-asset-compat": "node ../node_modules/tsx/dist/cli.mjs src/scripts/testImageAssetCompat.ts",
     "test:veo-capabilities": "node ../node_modules/tsx/dist/cli.mjs src/scripts/testVeoCapabilities.ts"

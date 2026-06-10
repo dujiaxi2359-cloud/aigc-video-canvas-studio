@@ -66,7 +66,7 @@ export const providerCatalog: ProviderCatalogItem[] = [
     displayName: "可灵 / Kling",
     defaultApiBaseUrl: "https://api.klingai.com",
     requiresApiBaseUrl: false,
-    apiKeyLabel: "Kling API Key",
+    apiKeyLabel: "AccessKey:SecretKey / 中转 Token",
     authType: "bearer",
     categories: ["video"]
   },

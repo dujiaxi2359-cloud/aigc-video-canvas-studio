@@ -108,6 +108,8 @@ function maxImagesForMode(model: ModelConfig | undefined, mode: OfficialVideoMod
   if (!model) return undefined;
   if (mode === "reference_images_to_video") {
     if (model.modelName === "omni_flash-10s") return 7;
+    if (model.providerId === "grok") return 7;
+    if (model.providerId === "kling") return 4;
     if (model.providerId === "google") return 3;
     if (model.modelName === "happyhorse-1.0-r2v" || model.modelName === "wan2.7-r2v") return 5;
   }

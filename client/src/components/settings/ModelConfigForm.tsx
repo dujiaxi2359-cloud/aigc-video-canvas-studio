@@ -263,6 +263,7 @@ export function ModelConfigForm({
           </Field>
           <Field label="API Key">
             <ApiKeyInput value={form.apiKey} maskedValue={model?.maskedApiKey} onChange={(apiKey) => setForm((current) => ({ ...current, apiKey }))} onTest={async () => setMessage(onTest ? await onTest(form) : "请先保存后再测试连接")} />
+            {form.providerId === "kling" && <div className="mt-1 text-[12px] leading-5 text-[#7d8796]">可灵官方开放平台填写 AccessKey:SecretKey；使用中转时直接填写中转提供的 Bearer Token。</div>}
           </Field>
           {message && <div className="text-[12px] text-[#7d8796]">{message}</div>}
         </div>
