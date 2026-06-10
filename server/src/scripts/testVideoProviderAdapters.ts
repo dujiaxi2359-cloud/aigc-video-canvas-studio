@@ -39,7 +39,7 @@ const payload = JSON.parse(Buffer.from(parts[1]!, "base64url").toString("utf8"))
 assert(payload.iss === "access-key", "Kling JWT issuer should use AccessKey");
 assert(klingBearerToken("relay-token") === "relay-token", "Kling relay Bearer token should pass through");
 assert(normalizeKlingPrompt("  a\n\n b  ") === "a b", "Kling prompt should collapse whitespace");
-assert(Array.from(normalizeKlingPrompt("汉".repeat(2600))).length === 2500, "Kling prompt should stay within official 2500 character limit");
+assert(Buffer.byteLength(normalizeKlingPrompt("汉".repeat(2600)), "utf8") <= 2400, "Kling prompt should stay within relay-safe UTF-8 byte limit");
 assert(!modelCatalog.some((item) => item.name === "grok-imagine-fast"), "Unpublished Grok Imagine Fast entry should be removed");
 
 const grokReference = getVideoModelCapability("grok", "grok-imagine-video", "grok-imagine-video", "reference_images_to_video");

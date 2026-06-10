@@ -58,12 +58,20 @@ function isOmniVideoEndpoint(endpoint: string) {
   return /\/omni-video\/?$/i.test(new URL(endpoint).pathname);
 }
 
-const KLING_PROMPT_LIMIT = 2500;
+const KLING_PROMPT_BYTE_LIMIT = 2400;
 
 export function normalizeKlingPrompt(prompt: string) {
   const normalized = prompt.replace(/\s+/g, " ").trim();
-  const chars = Array.from(normalized);
-  return chars.length > KLING_PROMPT_LIMIT ? chars.slice(0, KLING_PROMPT_LIMIT).join("") : normalized;
+  if (Buffer.byteLength(normalized, "utf8") <= KLING_PROMPT_BYTE_LIMIT) return normalized;
+  let result = "";
+  let bytes = 0;
+  for (const char of normalized) {
+    const charBytes = Buffer.byteLength(char, "utf8");
+    if (bytes + charBytes > KLING_PROMPT_BYTE_LIMIT) break;
+    result += char;
+    bytes += charBytes;
+  }
+  return result;
 }
 
 function record(value: unknown) {
