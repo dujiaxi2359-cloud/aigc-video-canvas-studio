@@ -56,7 +56,16 @@ function baseUrl(value: string) {
 export function grokCreateEndpoint(apiBaseUrl: string) {
   const base = baseUrl(apiBaseUrl);
   if (/\/(?:video\/generations|videos\/generations|videos)$/i.test(base)) return base;
-  return `${base}/videos/generations`;
+  if (/\/chat\/completions$/i.test(base)) return base.replace(/\/chat\/completions$/i, "/videos");
+  if (!isOfficialGrokEndpoint(base)) {
+    try {
+      const url = new URL(base);
+      if (url.pathname === "" || url.pathname === "/") return `${base}/v1/videos`;
+    } catch {
+      // Fall through to the standard relay path.
+    }
+  }
+  return isOfficialGrokEndpoint(base) ? `${base}/videos/generations` : `${base}/videos`;
 }
 
 export function grokPollEndpoint(apiBaseUrl: string, requestId: string) {

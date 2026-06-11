@@ -21,6 +21,18 @@ assert(
   "Grok full relay videos endpoint should be used as-is"
 );
 assert(
+  grokCreateEndpoint("https://relay.example/v1") === "https://relay.example/v1/videos",
+  "Grok relay base should append the OpenAI-style videos path"
+);
+assert(
+  grokCreateEndpoint("https://relay.example") === "https://relay.example/v1/videos",
+  "Grok relay root URL should append the OpenAI-style v1 videos path"
+);
+assert(
+  grokCreateEndpoint("https://relay.example/v1/chat/completions") === "https://relay.example/v1/videos",
+  "Grok relay chat-completions base should be converted to the videos path"
+);
+assert(
   grokPollEndpoint("https://relay.example/v1/videos", "request/1") === "https://relay.example/v1/videos/request%2F1",
   "Grok full relay videos endpoint should also be the polling base"
 );
@@ -82,7 +94,12 @@ assert(Buffer.byteLength(normalizeKlingPrompt("汉".repeat(2600)), "utf8") <= 24
 assert(!modelCatalog.some((item) => item.name === "grok-imagine-fast"), "Unpublished Grok Imagine Fast entry should be removed");
 assert(modelCatalog.some((item) => item.name === "grok-imagine-video"), "Official Grok Imagine Video model should be retained");
 assert(modelCatalog.some((item) => item.name === "grok-imagine-video-1.5-preview"), "Official Grok Imagine Video 1.5 Preview model should be retained");
-assert(!modelCatalog.some((item) => item.name === "grok-video-3"), "Non-official Grok Video 3 relay alias should not be in the built-in catalog");
+assert(modelCatalog.some((item) => item.name === "grok-video-3"), "Relay Grok Video 3 model should be available");
+assert(modelCatalog.some((item) => item.name === "grok-video-3-pro"), "Relay Grok Video 3 Pro model should be available");
+assert(modelCatalog.some((item) => item.name === "grok-video-3-max"), "Relay Grok Video 3 Max model should be available");
+assert(modelCatalog.some((item) => item.name === "grok-1.5-video-6s"), "Relay Grok 1.5 Video 6s model should be available");
+assert(modelCatalog.some((item) => item.name === "grok-1.5-video-10s"), "Relay Grok 1.5 Video 10s model should be available");
+assert(modelCatalog.some((item) => item.name === "grok-1.5-video-15s"), "Relay Grok 1.5 Video 15s model should be available");
 
 const grokReference = getVideoModelCapability("grok", "grok-imagine-video", "grok-imagine-video", "reference_images_to_video");
 assert(grokReference?.supportedResolutions.join(",") === "480p,720p", "Grok should expose official 480p and 720p resolutions");
@@ -92,6 +109,15 @@ assert(grokReference?.supportedDurations[0] === 3, "Grok should start at 3s dura
 assert(grokReference?.supportedDurations.at(-1) === 15, "Grok should end at 15s duration");
 const grokPreview = getVideoModelCapability("grok", "grok-imagine-video-1-5-preview", "grok-imagine-video-1.5-preview", "reference_images_to_video");
 assert(grokPreview?.supportedDurations.includes(10), "Grok Imagine Video 1.5 Preview should expose official-style durations");
+const grokRelay = getVideoModelCapability("grok", "grok-video-3", "grok-video-3", "reference_images_to_video");
+assert(grokRelay?.supportedDurations[0] === 3, "Relay Grok Video 3 should start at 3s duration");
+assert(grokRelay?.supportedDurations.at(-1) === 15, "Relay Grok Video 3 should end at 15s duration");
+const grokRelayPro = getVideoModelCapability("grok", "grok-video-3-pro", "grok-video-3-pro", "reference_images_to_video");
+assert(grokRelayPro?.supportedDurations.join(",") === "10", "Relay Grok Video 3 Pro should be fixed at 10s");
+const grokRelayMax = getVideoModelCapability("grok", "grok-video-3-max", "grok-video-3-max", "reference_images_to_video");
+assert(grokRelayMax?.supportedDurations.join(",") === "15", "Relay Grok Video 3 Max should be fixed at 15s");
+const grokRelay15s = getVideoModelCapability("grok", "grok-1-5-video-15s", "grok-1.5-video-15s", "reference_images_to_video");
+assert(grokRelay15s?.supportedDurations.join(",") === "15", "Relay Grok 1.5 Video 15s should be fixed at 15s");
 
 const klingReference = getVideoModelCapability("kling", "kling-3-0", "kling-v3-omni", "reference_images_to_video");
 assert(klingReference?.supportedModes.some((mode) => mode.mode === "image_to_video_first_last_frame"), "Kling should expose first/last frame mode");
