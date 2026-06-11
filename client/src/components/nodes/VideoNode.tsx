@@ -165,6 +165,10 @@ function PayloadSummary({ data }: { data?: Record<string, unknown> }) {
     ["videoMode", data.videoMode],
     ["qualityTier", data.qualityTier],
     ["qualityMode", data.qualityMode],
+    ["configuredModel", data.configuredModel],
+    ["proxyModel", data.proxyModel],
+    ["relayModel", data.relayModel],
+    ["relayProtocol", data.relayProtocol],
     ["resolution", data.mappedResolution],
     ["aspectRatio", data.aspectRatio],
     ["ratio", data.ratio],
@@ -183,6 +187,8 @@ function PayloadSummary({ data }: { data?: Record<string, unknown> }) {
     ["inputImageFileSize", data.inputImageFileSize],
     ["inputImageWasCompressed", String(data.inputImageWasCompressed)],
     ["inputPreprocessed", String(data.inputPreprocessed)],
+    ["outputAspectRatio", data.outputAspectRatio],
+    ["outputAspectRatioTransformed", String(data.outputAspectRatioTransformed)],
     ["outputWidth", data.outputWidth],
     ["outputHeight", data.outputHeight],
     ["outputDuration", data.outputDuration],
@@ -202,6 +208,66 @@ function PayloadSummary({ data }: { data?: Record<string, unknown> }) {
       {data.payloadSummary ? <pre className="mt-2 max-h-28 overflow-auto rounded-lg bg-black/[0.18] p-2 text-[10px] leading-4 text-[#8f9bad]">{JSON.stringify(data.payloadSummary, null, 2)}</pre> : null}
     </details>
   );
+}
+
+function numberValue(value: unknown) {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim() && Number.isFinite(Number(value))) return Number(value);
+  return undefined;
+}
+
+function nestedRecord(value: unknown) {
+  return value && typeof value === "object" ? value as Record<string, unknown> : undefined;
+}
+
+function formatBytes(value?: number) {
+  if (!value) return undefined;
+  if (value < 1024 * 1024) return `${Math.round(value / 1024)} KB`;
+  return `${(value / 1024 / 1024).toFixed(1)} MB`;
+}
+
+function formatBitrate(fileSize?: number, duration?: number) {
+  if (!fileSize || !duration) return undefined;
+  return `${Math.round((fileSize * 8) / duration / 1000)} kbps`;
+}
+
+function ratioFromDimensions(width?: number, height?: number) {
+  if (!width || !height) return undefined;
+  const value = width / height;
+  if (Math.abs(value - 16 / 9) < 0.04) return "16:9";
+  if (Math.abs(value - 9 / 16) < 0.04) return "9:16";
+  if (Math.abs(value - 1) < 0.04) return "1:1";
+  return `${width}:${height}`;
+}
+
+function outputInfo(data?: Record<string, unknown>, requestedResolution?: string) {
+  if (!data) return undefined;
+  const transformedOutput = nestedRecord(data.transformedOutput);
+  const originalOutput = nestedRecord(data.originalOutput);
+  const nestedOutput = nestedRecord(data.payloadSummary)?.output;
+  const output = nestedRecord(nestedOutput);
+  const width = numberValue(data.outputWidth) ?? numberValue(transformedOutput?.width) ?? numberValue(output?.width);
+  const height = numberValue(data.outputHeight) ?? numberValue(transformedOutput?.height) ?? numberValue(output?.height);
+  const duration = numberValue(data.outputDuration) ?? numberValue(transformedOutput?.duration) ?? numberValue(output?.duration);
+  const fileSize = numberValue(data.outputFileSize) ?? numberValue(transformedOutput?.fileSize) ?? numberValue(output?.fileSize);
+  if (!width && !height && !fileSize) return undefined;
+  const requested = String(requestedResolution ?? data.mappedResolution ?? data.resolution ?? "");
+  const expectedShortEdge = requested.toLowerCase() === "1080p" ? 1080 : requested.toLowerCase() === "4k" ? 2160 : requested.toLowerCase() === "720p" ? 720 : undefined;
+  const shortEdge = width && height ? Math.min(width, height) : undefined;
+  const lowerThanRequested = Boolean(expectedShortEdge && shortEdge && shortEdge < expectedShortEdge - 12);
+  return {
+    width,
+    height,
+    duration,
+    fileSize,
+    bitrate: formatBitrate(fileSize, duration),
+    fileSizeLabel: formatBytes(fileSize),
+    ratio: ratioFromDimensions(width, height),
+    transformed: data.outputAspectRatioTransformed === true,
+    originalWidth: numberValue(originalOutput?.width),
+    originalHeight: numberValue(originalOutput?.height),
+    lowerThanRequested
+  };
 }
 
 function stringList(value: unknown) {
@@ -324,6 +390,7 @@ export function VideoNode(props: NodeProps<VideoNodeData>) {
   const availableDurations = useMemo(() => dynamicOptions?.availableDurations ?? durationOptions(selectedModel) ?? emptyNumbers, [dynamicOptions?.availableDurations, selectedModel]);
   const outputUrl = absoluteUploadUrl(props.data.outputUrl);
   const outputIsVideo = isVideoOutput(props.data.outputUrl);
+  const actualOutputInfo = outputInfo(props.data.payloadSummary, props.data.resolution);
   const veoSafetyDetails = (props.data.payloadSummary ?? {}) as Record<string, unknown>;
   const isVeoRaiFiltered = props.data.errorCode === "VEO_RAI_FILTERED_NO_VIDEO" || veoSafetyDetails.type === "RAI_FILTERED";
   const veoRaiReasons = stringList(veoSafetyDetails.reasons ?? veoSafetyDetails.raiMediaFilteredReasons);
@@ -520,6 +587,18 @@ export function VideoNode(props: NodeProps<VideoNodeData>) {
               </div>
             )}
           </MediaPreview>
+          {actualOutputInfo && props.data.status === "success" ? (
+            <div className={`nodrag nopan rounded-xl border px-3 py-2 text-[11px] leading-5 ${actualOutputInfo.lowerThanRequested ? "border-amber-300/15 bg-amber-300/[0.08] text-amber-100" : "border-white/[0.06] bg-black/[0.16] text-[#a8b3c2]"}`}>
+              <span className="font-semibold text-[#e8edf3]">实际输出：</span>
+              {actualOutputInfo.width && actualOutputInfo.height ? `${actualOutputInfo.width}×${actualOutputInfo.height}` : "未知尺寸"}
+              {actualOutputInfo.ratio ? ` · ${actualOutputInfo.ratio}` : ""}
+              {actualOutputInfo.duration ? ` · ${actualOutputInfo.duration.toFixed(1)}s` : ""}
+              {actualOutputInfo.fileSizeLabel ? ` · ${actualOutputInfo.fileSizeLabel}` : ""}
+              {actualOutputInfo.bitrate ? ` · ${actualOutputInfo.bitrate}` : ""}
+              {actualOutputInfo.transformed ? ` · 已按所选比例转码${actualOutputInfo.originalWidth && actualOutputInfo.originalHeight ? `（原始 ${actualOutputInfo.originalWidth}×${actualOutputInfo.originalHeight}）` : ""}` : ""}
+              {actualOutputInfo.lowerThanRequested ? " · 中转返回低于所选清晰度" : ""}
+            </div>
+          ) : null}
 
           <div className="nodrag nopan flex h-8 flex-wrap gap-1.5 overflow-hidden">
             {availableVideoModes.filter((mode) => categoryForOfficialVideoMode(mode) === videoCategory).map((mode) => {

@@ -82,27 +82,71 @@ function errorMessage(payload: Record<string, unknown>) {
   return String(error.message ?? payload.message ?? data.message ?? payload.error ?? "未知错误");
 }
 
-function videoUrl(payload: Record<string, unknown>): string | undefined {
-  const data = record(payload.data);
-  const output = record(payload.output);
-  const video = record(payload.video);
-  const result = record(payload.result);
-  const dataOutput = record(data.output);
-  const candidates = [
-    payload.video_url,
-    payload.url,
-    video.url,
-    output.url,
-    output.video_url,
-    result.url,
-    result.video_url,
-    data.video_url,
-    data.url,
-    record(data.video).url,
-    dataOutput.url,
-    dataOutput.video_url
-  ];
-  return candidates.find((value) => typeof value === "string" && /^https?:\/\//i.test(value)) as string | undefined;
+const preferredVideoUrlKeys = [
+  "video_url",
+  "videoUrl",
+  "video",
+  "videos",
+  "output_url",
+  "outputUrl",
+  "download_url",
+  "downloadUrl",
+  "preview_url",
+  "previewUrl",
+  "play_url",
+  "playUrl",
+  "media_url",
+  "mediaUrl",
+  "source_url",
+  "sourceUrl",
+  "file_url",
+  "fileUrl",
+  "url",
+  "uri",
+  "href",
+  "link",
+  "links",
+  "data",
+  "result",
+  "results",
+  "output",
+  "outputs",
+  "file",
+  "files"
+];
+
+function isHttpUrl(value: string) {
+  return /^https?:\/\//i.test(value.trim());
+}
+
+function isLikelyVideoUrl(value: string) {
+  return isHttpUrl(value) && /\.(mp4|webm|mov|m4v)(?:[?#]|$)/i.test(value);
+}
+
+function videoUrl(value: unknown, preferred = false): string | undefined {
+  if (typeof value === "string") {
+    if (!isHttpUrl(value)) return undefined;
+    return preferred || isLikelyVideoUrl(value) || /(video|media|download|file|preview|play)/i.test(value) ? value : undefined;
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const found = videoUrl(item, preferred);
+      if (found) return found;
+    }
+    return undefined;
+  }
+  if (!value || typeof value !== "object") return undefined;
+  const payload = value as Record<string, unknown>;
+  for (const key of preferredVideoUrlKeys) {
+    if (!(key in payload)) continue;
+    const found = videoUrl(payload[key], true);
+    if (found) return found;
+  }
+  for (const nested of Object.values(payload)) {
+    const found = videoUrl(nested);
+    if (found) return found;
+  }
+  return undefined;
 }
 
 export async function generateVideoWithSeedance(params: VideoProviderParams): Promise<ProviderGenerateResult> {
@@ -192,7 +236,16 @@ export async function generateVideoWithSeedance(params: VideoProviderParams): Pr
       if (remoteUrl) await saveGenerationTask({ id, status: "success", progress: 100, result: task });
     }
 
-    if (!remoteUrl) throw new ProviderError("VEO_OPERATION_NO_VIDEO_IN_RESPONSE", "Seedance 中转任务已完成，但响应中没有视频 URL。", JSON.stringify(task));
+    if (!remoteUrl) {
+      if (id) await saveGenerationTask({ id, status: "completed_without_video_url", result: task, errorMessage: "Seedance 中转任务已完成，但响应中没有视频 URL。" });
+      throw new ProviderError("VEO_OPERATION_NO_VIDEO_IN_RESPONSE", "Seedance 中转任务已完成，但响应中没有视频 URL。", JSON.stringify(task), {
+        endpoint: seedanceCreateEndpoint(params.apiBaseUrl),
+        taskId: id,
+        configuredModel: params.modelName,
+        mode,
+        response: task
+      });
+    }
     const saved = await downloadGeneratedFile(remoteUrl, "video_seedance");
     return {
       status: "success",

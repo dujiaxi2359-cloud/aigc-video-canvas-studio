@@ -4,6 +4,7 @@ import { legacyInputModeToOfficialMode, type OfficialVideoMode } from "../../typ
 import { downloadGeneratedFile } from "../../utils/downloadGeneratedFile.js";
 import { ProviderError, rawErrorMessage } from "../../utils/providerErrors.js";
 import { getAsset } from "../asset.service.js";
+import { saveGenerationTask } from "../generationTask.service.js";
 import type { ProviderGenerateResult, VideoProviderParams } from "./providerTypes.js";
 
 function sleep(ms: number) {
@@ -113,21 +114,64 @@ function errorMessage(payload: Record<string, unknown>) {
   return typeof payload.message === "string" ? payload.message : JSON.stringify(payload);
 }
 
-function findVideoUrl(value: unknown): string | undefined {
+const preferredVideoUrlKeys = [
+  "video_url",
+  "videoUrl",
+  "video",
+  "videos",
+  "output_url",
+  "outputUrl",
+  "download_url",
+  "downloadUrl",
+  "preview_url",
+  "previewUrl",
+  "play_url",
+  "playUrl",
+  "media_url",
+  "mediaUrl",
+  "source_url",
+  "sourceUrl",
+  "file_url",
+  "fileUrl",
+  "url",
+  "uri",
+  "href",
+  "link",
+  "links",
+  "data",
+  "result",
+  "results",
+  "output",
+  "outputs",
+  "file",
+  "files"
+];
+
+function isHttpUrl(value: string) {
+  return /^https?:\/\//i.test(value.trim());
+}
+
+function isLikelyVideoUrl(value: string) {
+  return isHttpUrl(value) && /\.(mp4|webm|mov|m4v)(?:[?#]|$)/i.test(value);
+}
+
+function findVideoUrl(value: unknown, preferred = false): string | undefined {
   if (typeof value === "string") {
-    return /^https?:\/\//i.test(value) && (/\.mp4(?:[?#]|$)/i.test(value) || /video/i.test(value)) ? value : undefined;
+    if (!isHttpUrl(value)) return undefined;
+    return preferred || isLikelyVideoUrl(value) || /(video|media|download|file|preview|play)/i.test(value) ? value : undefined;
   }
   if (Array.isArray(value)) {
     for (const item of value) {
-      const found = findVideoUrl(item);
+      const found = findVideoUrl(item, preferred);
       if (found) return found;
     }
     return undefined;
   }
   if (!value || typeof value !== "object") return undefined;
   const record = value as Record<string, unknown>;
-  for (const key of ["video_url", "videoUrl", "output_url", "outputUrl", "url", "video"]) {
-    const found = findVideoUrl(record[key]);
+  for (const key of preferredVideoUrlKeys) {
+    if (!(key in record)) continue;
+    const found = findVideoUrl(record[key], true);
     if (found) return found;
   }
   for (const nested of Object.values(record)) {
@@ -185,24 +229,49 @@ export async function generateVideoWithVeoProxy(params: VideoProviderParams): Pr
     if (!taskId) {
       throw new ProviderError("PROVIDER_ERROR", "Veo 中转接口没有返回任务 id。", JSON.stringify(created));
     }
+    const pollUrl = protocol === "unified-create-query"
+      ? unifiedQueryEndpoint(endpoint, taskId)
+      : `${endpoint}/${encodeURIComponent(taskId)}`;
+    await saveGenerationTask({
+      id: taskId,
+      status: taskStatus(created) || "submitted",
+      result: {
+        provider: "google-veo-proxy",
+        endpoint,
+        pollUrl,
+        nodeId: params.nodeId,
+        configuredModel: params.modelName,
+        relayModel,
+        relayProtocol: protocol,
+        request: {
+          model: relayModel,
+          promptLength: params.prompt.length,
+          imageCount: images.length,
+          aspectRatio: params.aspectRatio,
+          resolution: params.resolution,
+          duration: params.duration
+        },
+        response: created
+      }
+    });
 
     let task = created;
     const startedAt = Date.now();
     while (!isCompletedStatus(taskStatus(task))) {
       if (isFailedStatus(taskStatus(task))) {
+        await saveGenerationTask({ id: taskId, status: "failed", result: task, errorMessage: errorMessage(task) });
         throw new ProviderError("VEO_OPERATION_FAILED", `Veo 中转任务失败：${errorMessage(task)}`, JSON.stringify(task));
       }
       if (Date.now() - startedAt > 15 * 60 * 1000) {
+        await saveGenerationTask({ id: taskId, status: "timeout", result: task, errorMessage: "Veo 中转任务超过 15 分钟仍未完成。" });
         throw new ProviderError("VEO_OPERATION_TIMEOUT", "Veo 中转任务超过 15 分钟仍未完成，请稍后重试。");
       }
       await sleep(5000);
-      const pollUrl = protocol === "unified-create-query"
-        ? unifiedQueryEndpoint(endpoint, taskId)
-        : `${endpoint}/${encodeURIComponent(taskId)}`;
       const pollResponse = await fetch(pollUrl, {
         headers: { Authorization: `Bearer ${params.apiKey}` }
       });
       task = await responseJson(pollResponse);
+      await saveGenerationTask({ id: taskId, status: taskStatus(task) || "processing", result: task });
       if (!pollResponse.ok) {
         throw new ProviderError("PROVIDER_ERROR", `Veo 中转任务查询失败：${errorMessage(task)}`, JSON.stringify(task));
       }
@@ -210,8 +279,17 @@ export async function generateVideoWithVeoProxy(params: VideoProviderParams): Pr
 
     const videoUrl = findVideoUrl(task);
     if (!videoUrl) {
-      throw new ProviderError("VEO_OPERATION_NO_VIDEO_IN_RESPONSE", "Veo 中转任务已完成，但响应中没有找到视频 URL。", JSON.stringify(task));
+      await saveGenerationTask({ id: taskId, status: "completed_without_video_url", result: task, errorMessage: "Veo 中转任务已完成，但响应中没有找到视频 URL。" });
+      throw new ProviderError("VEO_OPERATION_NO_VIDEO_IN_RESPONSE", "Veo 中转任务已完成，但响应中没有找到视频 URL。", JSON.stringify(task), {
+        endpoint,
+        taskId,
+        configuredModel: params.modelName,
+        relayModel,
+        relayProtocol: protocol,
+        response: task
+      });
     }
+    await saveGenerationTask({ id: taskId, status: "success", progress: 100, result: task });
     const saved = await downloadGeneratedFile(videoUrl, "video_veo_proxy");
     return {
       status: "success",
@@ -223,7 +301,13 @@ export async function generateVideoWithVeoProxy(params: VideoProviderParams): Pr
         relayProtocol: protocol,
         proxyEndpoint: endpoint,
         proxyTaskId: taskId,
-        proxyModel: relayModel
+        proxyModel: relayModel,
+        configuredModel: params.modelName,
+        relayDisplayNote: protocol === "openai-videos" ? "中转后台的平台列可能显示 Omni，但实际请求 model 字段仍是 proxyModel。" : undefined,
+        requestedAspectRatio: params.aspectRatio,
+        requestedResolution: params.resolution,
+        requestedDuration: params.duration,
+        inputImageCount: images.length
       }
     };
   } catch (error) {
