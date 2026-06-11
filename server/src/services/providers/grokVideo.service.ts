@@ -84,6 +84,11 @@ export function isOfficialGrokEndpoint(apiBaseUrl: string) {
   }
 }
 
+export function grokRequestModelName(modelName: string, apiBaseUrl: string) {
+  if (isOfficialGrokEndpoint(apiBaseUrl)) return modelName;
+  return /^grok-imagine-video/i.test(modelName) ? "grok-video-3" : modelName;
+}
+
 function record(value: unknown) {
   return value && typeof value === "object" ? value as Record<string, unknown> : {};
 }
@@ -140,6 +145,7 @@ export async function generateVideoWithGrok(params: VideoProviderParams): Promis
 
   try {
     const officialEndpoint = isOfficialGrokEndpoint(params.apiBaseUrl);
+    const requestModelName = grokRequestModelName(params.modelName, params.apiBaseUrl);
     const images = officialEndpoint ? await assetDataUrls(params.imageAssetIds) : [];
     const videos = officialEndpoint ? await assetDataUrls(params.videoAssetIds) : [];
     const relayImages = officialEndpoint ? [] : await assetFiles(params.imageAssetIds);
@@ -150,7 +156,7 @@ export async function generateVideoWithGrok(params: VideoProviderParams): Promis
     if (mode === "reference_images_to_video" && !imageCount) throw new ProviderError("MISSING_INPUT_ASSET", "Grok 参考图生视频需要连接 1 至 7 张参考图片。");
     if (["video_edit", "video_extension"].includes(mode) && !videoCount) throw new ProviderError("MISSING_VIDEO_INPUT", "Grok 视频编辑或延展需要连接一个视频素材。");
     const body: Record<string, unknown> = {
-      model: params.modelName,
+      model: requestModelName,
       prompt: params.prompt,
       duration: params.duration,
       aspect_ratio: params.aspectRatio,
@@ -172,7 +178,7 @@ export async function generateVideoWithGrok(params: VideoProviderParams): Promis
       requestBody = JSON.stringify(body);
     } else {
       const form = new FormData();
-      form.set("model", params.modelName);
+      form.set("model", requestModelName);
       form.set("prompt", params.prompt);
       form.set("aspect_ratio", params.aspectRatio);
       form.set("seconds", String(params.duration));
@@ -222,7 +228,7 @@ export async function generateVideoWithGrok(params: VideoProviderParams): Promis
       outputUrl: saved.outputUrl,
       localPath: saved.localPath,
       rawResponse: task,
-      payloadSummary: { endpoint, requestId: id, model: params.modelName, mode, protocol: officialEndpoint ? "xai-official-json" : "relay-multipart" }
+      payloadSummary: { endpoint, requestId: id, model: requestModelName, configuredModel: params.modelName, mode, protocol: officialEndpoint ? "xai-official-json" : "relay-multipart" }
     };
   } catch (error) {
     if (error instanceof ProviderError) throw error;

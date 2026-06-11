@@ -1,4 +1,4 @@
-import { grokCreateEndpoint, grokPollEndpoint, isOfficialGrokEndpoint } from "../services/providers/grokVideo.service.js";
+import { grokCreateEndpoint, grokPollEndpoint, grokRequestModelName, isOfficialGrokEndpoint } from "../services/providers/grokVideo.service.js";
 import { klingBearerToken, klingCreateEndpoint, klingPollEndpoint, normalizeKlingPrompt } from "../services/providers/klingVideo.service.js";
 import { seedanceCreateEndpoint, seedancePollEndpoint } from "../services/providers/seedanceVideo.service.js";
 import { getVideoModelCapability } from "../config/videoModelCapabilities.js";
@@ -42,6 +42,18 @@ assert(
 );
 assert(isOfficialGrokEndpoint("https://api.x.ai/v1"), "xAI endpoint should use the official JSON protocol");
 assert(!isOfficialGrokEndpoint("https://relay.example/v1/videos"), "Relay endpoint should use multipart protocol");
+assert(
+  grokRequestModelName("grok-imagine-video", "https://api.x.ai/v1") === "grok-imagine-video",
+  "Official Grok endpoint should keep the official model name"
+);
+assert(
+  grokRequestModelName("grok-imagine-video", "https://relay.example/v1") === "grok-video-3",
+  "Relay Grok endpoint should map official model names to the generic relay model"
+);
+assert(
+  grokRequestModelName("grok-1.5-video-15s", "https://relay.example/v1") === "grok-1.5-video-15s",
+  "Relay Grok endpoint should keep selected relay model names"
+);
 assert(
   seedanceCreateEndpoint("https://relay.example/v1/video/generations") === "https://relay.example/v1/video/generations",
   "Seedance full relay endpoint should be used as-is"
