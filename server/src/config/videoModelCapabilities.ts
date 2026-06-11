@@ -403,8 +403,8 @@ export const videoModelCapabilities: VideoModelCapability[] = [
     maxImages: 7,
     resultType: "async_task"
   }),
+  grokCapability({ modelId: "grok-imagine-video-1-5-preview", modelName: "grok-imagine-video-1.5-preview", displayName: "Grok Imagine Video 1.5 Preview（官方）", defaultDuration: 10 }),
   grokCapability({ modelId: "grok-imagine-video", modelName: "grok-imagine-video", displayName: "Grok Imagine Video（官方）", defaultDuration: 10 }),
-  grokCapability({ modelId: "grok-video-3", modelName: "grok-video-3", displayName: "Grok Video 3", defaultDuration: 10 }),
   klingCapability({ modelId: "kling-3-0", modelName: "kling-v3-omni", displayName: "可灵 Kling 3.0 Omni", supportedDurations: klingLongDurations }),
   klingCapability({ modelId: "kling-2-6", modelName: "kling-v2-6", displayName: "可灵 Kling 2.6", supportedDurations: klingLongDurations }),
   klingCapability({ modelId: "kling-2-5", modelName: "kling-v2-5-turbo", displayName: "可灵 Kling 2.5 Turbo", qualityTier: "turbo", supportedModes: klingModesForDurations(klingStandardDurations).filter((item) => item.mode !== "reference_images_to_video"), supportsReferenceImages: false, maxImages: 2 }),

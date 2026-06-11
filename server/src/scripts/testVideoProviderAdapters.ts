@@ -81,14 +81,15 @@ assert(normalizeKlingPrompt("  a\n\n b  ") === "a b", "Kling prompt should colla
 assert(Buffer.byteLength(normalizeKlingPrompt("汉".repeat(2600)), "utf8") <= 2400, "Kling prompt should stay within relay-safe UTF-8 byte limit");
 assert(!modelCatalog.some((item) => item.name === "grok-imagine-fast"), "Unpublished Grok Imagine Fast entry should be removed");
 assert(modelCatalog.some((item) => item.name === "grok-imagine-video"), "Official Grok Imagine Video model should be retained");
-assert(modelCatalog.some((item) => item.name === "grok-video-3"), "Grok Video 3 model should be available without relay-specific renaming");
+assert(modelCatalog.some((item) => item.name === "grok-imagine-video-1.5-preview"), "Official Grok Imagine Video 1.5 Preview model should be retained");
+assert(!modelCatalog.some((item) => item.name === "grok-video-3"), "Non-official Grok Video 3 relay alias should not be in the built-in catalog");
 
 const grokReference = getVideoModelCapability("grok", "grok-imagine-video", "grok-imagine-video", "reference_images_to_video");
 assert(grokReference?.supportedResolutions.join(",") === "480p,720p", "Grok should expose official 480p and 720p resolutions");
 assert(grokReference?.supportedModes.some((mode) => mode.mode === "video_edit"), "Grok should support video editing");
 assert(grokReference?.supportedModes.some((mode) => mode.mode === "video_extension"), "Grok should support video extension");
-const grokVideo3 = getVideoModelCapability("grok", "grok-video-3", "grok-video-3", "reference_images_to_video");
-assert(grokVideo3?.supportedDurations.includes(10), "Grok Video 3 should keep the selected model name and expose official-style durations");
+const grokPreview = getVideoModelCapability("grok", "grok-imagine-video-1-5-preview", "grok-imagine-video-1.5-preview", "reference_images_to_video");
+assert(grokPreview?.supportedDurations.includes(10), "Grok Imagine Video 1.5 Preview should expose official-style durations");
 
 const klingReference = getVideoModelCapability("kling", "kling-3-0", "kling-v3-omni", "reference_images_to_video");
 assert(klingReference?.supportedModes.some((mode) => mode.mode === "image_to_video_first_last_frame"), "Kling should expose first/last frame mode");
