@@ -88,6 +88,8 @@ const grokReference = getVideoModelCapability("grok", "grok-imagine-video", "gro
 assert(grokReference?.supportedResolutions.join(",") === "480p,720p", "Grok should expose official 480p and 720p resolutions");
 assert(grokReference?.supportedModes.some((mode) => mode.mode === "video_edit"), "Grok should support video editing");
 assert(grokReference?.supportedModes.some((mode) => mode.mode === "video_extension"), "Grok should support video extension");
+assert(grokReference?.supportedDurations[0] === 3, "Grok should start at 3s duration");
+assert(grokReference?.supportedDurations.at(-1) === 15, "Grok should end at 15s duration");
 const grokPreview = getVideoModelCapability("grok", "grok-imagine-video-1-5-preview", "grok-imagine-video-1.5-preview", "reference_images_to_video");
 assert(grokPreview?.supportedDurations.includes(10), "Grok Imagine Video 1.5 Preview should expose official-style durations");
 

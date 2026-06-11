@@ -157,7 +157,7 @@ const grokModes = [
 ];
 
 function grokCapability(input: { modelId: string; modelName: string; displayName: string; supportedDurations?: number[]; defaultDuration?: number; qualityTier?: "standard" | "full" | "fast" | "lite" | "turbo" }) {
-  const supportedDurations = input.supportedDurations ?? range(1, 15);
+  const supportedDurations = input.supportedDurations ?? range(3, 15);
   return capability({
     providerId: "grok",
     family: "grok",
