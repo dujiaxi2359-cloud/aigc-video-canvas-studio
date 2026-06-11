@@ -3,7 +3,9 @@ import fs from "node:fs";
 import { legacyInputModeToOfficialMode, type OfficialVideoMode } from "../../types/videoModes.js";
 import { downloadGeneratedFile } from "../../utils/downloadGeneratedFile.js";
 import { ProviderError, rawErrorMessage } from "../../utils/providerErrors.js";
+import { mapVideoDimensions, mapVideoSize, normalizeVideoAspectRatio } from "../../utils/videoParams.js";
 import { getAsset } from "../asset.service.js";
+import { prepareVideoFrameForAspectRatio } from "../assets/prepareVideoFrame.service.js";
 import { saveGenerationTask } from "../generationTask.service.js";
 import type { ProviderGenerateResult, VideoProviderParams } from "./providerTypes.js";
 
@@ -27,14 +29,15 @@ export function klingBearerToken(apiKey: string, timestamp = Math.floor(Date.now
   return `${header}.${payload}.${signature}`;
 }
 
-async function imageBase64(assetIds?: string[]) {
+async function imageBase64(assetIds?: string[], aspectRatio?: string) {
   const images: string[] = [];
   for (const assetId of assetIds ?? []) {
     const asset = await getAsset(assetId);
     if (!asset?.localPath || !fs.existsSync(asset.localPath)) {
       throw new ProviderError("MISSING_INPUT_ASSET", "可灵引用的图片素材不存在。");
     }
-    images.push(fs.readFileSync(asset.localPath).toString("base64"));
+    const prepared = await prepareVideoFrameForAspectRatio(asset.localPath, aspectRatio, "contain_blur");
+    images.push(fs.readFileSync(prepared.localPath).toString("base64"));
   }
   return images;
 }
@@ -125,19 +128,26 @@ export async function generateVideoWithKling(params: VideoProviderParams): Promi
   }
 
   try {
-    const images = await imageBase64(params.imageAssetIds);
+    const images = await imageBase64(params.imageAssetIds, params.aspectRatio);
     if (mode === "image_to_video_first_frame" && !images[0]) throw new ProviderError("MISSING_INPUT_ASSET", "可灵图生视频需要连接一张首帧图片。");
     if (mode === "image_to_video_first_last_frame" && images.length < 2) throw new ProviderError("MISSING_INPUT_ASSET", "可灵首尾帧模式需要连接首帧和尾帧两张图片。");
     if (mode === "reference_images_to_video" && !images.length) throw new ProviderError("MISSING_INPUT_ASSET", "可灵多图参考模式需要连接 1 至 4 张参考图片。");
     const endpoint = klingCreateEndpoint(params.apiBaseUrl, mode);
     const omniVideo = isOmniVideoEndpoint(endpoint);
     const prompt = normalizeKlingPrompt(params.prompt);
+    const normalizedRatio = normalizeVideoAspectRatio(params.aspectRatio);
+    const dimensions = mapVideoDimensions(params.aspectRatio, params.resolution);
     const body: Record<string, unknown> = {
       model_name: params.modelName,
       prompt,
       negative_prompt: params.negativePrompt,
       duration: String(params.duration),
-      aspect_ratio: params.aspectRatio,
+      aspect_ratio: normalizedRatio,
+      aspectRatio: normalizedRatio,
+      ratio: normalizedRatio,
+      width: dimensions.width,
+      height: dimensions.height,
+      dimensions: mapVideoSize(params.aspectRatio, params.resolution),
       mode: params.resolution.toLowerCase() === "1080p" ? "pro" : "std"
     };
     if (mode === "image_to_video_first_frame" || (omniVideo && mode === "reference_images_to_video")) body.image = images[0];

@@ -3,6 +3,7 @@ import { klingBearerToken, klingCreateEndpoint, klingPollEndpoint, normalizeKlin
 import { seedanceCreateEndpoint, seedancePollEndpoint } from "../services/providers/seedanceVideo.service.js";
 import { getVideoModelCapability } from "../config/videoModelCapabilities.js";
 import { modelCatalog } from "../services/modelCatalog.js";
+import { mapVideoDimensions } from "../utils/videoParams.js";
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
@@ -12,6 +13,10 @@ assert(
   grokCreateEndpoint("https://api.x.ai/v1") === "https://api.x.ai/v1/videos/generations",
   "Grok create endpoint should append /videos/generations"
 );
+assert(mapVideoDimensions("9:16", "720p").width === 720, "9:16 720p width should be 720");
+assert(mapVideoDimensions("9:16", "720p").height === 1280, "9:16 720p height should be 1280");
+assert(mapVideoDimensions("16:9", "720p").width === 1280, "16:9 720p width should be 1280");
+assert(mapVideoDimensions("16:9", "720p").height === 720, "16:9 720p height should be 720");
 assert(
   grokPollEndpoint("https://api.x.ai/v1", "request/1") === "https://api.x.ai/v1/videos/request%2F1",
   "Grok poll endpoint should encode request id"

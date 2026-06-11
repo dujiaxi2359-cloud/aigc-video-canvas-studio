@@ -3,7 +3,9 @@ import path from "node:path";
 import { legacyInputModeToOfficialMode } from "../../types/videoModes.js";
 import { downloadGeneratedFile } from "../../utils/downloadGeneratedFile.js";
 import { ProviderError, rawErrorMessage } from "../../utils/providerErrors.js";
+import { mapVideoDimensions, mapVideoSize, normalizeVideoAspectRatio, normalizeVideoResolution } from "../../utils/videoParams.js";
 import { getAsset } from "../asset.service.js";
+import { prepareVideoFrameForAspectRatio } from "../assets/prepareVideoFrame.service.js";
 import { saveGenerationTask } from "../generationTask.service.js";
 import type { ProviderGenerateResult, VideoProviderParams } from "./providerTypes.js";
 
@@ -22,28 +24,35 @@ function mimeType(filePath: string, configured?: string) {
   return "image/jpeg";
 }
 
-async function assetDataUrls(assetIds?: string[]) {
+async function assetDataUrls(assetIds?: string[], aspectRatio?: string) {
   const urls: string[] = [];
   for (const assetId of assetIds ?? []) {
     const asset = await getAsset(assetId);
     if (!asset?.localPath || !fs.existsSync(asset.localPath)) {
       throw new ProviderError("MISSING_INPUT_ASSET", "Grok 引用的图片或视频素材不存在。");
     }
-    urls.push(`data:${mimeType(asset.localPath, asset.mimeType)};base64,${fs.readFileSync(asset.localPath).toString("base64")}`);
+    const sourcePath = asset.mimeType?.startsWith("image/")
+      ? (await prepareVideoFrameForAspectRatio(asset.localPath, aspectRatio, "contain_blur")).localPath
+      : asset.localPath;
+    urls.push(`data:${mimeType(sourcePath, asset.mimeType)};base64,${fs.readFileSync(sourcePath).toString("base64")}`);
   }
   return urls;
 }
 
-async function assetFiles(assetIds?: string[]) {
+async function assetFiles(assetIds?: string[], aspectRatio?: string) {
   const files: Array<{ blob: Blob; filename: string }> = [];
   for (const assetId of assetIds ?? []) {
     const asset = await getAsset(assetId);
     if (!asset?.localPath || !fs.existsSync(asset.localPath)) {
       throw new ProviderError("MISSING_INPUT_ASSET", "Grok 引用的图片或视频素材不存在。");
     }
+    const prepared = asset.mimeType?.startsWith("image/")
+      ? await prepareVideoFrameForAspectRatio(asset.localPath, aspectRatio, "contain_blur")
+      : undefined;
+    const sourcePath = prepared?.localPath ?? asset.localPath;
     files.push({
-      blob: new Blob([fs.readFileSync(asset.localPath)], { type: mimeType(asset.localPath, asset.mimeType) }),
-      filename: path.basename(asset.localPath)
+      blob: new Blob([fs.readFileSync(sourcePath)], { type: mimeType(sourcePath, prepared ? "image/png" : asset.mimeType) }),
+      filename: prepared?.transformed ? `grok_${prepared.aspectRatio.replace(":", "x")}_${assetId}.png` : path.basename(asset.localPath)
     });
   }
   return files;
@@ -146,9 +155,9 @@ export async function generateVideoWithGrok(params: VideoProviderParams): Promis
   try {
     const officialEndpoint = isOfficialGrokEndpoint(params.apiBaseUrl);
     const requestModelName = grokRequestModelName(params.modelName, params.apiBaseUrl);
-    const images = officialEndpoint ? await assetDataUrls(params.imageAssetIds) : [];
+    const images = officialEndpoint ? await assetDataUrls(params.imageAssetIds, params.aspectRatio) : [];
     const videos = officialEndpoint ? await assetDataUrls(params.videoAssetIds) : [];
-    const relayImages = officialEndpoint ? [] : await assetFiles(params.imageAssetIds);
+    const relayImages = officialEndpoint ? [] : await assetFiles(params.imageAssetIds, params.aspectRatio);
     const relayVideos = officialEndpoint ? [] : await assetFiles(params.videoAssetIds);
     const imageCount = officialEndpoint ? images.length : relayImages.length;
     const videoCount = officialEndpoint ? videos.length : relayVideos.length;
@@ -159,8 +168,14 @@ export async function generateVideoWithGrok(params: VideoProviderParams): Promis
       model: requestModelName,
       prompt: params.prompt,
       duration: params.duration,
-      aspect_ratio: params.aspectRatio,
-      resolution: params.resolution.toLowerCase()
+      seconds: params.duration,
+      aspect_ratio: normalizeVideoAspectRatio(params.aspectRatio),
+      aspectRatio: normalizeVideoAspectRatio(params.aspectRatio),
+      ratio: normalizeVideoAspectRatio(params.aspectRatio),
+      resolution: normalizeVideoResolution(params.resolution),
+      size: normalizeVideoResolution(params.resolution),
+      dimensions: mapVideoSize(params.aspectRatio, params.resolution),
+      ...mapVideoDimensions(params.aspectRatio, params.resolution)
     };
     if (mode === "image_to_video_first_frame") body.image = { url: images[0] };
     if (mode === "reference_images_to_video") body.reference_images = images.map((url) => ({ url }));
@@ -180,9 +195,19 @@ export async function generateVideoWithGrok(params: VideoProviderParams): Promis
       const form = new FormData();
       form.set("model", requestModelName);
       form.set("prompt", params.prompt);
-      form.set("aspect_ratio", params.aspectRatio);
+      const normalizedRatio = normalizeVideoAspectRatio(params.aspectRatio);
+      const normalizedResolution = normalizeVideoResolution(params.resolution);
+      const dimensions = mapVideoDimensions(params.aspectRatio, params.resolution);
+      form.set("aspect_ratio", normalizedRatio);
+      form.set("aspectRatio", normalizedRatio);
+      form.set("ratio", normalizedRatio);
       form.set("seconds", String(params.duration));
-      form.set("size", params.resolution.toUpperCase());
+      form.set("duration", String(params.duration));
+      form.set("size", normalizedResolution);
+      form.set("resolution", normalizedResolution);
+      form.set("width", String(dimensions.width));
+      form.set("height", String(dimensions.height));
+      form.set("dimensions", mapVideoSize(params.aspectRatio, params.resolution));
       for (const file of relayImages) form.append("input_reference", file.blob, file.filename);
       for (const file of relayVideos) form.append("input_video", file.blob, file.filename);
       if (mode === "video_extension") form.set("mode", "extend");

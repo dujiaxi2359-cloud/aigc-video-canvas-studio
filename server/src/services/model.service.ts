@@ -20,6 +20,7 @@ import { generateVideoWithKling } from "./providers/klingVideo.service.js";
 import { generateImageWithOpenAI } from "./providers/openaiImage.service.js";
 import { generateVideoWithSeedance } from "./providers/seedanceVideo.service.js";
 import { resolveProviderApiBaseUrl } from "./providers/providerBaseUrl.js";
+import { ensureVideoAspectRatio } from "./assets/ensureVideoAspectRatio.service.js";
 import type { ImageInputMode, ModelCapabilities, ModelCatalogItem, VideoNodeContext } from "../types/model.js";
 import type { OfficialVideoMode } from "../types/videoModes.js";
 import { legacyInputModeToOfficialMode } from "../types/videoModes.js";
@@ -346,6 +347,33 @@ async function enrichPayloadSummaryWithOutput(
   };
 }
 
+async function enforceVideoAspectRatio(result: ProviderGenerateResult, aspectRatio: string, resolution: string): Promise<ProviderGenerateResult> {
+  const ensured = await ensureVideoAspectRatio(result.localPath, aspectRatio, resolution);
+  if (!ensured) return result;
+  if (!ensured.transformed) {
+    return {
+      ...result,
+      payloadSummary: {
+        ...(result.payloadSummary && typeof result.payloadSummary === "object" ? result.payloadSummary as Record<string, unknown> : {}),
+        outputAspectRatio: ensured.aspectRatio,
+        outputAspectRatioTransformed: false
+      }
+    };
+  }
+  return {
+    ...result,
+    localPath: ensured.localPath,
+    outputUrl: ensured.outputUrl ?? result.outputUrl,
+    payloadSummary: {
+      ...(result.payloadSummary && typeof result.payloadSummary === "object" ? result.payloadSummary as Record<string, unknown> : {}),
+      outputAspectRatio: ensured.aspectRatio,
+      outputAspectRatioTransformed: true,
+      originalOutput: ensured.originalMetadata,
+      transformedOutput: ensured.metadata
+    }
+  };
+}
+
 export async function generateText(input: GenerateTextRequest) {
   const { model, apiKey, catalogItem, forceMock } = await getGenerationContext(input.modelConfigId, "text");
   logGenerate({ type: "text", model, catalogItem, apiKey, inputMode: "text" });
@@ -491,6 +519,7 @@ export async function generateVideo(input: GenerateVideoRequest) {
       default:
         throw new Error("该视频模型暂未支持真实调用");
     }
+    result = await enforceVideoAspectRatio(result, inputForGeneration.aspectRatio, inputForGeneration.resolution);
 
     const asset = await createGeneratedAssetFromProvider(result, `video_${inputForGeneration.nodeId}.mp4`, {
       providerId,

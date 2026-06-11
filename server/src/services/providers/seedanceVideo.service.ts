@@ -3,7 +3,9 @@ import path from "node:path";
 import { legacyInputModeToOfficialMode } from "../../types/videoModes.js";
 import { downloadGeneratedFile } from "../../utils/downloadGeneratedFile.js";
 import { ProviderError, rawErrorMessage } from "../../utils/providerErrors.js";
+import { mapVideoDimensions, mapVideoSize, normalizeVideoAspectRatio, normalizeVideoResolution } from "../../utils/videoParams.js";
 import { getAsset } from "../asset.service.js";
+import { prepareVideoFrameForAspectRatio } from "../assets/prepareVideoFrame.service.js";
 import { saveGenerationTask } from "../generationTask.service.js";
 import type { ProviderGenerateResult, VideoProviderParams } from "./providerTypes.js";
 
@@ -26,14 +28,17 @@ function mimeType(filePath: string, configured?: string) {
   return "image/jpeg";
 }
 
-async function assetDataUrls(assetIds?: string[]) {
+async function assetDataUrls(assetIds?: string[], aspectRatio?: string) {
   const urls: string[] = [];
   for (const assetId of assetIds ?? []) {
     const asset = await getAsset(assetId);
     if (!asset?.localPath || !fs.existsSync(asset.localPath)) {
       throw new ProviderError("MISSING_INPUT_ASSET", "Seedance 引用的图片或视频素材不存在。");
     }
-    urls.push(`data:${mimeType(asset.localPath, asset.mimeType)};base64,${fs.readFileSync(asset.localPath).toString("base64")}`);
+    const sourcePath = asset.mimeType?.startsWith("image/")
+      ? (await prepareVideoFrameForAspectRatio(asset.localPath, aspectRatio, "contain_blur")).localPath
+      : asset.localPath;
+    urls.push(`data:${mimeType(sourcePath, asset.mimeType)};base64,${fs.readFileSync(sourcePath).toString("base64")}`);
   }
   return urls;
 }
@@ -107,7 +112,7 @@ export async function generateVideoWithSeedance(params: VideoProviderParams): Pr
   }
 
   try {
-    const images = await assetDataUrls(params.imageAssetIds);
+    const images = await assetDataUrls(params.imageAssetIds, params.aspectRatio);
     const videos = await assetDataUrls(params.videoAssetIds);
     if (["image_to_video_first_frame", "reference_images_to_video"].includes(mode) && !images.length) {
       throw new ProviderError("MISSING_INPUT_ASSET", "Seedance 图生视频需要连接参考图片。");
@@ -116,13 +121,22 @@ export async function generateVideoWithSeedance(params: VideoProviderParams): Pr
       throw new ProviderError("MISSING_VIDEO_INPUT", "Seedance 视频编辑需要连接视频素材。");
     }
 
+    const normalizedRatio = normalizeVideoAspectRatio(params.aspectRatio);
+    const normalizedResolution = normalizeVideoResolution(params.resolution);
+    const dimensions = mapVideoDimensions(params.aspectRatio, params.resolution);
     const body: Record<string, unknown> = {
       model: params.modelName,
       prompt: params.prompt,
       duration: params.duration,
       seconds: params.duration,
-      aspect_ratio: params.aspectRatio,
-      resolution: params.resolution.toLowerCase()
+      aspect_ratio: normalizedRatio,
+      aspectRatio: normalizedRatio,
+      ratio: normalizedRatio,
+      resolution: normalizedResolution,
+      size: normalizedResolution,
+      dimensions: mapVideoSize(params.aspectRatio, params.resolution),
+      width: dimensions.width,
+      height: dimensions.height
     };
     if (images[0]) {
       body.image = images[0];

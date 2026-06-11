@@ -13,13 +13,28 @@ export function normalizeVideoResolution(resolution?: string) {
 export function mapVideoSize(aspectRatio?: string, resolution?: string) {
   const normalizedRatio = normalizeVideoAspectRatio(aspectRatio);
   const normalizedResolution = normalizeVideoResolution(resolution);
-  const is1080 = normalizedResolution === "1080P";
-  const is480 = normalizedResolution === "480P";
-  const long = is1080 ? 1920 : is480 ? 854 : 1280;
-  const short = is1080 ? 1080 : is480 ? 480 : 720;
+  const { long, short } = videoLongShort(normalizedResolution);
   if (normalizedRatio === "9:16") return `${short}*${long}`;
   if (normalizedRatio === "1:1") return `${short}*${short}`;
   return `${long}*${short}`;
+}
+
+function videoLongShort(resolution?: string) {
+  const normalizedResolution = normalizeVideoResolution(resolution);
+  const is1080 = normalizedResolution === "1080P";
+  const is480 = normalizedResolution === "480P";
+  return {
+    long: is1080 ? 1920 : is480 ? 854 : 1280,
+    short: is1080 ? 1080 : is480 ? 480 : 720
+  };
+}
+
+export function mapVideoDimensions(aspectRatio?: string, resolution?: string) {
+  const normalizedRatio = normalizeVideoAspectRatio(aspectRatio);
+  const { long, short } = videoLongShort(resolution);
+  if (normalizedRatio === "9:16") return { width: short, height: long };
+  if (normalizedRatio === "1:1") return { width: short, height: short };
+  return { width: long, height: short };
 }
 
 export function mapVideoParams(providerId: string | undefined, modelName: string, inputMode: string, aspectRatio?: string, resolution?: string, duration?: number) {
