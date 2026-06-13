@@ -18,14 +18,15 @@ import { ErrorBoundary } from "./components/common/ErrorBoundary";
 import { useAuthStore } from "./store/authStore";
 import { LoginPage } from "./pages/LoginPage";
 import { InvitePage } from "./pages/InvitePage";
+import { LegalPage } from "./pages/LegalPage";
 
-export type Page = "login" | "invite" | "home" | "photos" | "video" | "workspace" | "canvas" | "templates" | "community" | "arena" | "pricing" | "account" | "settings" | "assets" | "history";
+export type Page = "login" | "invite" | "home" | "photos" | "video" | "workspace" | "canvas" | "templates" | "community" | "arena" | "pricing" | "account" | "settings" | "assets" | "history" | "privacy" | "terms";
 
 function routeState() {
   const path = window.location.pathname;
   if (path.startsWith("/canvas/")) return { page: "canvas" as Page, projectId: decodeURIComponent(path.slice("/canvas/".length)) };
   const route = path.slice(1) as Page;
-  const supported: Page[] = ["login", "invite", "home", "photos", "video", "workspace", "templates", "community", "arena", "pricing", "account", "settings", "assets", "history"];
+  const supported: Page[] = ["login", "invite", "home", "photos", "video", "workspace", "templates", "community", "arena", "pricing", "account", "settings", "assets", "history", "privacy", "terms"];
   const page = supported.includes(route) ? route : "home";
   return { page };
 }
@@ -158,6 +159,9 @@ export default function App() {
         {page === "settings" && <SettingsPage key="settings" onNavigate={navigate} />}
         {page === "assets" && <AssetLibraryPage key="assets" onNavigate={navigate} />}
         {page === "history" && <HistoryPage key="history" />}
+        {["privacy", "terms"].includes(page) && (
+          <LegalPage key={page} page={page} onNavigate={navigate} />
+        )}
         {["templates", "community", "arena", "pricing", "account"].includes(page) && (
           <PlaceholderPage key={page} page={page} onNavigate={navigate} />
         )}
