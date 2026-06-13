@@ -94,6 +94,12 @@ export async function getDb() {
   if (!modelColumns.some((column) => column.name === "requires_api_base_url")) {
     await db.exec("ALTER TABLE model_configs ADD COLUMN requires_api_base_url INTEGER DEFAULT 0");
   }
+  if (!modelColumns.some((column) => column.name === "workspace_id")) {
+    await db.exec("ALTER TABLE model_configs ADD COLUMN workspace_id TEXT");
+  }
+  if (!modelColumns.some((column) => column.name === "created_by_user_id")) {
+    await db.exec("ALTER TABLE model_configs ADD COLUMN created_by_user_id TEXT");
+  }
   const database = db;
   const ensureColumn = async (table: string, name: string, sql: string) => {
     const columns = await database.all<Array<{ name: string }>>(`PRAGMA table_info(${table})`);
@@ -133,8 +139,12 @@ export async function getDb() {
   await ensureColumn("generation_history", "user_id", "ALTER TABLE generation_history ADD COLUMN user_id TEXT");
   await ensureColumn("generation_tasks", "workspace_id", "ALTER TABLE generation_tasks ADD COLUMN workspace_id TEXT");
   await ensureColumn("generation_tasks", "user_id", "ALTER TABLE generation_tasks ADD COLUMN user_id TEXT");
-  await database.exec("CREATE INDEX IF NOT EXISTS idx_projects_workspace ON projects(workspace_id); CREATE INDEX IF NOT EXISTS idx_assets_workspace ON assets(workspace_id); CREATE INDEX IF NOT EXISTS idx_asset_folders_workspace ON asset_folders(workspace_id); CREATE INDEX IF NOT EXISTS idx_history_workspace ON generation_history(workspace_id)");
+  await database.exec("CREATE INDEX IF NOT EXISTS idx_projects_workspace ON projects(workspace_id); CREATE INDEX IF NOT EXISTS idx_assets_workspace ON assets(workspace_id); CREATE INDEX IF NOT EXISTS idx_asset_folders_workspace ON asset_folders(workspace_id); CREATE INDEX IF NOT EXISTS idx_history_workspace ON generation_history(workspace_id); CREATE INDEX IF NOT EXISTS idx_model_configs_workspace ON model_configs(workspace_id)");
   const timestamp = Date.now();
+  await database.run(`UPDATE model_configs SET workspace_id = COALESCE(
+    (SELECT default_workspace_id FROM users WHERE role IN ('super_admin', 'admin') AND default_workspace_id IS NOT NULL ORDER BY created_at ASC LIMIT 1),
+    (SELECT id FROM workspaces ORDER BY created_at ASC LIMIT 1)
+  ) WHERE workspace_id IS NULL`);
   await database.run("INSERT OR IGNORE INTO plans (id, code, name, type, price_monthly, price_yearly, currency, max_members, monthly_credits, storage_limit_mb, features_json, status, created_at, updated_at) VALUES ('plan_free', 'free', 'Free', 'personal', 0, 0, 'CNY', 1, 100, 1024, ?, 'active', ?, ?)", JSON.stringify({ image_generation: true, video_generation: true, agent: true, upload: true, export: true }), timestamp, timestamp);
   const bootstrapInvite = (process.env.BOOTSTRAP_INVITE_CODE || (process.env.NODE_ENV === "production" ? "" : "AIGCNONG-ACCESS")).trim().toUpperCase();
   if (bootstrapInvite) {

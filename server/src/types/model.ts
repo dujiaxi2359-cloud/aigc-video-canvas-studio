@@ -88,6 +88,7 @@ export type ModelCatalogItem = {
 
 export type ModelConfig = {
   id: string;
+  workspaceId?: string;
   providerId?: string;
   provider: string;
   category?: ModelCatalogItem["category"];

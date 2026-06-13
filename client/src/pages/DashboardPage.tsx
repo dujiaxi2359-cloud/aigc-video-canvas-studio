@@ -14,7 +14,7 @@ const featured = [
   { title: "电商主图工作流", subtitle: "一组素材生成完整视觉", tone: "from-[#4a302e] via-[#936d5e] to-[#d8b693]" }
 ];
 
-export function DashboardPage({ onNavigate }: { onNavigate: (page: Page, projectId?: string) => void }) {
+export function DashboardPage({ onNavigate, navPage = "video" }: { onNavigate: (page: Page, projectId?: string) => void; navPage?: Page }) {
   const [prompt, setPrompt] = useState("");
   const [invalid, setInvalid] = useState(false);
   const { projects, fetchProjects, createProject, loadProject } = useProjectStore();
@@ -67,7 +67,7 @@ export function DashboardPage({ onNavigate }: { onNavigate: (page: Page, project
 
   return (
     <motion.div className="studio-page min-h-full overflow-auto" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-      <HomeTopNav page="home" onNavigate={onNavigate} />
+      <HomeTopNav page={navPage} onNavigate={onNavigate} />
       <main className="mx-auto max-w-[1480px] px-5 pb-16 pt-32 md:px-10">
         <section className="mx-auto max-w-[820px] text-center">
           <div className="mx-auto grid h-12 w-12 place-items-center rounded-2xl border border-white/[0.1] bg-white/[0.05] text-white/80 shadow-[0_18px_70px_rgba(0,0,0,.35)]"><WandSparkles size={21} /></div>

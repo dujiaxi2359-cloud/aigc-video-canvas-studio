@@ -1,10 +1,12 @@
 import { useState } from "react";
-import { Bell, ChevronDown, Download, LogOut, Settings, UserRound, WalletCards } from "lucide-react";
+import { Bell, ChevronDown, Download, LogIn, LogOut, Settings, UserRound, WalletCards } from "lucide-react";
 import type { Page } from "../../App";
 import { useAuthStore } from "../../store/authStore";
 
 const links: Array<[Page, string]> = [
   ["home", "首页"],
+  ["photos", "图文创作"],
+  ["video", "视频画布"],
   ["workspace", "工作空间"],
   ["assets", "素材库"]
 ];
@@ -23,10 +25,17 @@ export function HomeTopNav({ page, onNavigate }: { page: Page; onNavigate: (page
       </button>
       <nav className="absolute left-1/2 hidden -translate-x-1/2 items-center gap-1 rounded-full border border-white/[0.07] bg-white/[0.035] p-1 md:flex">
         {links.map(([target, label]) => (
-          <button key={target} type="button" onClick={() => onNavigate(target)} className={`h-9 rounded-full px-4 text-[13px] transition ${page === target ? "bg-white/[0.12] font-medium text-white" : "text-white/48 hover:bg-white/[0.06] hover:text-white"}`}>{label}</button>
+          <button key={target} type="button" onClick={() => target === "photos" ? window.location.assign("/photos") : onNavigate(target)} className={`h-9 rounded-full px-4 text-[13px] transition ${page === target ? "bg-white/[0.12] font-medium text-white" : "text-white/48 hover:bg-white/[0.06] hover:text-white"}`}>{label}</button>
         ))}
       </nav>
       <div className="ml-auto flex items-center gap-1.5">
+        {!auth.user && (
+          <button type="button" onClick={() => onNavigate("login")} className="studio-secondary-button">
+            <LogIn size={15} /> 登录
+          </button>
+        )}
+        {auth.user && (
+          <>
         <button type="button" title="设置中心" onClick={() => onNavigate("settings")} className="studio-nav-icon"><Settings size={16} /></button>
         <div className="relative">
           <button type="button" title="通知" className={`studio-nav-icon ${notificationsOpen ? "is-active" : ""}`} onClick={() => setNotificationsOpen((value) => !value)}><Bell size={16} /></button>
@@ -50,6 +59,8 @@ export function HomeTopNav({ page, onNavigate }: { page: Page; onNavigate: (page
           <button type="button" onClick={()=>void auth.logout()}><LogOut size={14}/>退出登录</button>
         </div>}
         </div>
+          </>
+        )}
       </div>
     </header>
   );

@@ -2,10 +2,10 @@ import { useEffect, useState } from "react";
 import { Copy, Plus, RefreshCw, Ticket, WalletCards } from "lucide-react";
 import { api } from "../../services/api";
 
-type Overview = { users: any[]; workspaces: any[]; invites: any[]; plans: any[] };
+type Overview = { users: any[]; workspaces: any[]; invites: any[]; plans: any[]; models: any[] };
 
 export function CommercialAdminPanel() {
-  const [data,setData]=useState<Overview>({users:[],workspaces:[],invites:[],plans:[]}); const [error,setError]=useState(""); const [code,setCode]=useState(""); const [busy,setBusy]=useState(false);
+  const [data,setData]=useState<Overview>({users:[],workspaces:[],invites:[],plans:[],models:[]}); const [error,setError]=useState(""); const [code,setCode]=useState(""); const [busy,setBusy]=useState(false);
   async function load(){try{setData(await api.get<Overview>("/api/admin/overview"));setError("");}catch(err){setError(err instanceof Error?err.message:"加载失败");}}
   useEffect(()=>{void load();},[]);
   async function createInvite(){try{setBusy(true);await api.post("/api/admin/invite-codes",{code:code||undefined,name:code||"Access Invite",type:"customer",maxUses:1});setCode("");await load();}catch(err){setError(err instanceof Error?err.message:"创建失败");}finally{setBusy(false);}}
@@ -30,5 +30,6 @@ export function CommercialAdminPanel() {
       <div className="rounded-[10px] border border-white/[0.08] p-4"><h3 className="text-[13px] font-medium">工作空间与额度</h3><div className="mt-3 max-h-64 space-y-2 overflow-auto">{data.workspaces.map((workspace)=><div key={workspace.id} className="flex items-center gap-3 rounded-[8px] bg-white/[0.04] px-3 py-2"><WalletCards size={15} className="text-white/35"/><div className="min-w-0 flex-1"><div className="truncate text-[12px]">{workspace.name}</div><div className="text-[10px] text-white/32">{workspace.type} · {workspace.member_count} 成员</div></div><span className="text-[11px]">{workspace.credits} credits</span><button className="rounded-[6px] bg-white/[0.07] px-2 py-1 text-[10px]" onClick={()=>void addCredits(workspace.id)}>调整</button></div>)}</div></div>
     </div>
     <div className="mt-4 rounded-[10px] border border-white/[0.08] p-4"><h3 className="text-[13px] font-medium">用户（{data.users.length}）</h3><div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">{data.users.map((user)=><div key={user.id} className="rounded-[8px] bg-white/[0.04] px-3 py-2"><div className="truncate text-[12px]">{user.email}</div><div className="mt-1 text-[10px] text-white/34">{user.role} · {user.status} · invite {user.invite_status}</div></div>)}</div></div>
+    <div className="mt-4 rounded-[10px] border border-white/[0.08] p-4"><h3 className="text-[13px] font-medium">客户模型配置（{data.models.length}）</h3><div className="mt-3 overflow-x-auto"><table className="w-full min-w-[900px] text-left text-[11px]"><thead className="text-white/34"><tr><th className="pb-2">工作空间</th><th className="pb-2">类型</th><th className="pb-2">供应商 / 模型</th><th className="pb-2">官方或中转 URL</th><th className="pb-2">API Key</th><th className="pb-2">调用</th><th className="pb-2">状态</th></tr></thead><tbody>{data.models.map((model)=><tr key={model.id} className="border-t border-white/[0.06]"><td className="py-2 pr-3">{model.workspaceName}</td><td className="py-2 pr-3">{model.category}</td><td className="py-2 pr-3"><div>{model.provider}</div><div className="text-white/35">{model.modelName}</div></td><td className="max-w-[280px] truncate py-2 pr-3" title={model.apiBaseUrl}>{model.apiBaseUrl || "官方默认"}</td><td className="py-2 pr-3 font-mono text-white/45">{model.maskedApiKey || "未配置"}</td><td className="py-2 pr-3">{model.usageCount} · 成功 {model.successCount} · 失败 {model.errorCount}</td><td className="py-2">{model.enabled ? "启用" : "停用"}</td></tr>)}</tbody></table></div></div>
   </section>;
 }

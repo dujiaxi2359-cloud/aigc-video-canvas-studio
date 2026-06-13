@@ -1,4 +1,5 @@
 import { getDb } from "../db/database.js";
+import { requireRequestContext } from "./requestContext.js";
 import { modelCatalog } from "./modelCatalog.js";
 import { getVideoModelCapabilityOrLegacy } from "../config/videoModelCapabilities.js";
 import { officialModeToLegacyInputMode, officialVideoModeLabels } from "../types/videoModes.js";
@@ -159,8 +160,9 @@ export function calculateAvailableImageOptions(capabilities: ModelCapabilities, 
 async function getCapabilities(modelConfigId: string) {
   const db = await getDb();
   const row = await db.get<{ provider_id?: string; model_name: string; capabilities_json: string }>(
-    "SELECT provider_id, model_name, capabilities_json FROM model_configs WHERE id = ? AND enabled = 1",
-    modelConfigId
+    "SELECT provider_id, model_name, capabilities_json FROM model_configs WHERE id = ? AND workspace_id = ? AND enabled = 1",
+    modelConfigId,
+    requireRequestContext().workspace.id
   );
   if (!row) throw new Error("Model config not found or disabled");
   const catalogItem = modelCatalog.find((item) => item.providerId === row.provider_id && item.name === row.model_name);
@@ -170,8 +172,9 @@ async function getCapabilities(modelConfigId: string) {
 async function getCapabilityContext(modelConfigId: string) {
   const db = await getDb();
   const row = await db.get<{ provider_id?: string; model_name: string; capabilities_json: string }>(
-    "SELECT provider_id, model_name, capabilities_json FROM model_configs WHERE id = ? AND enabled = 1",
-    modelConfigId
+    "SELECT provider_id, model_name, capabilities_json FROM model_configs WHERE id = ? AND workspace_id = ? AND enabled = 1",
+    modelConfigId,
+    requireRequestContext().workspace.id
   );
   if (!row) throw new Error("Model config not found or disabled");
   const catalogItem = modelCatalog.find((item) => item.providerId === row.provider_id && item.name === row.model_name);

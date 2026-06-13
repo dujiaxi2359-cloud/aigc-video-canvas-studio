@@ -1,6 +1,7 @@
 import { getDb } from "../../db/database.js";
 import { decryptApiKey } from "../encryption.service.js";
 import type { ModelCapabilities, ModelConfig } from "../../types/model.js";
+import { requireRequestContext } from "../requestContext.js";
 
 export type InternalAgentModelConfig = {
   id: string;
@@ -50,7 +51,7 @@ export async function listEnabledTextAgentModels() {
   const db = await getDb();
   const rows = await db.all<ModelConfigRow[]>(
     `SELECT * FROM model_configs
-     WHERE enabled = 1 AND (category = 'text' OR model_type = 'text')
+     WHERE workspace_id = ? AND enabled = 1 AND (category = 'text' OR model_type = 'text')
      ORDER BY
        CASE
          WHEN provider_id = 'google' THEN 0
@@ -58,7 +59,8 @@ export async function listEnabledTextAgentModels() {
          WHEN provider_id = 'deepseek' THEN 2
          ELSE 3
        END,
-       updated_at DESC`
+       updated_at DESC`,
+    requireRequestContext().workspace.id
   );
   return rows.map(toInternal);
 }
@@ -72,4 +74,3 @@ export async function getEnabledTextAgentModel(id?: string) {
 export function decryptAgentModelKey(model: InternalAgentModelConfig) {
   return model.encryptedApiKey ? decryptApiKey(model.encryptedApiKey) : "";
 }
-

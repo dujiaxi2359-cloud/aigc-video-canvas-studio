@@ -4,9 +4,12 @@ import { now } from "../utils/time.js";
 import { decryptApiKey, encryptApiKey, maskEncryptedApiKey } from "./encryption.service.js";
 import { defaultCapabilities, modelCatalog } from "./modelCatalog.js";
 import type { ModelCapabilities, ModelConfig } from "../types/model.js";
+import { requireRequestContext } from "./requestContext.js";
 
 type ModelConfigRow = {
   id: string;
+  workspace_id?: string;
+  created_by_user_id?: string;
   provider_id?: string;
   provider: string;
   category?: ModelConfig["category"];
@@ -40,6 +43,7 @@ function toPublicModelConfig(row: ModelConfigRow): ModelConfig {
   const catalogItem = modelCatalog.find((item) => item.providerId === row.provider_id && item.name === row.model_name);
   return {
     id: row.id,
+    workspaceId: row.workspace_id,
     providerId: row.provider_id,
     provider: row.provider,
     category: row.category ?? inferCategory(row.model_type),
@@ -58,26 +62,31 @@ function toPublicModelConfig(row: ModelConfigRow): ModelConfig {
 
 export async function listModelConfigs() {
   const db = await getDb();
-  const rows = await db.all<ModelConfigRow[]>("SELECT * FROM model_configs ORDER BY updated_at DESC");
+  const { workspace } = requireRequestContext();
+  const rows = await db.all<ModelConfigRow[]>("SELECT * FROM model_configs WHERE workspace_id = ? ORDER BY updated_at DESC", workspace.id);
   return rows.map(toPublicModelConfig);
 }
 
 export async function getInternalModelConfig(id: string) {
   const db = await getDb();
-  return db.get<ModelConfigRow>("SELECT * FROM model_configs WHERE id = ?", id);
+  const context = requireRequestContext();
+  return db.get<ModelConfigRow>("SELECT * FROM model_configs WHERE id = ? AND workspace_id = ?", id, context.workspace.id);
 }
 
 export async function createModelConfig(input: Partial<ModelConfig> & { apiKey?: string }) {
   const db = await getDb();
   const timestamp = now();
   const id = createId("model");
+  const { workspace, user } = requireRequestContext();
   const capabilities: ModelCapabilities = input.capabilities ?? defaultCapabilities();
   const apiKey = submittedApiKey(input.apiKey);
   await db.run(
     `INSERT INTO model_configs
-     (id, provider_id, provider, category, display_name, api_base_url, requires_api_base_url, encrypted_api_key, model_name, model_type, enabled, capabilities_json, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     (id, workspace_id, created_by_user_id, provider_id, provider, category, display_name, api_base_url, requires_api_base_url, encrypted_api_key, model_name, model_type, enabled, capabilities_json, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     id,
+    workspace.id,
+    user.id,
     input.providerId ?? null,
     input.provider ?? "自定义 API",
     input.category ?? inferCategory(input.modelType),
@@ -126,7 +135,23 @@ export async function updateModelConfig(id: string, input: Partial<ModelConfig> 
 
 export async function deleteModelConfig(id: string) {
   const db = await getDb();
-  await db.run("DELETE FROM model_configs WHERE id = ?", id);
+  await db.run("DELETE FROM model_configs WHERE id = ? AND workspace_id = ?", id, requireRequestContext().workspace.id);
+}
+
+export async function getRuntimeModelConfig(id: string) {
+  const row = await getInternalModelConfig(id);
+  if (!row) throw new Error("Model config not found");
+  return {
+    id: row.id,
+    providerId: row.provider_id,
+    provider: row.provider,
+    category: row.category ?? inferCategory(row.model_type),
+    displayName: row.display_name,
+    apiBaseUrl: row.api_base_url,
+    modelName: row.model_name,
+    modelType: row.model_type,
+    enabled: Boolean(row.enabled)
+  };
 }
 
 export async function testModelConfig(id: string, input: Partial<ModelConfig> & { apiKey?: string } = {}) {

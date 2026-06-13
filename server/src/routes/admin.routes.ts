@@ -4,6 +4,7 @@ import { requireAdmin, requireLogin } from "../middleware/auth.js";
 import { getDb } from "../db/database.js";
 import { createId } from "../utils/id.js";
 import { now } from "../utils/time.js";
+import { maskEncryptedApiKey } from "../services/encryption.service.js";
 
 export const adminRouter = Router();
 adminRouter.use(requireLogin, requireAdmin);
@@ -21,7 +22,32 @@ adminRouter.get("/overview", async (_req, res) => {
     LEFT JOIN credit_balances cb ON cb.workspace_id = w.id GROUP BY w.id ORDER BY w.created_at DESC`);
   const invites = await db.all("SELECT * FROM invite_codes ORDER BY created_at DESC");
   const plans = await db.all("SELECT * FROM plans ORDER BY created_at DESC");
-  res.json({ users, workspaces, invites, plans });
+  const modelRows = await db.all<any[]>(`SELECT mc.*, w.name AS workspace_name,
+    (SELECT COUNT(*) FROM usage_records ur WHERE ur.model_id = mc.id) AS usage_count,
+    (SELECT COUNT(*) FROM generation_history gh WHERE gh.model_config_id = mc.id AND gh.status = 'success') AS success_count,
+    (SELECT COUNT(*) FROM generation_history gh WHERE gh.model_config_id = mc.id AND gh.status = 'error') AS error_count
+    FROM model_configs mc
+    LEFT JOIN workspaces w ON w.id = mc.workspace_id
+    ORDER BY mc.updated_at DESC`);
+  const models = modelRows.map((row) => ({
+    id: row.id,
+    workspaceId: row.workspace_id,
+    workspaceName: row.workspace_name || "Legacy / Unassigned",
+    providerId: row.provider_id,
+    provider: row.provider,
+    category: row.category,
+    displayName: row.display_name,
+    apiBaseUrl: row.api_base_url,
+    maskedApiKey: maskEncryptedApiKey(row.encrypted_api_key),
+    modelName: row.model_name,
+    modelType: row.model_type,
+    enabled: Boolean(row.enabled),
+    usageCount: Number(row.usage_count || 0),
+    successCount: Number(row.success_count || 0),
+    errorCount: Number(row.error_count || 0),
+    updatedAt: row.updated_at
+  }));
+  res.json({ users, workspaces, invites, plans, models });
 });
 
 adminRouter.post("/invite-codes", async (req, res) => {

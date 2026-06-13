@@ -1,0 +1,46 @@
+{
+  "name": "ai-image-workflow",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "dev:mac": "NEXT_TEST_WASM_DIR=node_modules/@next/swc-wasm-nodejs next dev --webpack",
+    "build": "next build --webpack",
+    "build:mac": "NEXT_TEST_WASM_DIR=node_modules/@next/swc-wasm-nodejs next build --webpack",
+    "start": "node scripts/start-lan.js",
+    "start:local": "node scripts/start-local-preview.js",
+    "start:lan": "node scripts/start-lan.js",
+    "preview:local": "node scripts/start-local-preview.js",
+    "preview:restart": "powershell -ExecutionPolicy Bypass -File scripts/restart-local-preview.ps1",
+    "start:keepalive": "node scripts/keep-alive.js",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "framer-motion": "^12.40.0",
+    "lucide-react": "latest",
+    "next": "latest",
+    "openai": "latest",
+    "react": "latest",
+    "react-dom": "latest",
+    "undici": "^8.2.0"
+  },
+  "overrides": {
+    "@typescript-eslint/typescript-estree": {
+      "brace-expansion": "5.0.6"
+    },
+    "postcss": "8.5.10"
+  },
+  "devDependencies": {
+    "@eslint/eslintrc": "latest",
+    "@next/swc-wasm-nodejs": "16.2.6",
+    "@types/node": "latest",
+    "@types/react": "latest",
+    "@types/react-dom": "latest",
+    "autoprefixer": "^10.4.20",
+    "eslint": "latest",
+    "eslint-config-next": "latest",
+    "postcss": "8.5.10",
+    "tailwindcss": "^3.4.17",
+    "typescript": "latest"
+  }
+}

@@ -13,6 +13,8 @@ CREATE TABLE IF NOT EXISTS projects (
 
 CREATE TABLE IF NOT EXISTS model_configs (
   id TEXT PRIMARY KEY,
+  workspace_id TEXT,
+  created_by_user_id TEXT,
   provider_id TEXT,
   provider TEXT NOT NULL,
   category TEXT,

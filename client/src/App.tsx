@@ -3,10 +3,12 @@ import { AnimatePresence, motion } from "framer-motion";
 import { AppLayout } from "./components/layout/AppLayout";
 import { FirstRunGuideModal } from "./components/modals/FirstRunGuideModal";
 import { AssetLibraryPage } from "./pages/AssetLibraryPage";
+import { BrandGatewayPage } from "./pages/BrandGatewayPage";
 import { CanvasPage } from "./pages/CanvasPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { HistoryPage } from "./pages/HistoryPage";
 import { PlaceholderPage } from "./pages/PlaceholderPage";
+import { PhotoStudioPage } from "./pages/PhotoStudioPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { WorkspacePage } from "./pages/WorkspacePage";
 import { useModelConfigStore } from "./store/modelConfigStore";
@@ -17,13 +19,13 @@ import { useAuthStore } from "./store/authStore";
 import { LoginPage } from "./pages/LoginPage";
 import { InvitePage } from "./pages/InvitePage";
 
-export type Page = "login" | "invite" | "home" | "workspace" | "canvas" | "templates" | "community" | "arena" | "pricing" | "account" | "settings" | "assets" | "history";
+export type Page = "login" | "invite" | "home" | "photos" | "video" | "workspace" | "canvas" | "templates" | "community" | "arena" | "pricing" | "account" | "settings" | "assets" | "history";
 
 function routeState() {
   const path = window.location.pathname;
   if (path.startsWith("/canvas/")) return { page: "canvas" as Page, projectId: decodeURIComponent(path.slice("/canvas/".length)) };
   const route = path.slice(1) as Page;
-  const supported: Page[] = ["login", "invite", "home", "workspace", "templates", "community", "arena", "pricing", "account", "settings", "assets", "history"];
+  const supported: Page[] = ["login", "invite", "home", "photos", "video", "workspace", "templates", "community", "arena", "pricing", "account", "settings", "assets", "history"];
   const page = supported.includes(route) ? route : "home";
   return { page };
 }
@@ -63,6 +65,7 @@ export default function App() {
   useEffect(() => {
     if (auth.loading) return;
     if (!auth.user) {
+      if (page === "home") return;
       if (window.location.pathname !== "/login") window.history.replaceState({}, "", "/login");
       setPage("login");
       return;
@@ -72,7 +75,7 @@ export default function App() {
       setPage("invite");
       return;
     }
-    if (["login", "invite"].includes(page)) navigate("workspace", undefined, true);
+    if (["login", "invite"].includes(page)) navigate("home", undefined, true);
   }, [auth.loading, auth.user?.id, auth.user?.inviteStatus]);
 
   useEffect(() => {
@@ -111,14 +114,29 @@ export default function App() {
   }, [loadCanvasProject, loadProject, page, routeProjectId]);
 
   if (auth.loading) return <div className="grid h-screen place-items-center bg-[#070708] text-[13px] text-white/45">正在验证会话...</div>;
-  if (!auth.user) return <LoginPage />;
+  if (!auth.user) {
+    if (page === "home") {
+      return (
+        <AppLayout page={page} onNavigate={navigate}>
+          <BrandGatewayPage onNavigate={navigate} />
+        </AppLayout>
+      );
+    }
+    return <LoginPage />;
+  }
   if (auth.user.inviteStatus !== "active") return <InvitePage />;
 
   return (
     <AppLayout page={page} onNavigate={navigate}>
       <AnimatePresence mode="wait">
         {page === "home" && (
-          <DashboardPage key="home" onNavigate={navigate} />
+          <BrandGatewayPage key="home" onNavigate={navigate} />
+        )}
+        {page === "photos" && (
+          <PhotoStudioPage key="photos" onNavigate={navigate} />
+        )}
+        {page === "video" && (
+          <DashboardPage key="video" navPage="video" onNavigate={navigate} />
         )}
         {page === "workspace" && (
           <WorkspacePage key="workspace" onNavigate={navigate} />

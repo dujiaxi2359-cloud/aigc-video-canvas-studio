@@ -40,6 +40,12 @@ export function requireAdmin(req: Request, res: Response, next: NextFunction) {
   next();
 }
 
+export function requireWorkspaceManager(req: Request, res: Response, next: NextFunction) {
+  if (!req.auth?.workspace) return res.status(403).json({ errorCode: "WORKSPACE_REQUIRED", errorMessage: "请选择工作空间。" });
+  if (["admin", "super_admin"].includes(req.auth.user.role) || ["owner", "admin"].includes(req.auth.workspace.role)) return next();
+  return res.status(403).json({ errorCode: "WORKSPACE_MANAGER_REQUIRED", errorMessage: "只有空间所有者或管理员可以管理 API 配置。" });
+}
+
 export async function requireAssetFileAccess(req: Request, res: Response, next: NextFunction) {
   await requireLogin(req, res, () => undefined);
   if (!req.auth) return;

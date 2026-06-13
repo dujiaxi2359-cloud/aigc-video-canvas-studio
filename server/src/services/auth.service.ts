@@ -157,8 +157,8 @@ export async function verifyLoginCode(rawEmail: string, code: string) {
   let userRow = await db.get<any>("SELECT * FROM users WHERE email = ?", email);
   if (!userRow) {
     const id = createId("user");
-    const userCount = await db.get<{ count: number }>("SELECT COUNT(*) AS count FROM users");
-    const role = email === process.env.BOOTSTRAP_ADMIN_EMAIL?.trim().toLowerCase() || (userCount?.count || 0) === 0 ? "super_admin" : "user";
+    const bootstrapAdminEmail = process.env.BOOTSTRAP_ADMIN_EMAIL?.trim().toLowerCase();
+    const role = bootstrapAdminEmail && email === bootstrapAdminEmail ? "super_admin" : "user";
     await db.run("INSERT INTO users (id, email, name, role, status, invite_status, created_at, updated_at) VALUES (?, ?, ?, ?, 'pending', 'pending', ?, ?)", id, email, email.split("@")[0], role, now(), now());
     userRow = await db.get("SELECT * FROM users WHERE id = ?", id);
   }

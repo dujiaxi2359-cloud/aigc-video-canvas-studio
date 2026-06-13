@@ -25,6 +25,10 @@ export default defineConfig(({ mode }) => ({
     port: 3001,
     host: "0.0.0.0",
     proxy: {
+      "/photos": {
+        target: "http://127.0.0.1:3000",
+        changeOrigin: false
+      },
       "/api": {
         target: "http://127.0.0.1:4000",
         changeOrigin: true
