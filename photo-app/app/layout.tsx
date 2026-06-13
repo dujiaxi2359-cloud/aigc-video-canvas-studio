@@ -43,7 +43,7 @@ export default function RootLayout({
                 ))}
               </div>
               <div className="text-[12px] font-semibold leading-5 tracking-[0.02em] text-white/52">
-                版权所有 ©2025-2026 AIGCNONG个人工作室 保留所有权利
+                版权所有—AIGCNONG个人工作室 保留所有权利
               </div>
               <div className="flex justify-center md:justify-end">
                 <a

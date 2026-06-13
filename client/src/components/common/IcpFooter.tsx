@@ -31,7 +31,7 @@ export function IcpFooter({
           ))}
         </div>
         <div className="mt-3 text-[13px] font-semibold leading-6 tracking-[0.01em] text-white/50">
-          版权所有 ©2025-2026 {STUDIO_NAME} 保留所有权利
+          版权所有—{STUDIO_NAME} 保留所有权利
         </div>
         <div className="mt-3">
           <a
