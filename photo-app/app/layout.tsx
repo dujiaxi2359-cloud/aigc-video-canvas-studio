@@ -24,6 +24,16 @@ export default function RootLayout({
         <HydrationErrorFilter />
         <ClientCacheReset />
         {children}
+        <footer className="pointer-events-none fixed inset-x-0 bottom-3 z-[90] flex justify-center px-4">
+          <a
+            href="https://beian.miit.gov.cn/"
+            target="_blank"
+            rel="noreferrer"
+            className="pointer-events-auto rounded-full border border-white/[0.08] bg-black/35 px-3 py-1.5 text-[11px] text-white/40 backdrop-blur-md transition hover:border-white/[0.16] hover:text-white/72"
+          >
+            粤ICP备2026074382号
+          </a>
+        </footer>
       </body>
     </html>
   );

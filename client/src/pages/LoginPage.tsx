@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { ArrowRight, Check, Mail } from "lucide-react";
+import { IcpFooter } from "../components/common/IcpFooter";
 import { useAuthStore } from "../store/authStore";
 
 const emailOptions = [
@@ -49,7 +50,7 @@ export function LoginPage() {
 
   const detectedType = email ? detectEmailType(email) : emailType;
 
-  return <div className="grid h-screen place-items-center overflow-auto bg-[#070708] p-5 text-white">
+  return <div className="grid h-screen place-items-center overflow-auto bg-[#070708] p-5 pb-16 text-white">
     <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_50%_30%,rgba(95,84,180,.13),transparent_34%)]" />
     <section className="relative w-full max-w-[520px] rounded-[20px] border border-white/[0.1] bg-[#121214] p-8 shadow-2xl shadow-black/50">
       <div className="studio-brand-mark mb-6">N</div>
@@ -76,5 +77,6 @@ export function LoginPage() {
       {error && <p className="mt-3 text-[12px] text-red-300">{error}</p>}
       <button type="button" disabled={busy || !email || (sent && code.length !== 6)} onClick={() => void (sent ? verify() : send())} className="studio-primary-button mt-6 h-12 w-full justify-center disabled:opacity-40">{busy ? "处理中..." : sent ? "验证并登录" : "发送验证码"}<ArrowRight size={16}/></button>
     </section>
+    <IcpFooter />
   </div>;
 }
