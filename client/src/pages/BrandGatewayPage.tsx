@@ -100,7 +100,7 @@ export function BrandGatewayPage({ onNavigate }: { onNavigate: (page: Page, proj
             <Image size={16} /> 素材库
           </button>
           <button type="button" onClick={() => onNavigate("settings")} className="studio-secondary-button justify-start">
-            <Sparkles size={16} /> 模型与系统设置
+            <Sparkles size={16} /> 设置中心
           </button>
         </section>
       </main>

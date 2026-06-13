@@ -1819,7 +1819,7 @@ export default function Home() {
         <nav className="absolute right-6 top-6 z-[60] flex items-center gap-2">
           <a href="/" className="studio-secondary-button">统一首页</a>
           <a href="/video" className="studio-secondary-button">视频画布</a>
-          <a href="/settings" className="studio-secondary-button">API 设置</a>
+          <a href="/settings" className="studio-secondary-button">设置中心</a>
         </nav>
         <motion.div
           className="absolute inset-0 z-0 pointer-events-none"
@@ -2143,7 +2143,7 @@ export default function Home() {
                   {unifiedImageModels.map((model) => <option key={model.id} value={model.id}>{model.displayName} · {model.modelName}</option>)}
                 </select>
               </label>
-              <a href="/settings" className="studio-secondary-button">统一 API 设置</a>
+              <a href="/settings" className="studio-secondary-button">设置中心</a>
               <span className={`studio-api-badge ${apiBadgeIsOk ? "studio-api-ok" : "studio-api-missing"}`}>
                 {selectedUnifiedModelId ? "统一模型已连接" : apiBadgeLabel}
               </span>
@@ -2151,7 +2151,7 @@ export default function Home() {
                 <Download className="h-4 w-4" />
                 下载全部
               </button>
-              <button className="studio-icon-button" onClick={() => window.location.assign("/settings")} title="统一 API 设置中心">
+              <button className="studio-icon-button" onClick={() => window.location.assign("/settings")} title="设置中心">
                 <Settings className="h-5 w-5" />
               </button>
             </div>

@@ -9,7 +9,7 @@ const links: Array<[Page, string]> = [
   ["video", "视频画布"],
   ["workspace", "工作空间"],
   ["assets", "素材库"],
-  ["settings", "API 设置"]
+  ["settings", "设置中心"]
 ];
 
 export function HomeTopNav({ page, onNavigate }: { page: Page; onNavigate: (page: Page, projectId?: string) => void }) {
