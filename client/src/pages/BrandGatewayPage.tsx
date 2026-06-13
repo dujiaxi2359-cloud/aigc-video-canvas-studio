@@ -32,7 +32,7 @@ const productAreas: Array<{
 
 export function BrandGatewayPage({ onNavigate }: { onNavigate: (page: Page, projectId?: string) => void }) {
   return (
-    <motion.div className="studio-page min-h-full overflow-auto" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+    <motion.div className="studio-page h-full overflow-y-auto overflow-x-hidden" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
       <HomeTopNav page="home" onNavigate={onNavigate} />
       <main className="mx-auto max-w-[1240px] px-5 pb-0 pt-24 md:px-10">
         <section className="grid min-h-[calc(100vh-150px)] items-center gap-10 lg:grid-cols-[0.92fr_1.08fr]">
