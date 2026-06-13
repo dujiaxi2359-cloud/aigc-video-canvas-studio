@@ -14,7 +14,7 @@ export function AppLayout({
   return (
     <div className="relative h-screen overflow-hidden bg-[#050608] text-[#f3f5f7]" data-page={page}>
       <main className="h-full">{children}</main>
-      <IcpFooter />
+      {page !== "home" && <IcpFooter />}
     </div>
   );
 }
