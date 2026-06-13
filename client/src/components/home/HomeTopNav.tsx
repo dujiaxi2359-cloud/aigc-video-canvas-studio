@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Bell, ChevronDown, Download, LogIn, LogOut, Settings, UserRound, WalletCards } from "lucide-react";
+import { Bell, ChevronDown, LogIn, LogOut, Settings, UserRound, WalletCards } from "lucide-react";
 import type { Page } from "../../App";
 import { useAuthStore } from "../../store/authStore";
 
@@ -21,8 +21,7 @@ export function HomeTopNav({ page, onNavigate }: { page: Page; onNavigate: (page
     <header className="studio-home-nav fixed inset-x-0 top-0 z-50 flex h-[72px] items-center px-5 md:px-8">
       <button type="button" onClick={() => onNavigate("home")} className="flex items-center gap-2.5">
         <span className="studio-brand-mark">N</span>
-        <span className="hidden text-[14px] font-bold tracking-[0.08em] text-white sm:block">AIGCNONG</span>
-        <Download size={15} className="hidden text-white/38 md:block" />
+        <span className="text-[12px] font-semibold text-white sm:text-[14px]">AIGC｜创作平台</span>
       </button>
       <nav className="absolute left-1/2 hidden -translate-x-1/2 items-center gap-1 rounded-full border border-white/[0.07] bg-white/[0.035] p-1 md:flex">
         {links.map(([target, label]) => (
