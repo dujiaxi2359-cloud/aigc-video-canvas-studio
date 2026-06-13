@@ -1,6 +1,7 @@
 import { motion } from "framer-motion";
 import { ArrowRight, FolderOpen, Image, Sparkles, Video } from "lucide-react";
 import type { Page } from "../App";
+import { IcpFooter } from "../components/common/IcpFooter";
 import { HomeTopNav } from "../components/home/HomeTopNav";
 
 const productAreas: Array<{
@@ -33,7 +34,7 @@ export function BrandGatewayPage({ onNavigate }: { onNavigate: (page: Page, proj
   return (
     <motion.div className="studio-page min-h-full overflow-auto" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
       <HomeTopNav page="home" onNavigate={onNavigate} />
-      <main className="mx-auto max-w-[1240px] px-5 pb-16 pt-28 md:px-10">
+      <main className="mx-auto max-w-[1240px] px-5 pb-6 pt-28 md:px-10">
         <section className="grid min-h-[calc(100vh-150px)] items-center gap-10 lg:grid-cols-[0.92fr_1.08fr]">
           <div>
             <div className="inline-flex items-center gap-2 rounded-full border border-white/[0.08] bg-white/[0.04] px-3 py-2 text-[12px] text-white/52">
@@ -104,6 +105,7 @@ export function BrandGatewayPage({ onNavigate }: { onNavigate: (page: Page, proj
           </button>
         </section>
       </main>
+      <IcpFooter mode="flow" />
     </motion.div>
   );
 }
