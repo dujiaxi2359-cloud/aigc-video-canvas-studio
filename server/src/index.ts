@@ -37,6 +37,17 @@ const host = process.env.HOST || "0.0.0.0";
 const port = Number(process.env.PORT ?? 4000);
 const uploadDir = path.resolve(process.cwd(), process.env.UPLOAD_DIR ?? process.env.UPLOADS_DIR ?? "./uploads");
 const clientDistDir = path.resolve(process.cwd(), "../client/dist");
+const defaultAllowedOrigins = [
+  "https://imagephotos.asia",
+  "https://www.imagephotos.asia",
+  "https://video-img.imagephotos.asia",
+  "http://localhost:3000",
+  "http://localhost:3001",
+  "http://localhost:3002",
+  "http://127.0.0.1:3000",
+  "http://127.0.0.1:3001",
+  "http://127.0.0.1:3002"
+];
 
 function localIpAddress() {
   const candidates: string[] = [];
@@ -56,10 +67,11 @@ function localIpAddress() {
 }
 
 function allowedOrigins() {
-  return (process.env.FRONTEND_ORIGIN || "")
+  const configuredOrigins = (process.env.FRONTEND_ORIGIN || "")
     .split(",")
     .map((origin) => origin.trim())
     .filter(Boolean);
+  return Array.from(new Set([...defaultAllowedOrigins, ...configuredOrigins]));
 }
 
 function isPrivateLanOrigin(origin: string) {
