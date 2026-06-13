@@ -37,6 +37,15 @@ projectRouter.put("/:id", async (req, res, next) => {
   }
 });
 
+projectRouter.post("/:id/autosave", async (req, res, next) => {
+  try {
+    await saveProject(req.params.id, req.body);
+    res.status(204).end();
+  } catch (error) {
+    next(error);
+  }
+});
+
 projectRouter.delete("/:id", async (req, res, next) => {
   try {
     await deleteProject(req.params.id);

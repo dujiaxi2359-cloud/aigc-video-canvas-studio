@@ -1,5 +1,6 @@
 import { getDb } from "../db/database.js";
 import { now } from "../utils/time.js";
+import { requireRequestContext } from "./requestContext.js";
 
 interface GenerationTaskRow {
   id: string;
@@ -13,7 +14,7 @@ interface GenerationTaskRow {
 
 export async function getGenerationTask(id: string) {
   const db = await getDb();
-  const row = await db.get<GenerationTaskRow>("SELECT * FROM generation_tasks WHERE id = ?", id);
+  const row = await db.get<GenerationTaskRow>("SELECT * FROM generation_tasks WHERE id = ? AND workspace_id = ?", id, requireRequestContext().workspace.id);
   if (!row) return undefined;
 
   return {
@@ -35,10 +36,11 @@ export async function saveGenerationTask(input: {
   errorMessage?: string;
 }) {
   const db = await getDb();
+  const { workspace, user } = requireRequestContext();
   const timestamp = now();
   await db.run(
-    `INSERT INTO generation_tasks (id, status, progress, result_json, error_message, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO generation_tasks (id, workspace_id, user_id, status, progress, result_json, error_message, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(id) DO UPDATE SET
        status = excluded.status,
        progress = excluded.progress,
@@ -46,6 +48,8 @@ export async function saveGenerationTask(input: {
        error_message = excluded.error_message,
        updated_at = excluded.updated_at`,
     input.id,
+    workspace.id,
+    user.id,
     input.status,
     input.progress ?? 0,
     input.result === undefined ? undefined : JSON.stringify(input.result),

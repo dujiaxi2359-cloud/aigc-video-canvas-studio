@@ -87,11 +87,11 @@ function avoidOverlap(nodes: Node[], position: { x: number; y: number }) {
 }
 
 function edgeStyle() {
-  return { stroke: "rgba(81,199,255,0.62)", strokeWidth: 2, filter: "drop-shadow(0 0 4px rgba(81,199,255,0.24))" };
+  return { stroke: "rgba(226,232,240,0.34)", strokeWidth: 1.6 };
 }
 
 function createFlowEdge(sourceId: string, targetId: string): Edge {
-  return { id: createClientId("edge"), source: sourceId, target: targetId, sourceHandle: "out", type: "studioEdge", animated: true, style: edgeStyle() };
+  return { id: createClientId("edge"), source: sourceId, target: targetId, sourceHandle: "out", type: "studioEdge", animated: false, style: edgeStyle() };
 }
 
 export const useCanvasStore = create<State>((set, get) => ({
@@ -101,7 +101,7 @@ export const useCanvasStore = create<State>((set, get) => ({
     set((state) => ({
       nodes: [
         ...state.nodes,
-        { id: createClientId(type), type, dragHandle: ".node-drag-handle", position: nextPosition(state.nodes, position), data: defaults[type] }
+        { id: createClientId(type), type, dragHandle: ".drag-handle", position: nextPosition(state.nodes, position), data: defaults[type] }
       ]
     })),
   addAssetNode: (asset, position) =>
@@ -118,7 +118,7 @@ export const useCanvasStore = create<State>((set, get) => ({
       return {
         nodes: [
           ...state.nodes,
-          { id: createClientId(type), type, dragHandle: ".node-drag-handle", position: nextPosition(state.nodes, position), data }
+          { id: createClientId(type), type, dragHandle: ".drag-handle", position: nextPosition(state.nodes, position), data }
         ]
       };
     }),
@@ -132,7 +132,7 @@ export const useCanvasStore = create<State>((set, get) => ({
       const targetNode: Node = {
         id: targetId,
         type,
-        dragHandle: ".node-drag-handle",
+        dragHandle: ".drag-handle",
         position: targetPosition,
         data: {
           ...(defaults[type] as Record<string, unknown>),
@@ -232,7 +232,7 @@ export const useCanvasStore = create<State>((set, get) => ({
         return {
           id,
           type,
-          dragHandle: ".node-drag-handle",
+          dragHandle: ".drag-handle",
           position,
           data: {
             ...(defaults[type] as Record<string, unknown>),

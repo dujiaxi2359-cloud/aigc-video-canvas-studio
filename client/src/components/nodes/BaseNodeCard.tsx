@@ -62,7 +62,11 @@ export function BaseNodeCard({
       style={{ width }}
       className={`studio-node-card group relative overflow-visible text-[#f3f5f7] transition duration-200 ${selected ? "is-selected" : ""} ${tone === "running" ? "is-running" : ""}`}
     >
-      <div className="pointer-events-none absolute inset-0 rounded-[22px] opacity-0 transition duration-200 group-hover:opacity-100">
+      <div className="node-floating-label node-drag-handle absolute -top-7 left-1 flex cursor-grab items-center gap-1.5 text-[12px] font-medium text-white/68 active:cursor-grabbing">
+        <span className="h-3 w-3 rounded-[3px] border border-white/25 bg-white/[0.04]" />
+        <span className="max-w-[220px] truncate">{title}</span>
+      </div>
+      <div className="pointer-events-none absolute inset-0 rounded-[18px] opacity-0 transition duration-200 group-hover:opacity-100">
         <div className="absolute inset-x-8 -top-px h-px bg-[linear-gradient(90deg,transparent,rgba(125,211,252,0.34),transparent)]" />
       </div>
       {inputPositions.map((top, index) => (
@@ -86,21 +90,21 @@ export function BaseNodeCard({
         />
       )}
 
-      <div className="node-drag-handle flex h-[42px] cursor-grab items-center justify-between border-b border-white/[0.055] px-3 active:cursor-grabbing">
+      <div className="node-drag-handle flex min-h-[34px] cursor-grab items-center justify-between border-b border-white/[0.045] px-3 active:cursor-grabbing">
         <div className="flex min-w-0 items-center gap-2">
-          <div className="truncate text-[14px] font-semibold text-[#f3f5f7]">{title}</div>
+          <div className="truncate text-[12px] font-medium text-white/72">{title}</div>
           <Badge>{badge}</Badge>
         </div>
         <div className="nodrag nopan flex items-center gap-2">
           {status && <span className={`studio-status-badge is-${tone}`}>{status}</span>}
           {headerActions}
-          <Button variant="ghost" className="nodrag nopan h-7 w-7 px-0 text-[#8b95a5]" onClick={() => deleteNode(id)} title="删除节点">
+          <Button variant="ghost" className="nodrag nopan h-7 w-7 rounded-full px-0 text-[#8b95a5] opacity-0 transition group-hover:opacity-100" onClick={() => deleteNode(id)} title="删除节点">
             <Trash2 size={14} strokeWidth={1.8} />
           </Button>
         </div>
       </div>
 
-      <div className="p-3">{children}</div>
+      <div className="p-2.5">{children}</div>
       {footer && <div className="border-t border-white/[0.05] px-3 py-2.5">{footer}</div>}
     </div>
   );

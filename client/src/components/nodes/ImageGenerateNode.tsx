@@ -1,10 +1,9 @@
-import { useEffect, useMemo, useRef, useState, type ChangeEvent, type CompositionEvent } from "react";
+import { memo, useEffect, useMemo, useRef, useState, type ChangeEvent, type CompositionEvent } from "react";
 import type { NodeProps } from "reactflow";
-import { ImagePlus, Sparkles } from "lucide-react";
+import { ArrowUp, Camera, ImagePlus, Maximize2, Palette, Plus, Sparkles } from "lucide-react";
 import { Button } from "../common/Button";
 import { Select } from "../common/Select";
 import { Textarea } from "../common/Textarea";
-import { NodeShell } from "./NodeShell";
 import { MediaPreview } from "../media/MediaPreview";
 import { generationApi } from "../../services/generationApi";
 import { modelConfigApi } from "../../services/modelConfigApi";
@@ -14,6 +13,10 @@ import { compactAssetIds, resolveImageNodeInputs } from "../../utils/workflowInp
 import { AgentAnalyzeErrorButton } from "../agent/AgentAnalyzeErrorButton";
 import type { AvailableImageOptions, ImageInputMode } from "../../types/model";
 import type { ImageGenerateNodeData } from "../../types/node";
+import { NodeParameterPopover } from "./NodeParameterPopover";
+import { CreationNodeFrame } from "./CreationNodeFrame";
+import { NodeToolPanel, type NodeTool } from "./NodeToolPanel";
+import { MediaPreviewActions } from "./MediaPreviewActions";
 
 const modeLabels: Record<ImageInputMode, string> = {
   "text-to-image": "文生图",
@@ -22,6 +25,21 @@ const modeLabels: Record<ImageInputMode, string> = {
 };
 
 const imageAspectRatios = ["1:1", "3:4", "4:3", "9:16", "16:9"];
+const imageQualityTiers = ["1K", "2K", "4K"];
+
+function qualityValueForTier(tier: string, qualities: string[]) {
+  if (qualities.length === 0) return "auto";
+  if (tier === "1K") return qualities[0];
+  if (tier === "4K") return qualities[qualities.length - 1];
+  return qualities[Math.floor((qualities.length - 1) / 2)];
+}
+
+function tierForQuality(value: string | undefined, qualities: string[]) {
+  const index = qualities.indexOf(value ?? "");
+  if (index <= 0) return "1K";
+  if (index >= qualities.length - 1) return "4K";
+  return "2K";
+}
 
 function aspectRatioCss(ratio?: string) {
   const [width, height] = (ratio || "1:1").split(":").map(Number);
@@ -91,7 +109,7 @@ function PayloadSummary({ data }: { data?: Record<string, unknown> }) {
   );
 }
 
-export function ImageGenerateNode(props: NodeProps<ImageGenerateNodeData>) {
+function ImageGenerateNodeComponent(props: NodeProps<ImageGenerateNodeData>) {
   const update = useCanvasStore((state) => state.updateNodeData);
   const edges = useCanvasStore((state) => state.edges);
   const nodes = useCanvasStore((state) => state.nodes);
@@ -101,8 +119,33 @@ export function ImageGenerateNode(props: NodeProps<ImageGenerateNodeData>) {
   const [options, setOptions] = useState<AvailableImageOptions | null>(null);
   const [localError, setLocalError] = useState("");
   const [localPrompt, setLocalPrompt] = useState(props.data.prompt || "");
+  const [parametersOpen, setParametersOpen] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+  const [activeTool, setActiveTool] = useState<NodeTool>(null);
   const isComposingRef = useRef(false);
+  const parameterAnchorRef = useRef<HTMLDivElement | null>(null);
   const resolvedInputs = useMemo(() => resolveImageNodeInputs(props.id, nodes, edges), [edges, nodes, props.id]);
+
+  useEffect(() => {
+    function closeFloatingPanels(event: PointerEvent) {
+      if ((event.target as HTMLElement | null)?.closest(".creation-dock, .node-parameter-popover")) return;
+      setParametersOpen(false);
+      setActiveTool(null);
+      setExpanded(false);
+    }
+    function closeOnEscape(event: KeyboardEvent) {
+      if (event.key !== "Escape") return;
+      setParametersOpen(false);
+      setActiveTool(null);
+      setExpanded(false);
+    }
+    window.addEventListener("pointerdown", closeFloatingPanels);
+    window.addEventListener("keydown", closeOnEscape);
+    return () => {
+      window.removeEventListener("pointerdown", closeFloatingPanels);
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, []);
 
   useEffect(() => {
     if (isComposingRef.current) return;
@@ -163,6 +206,9 @@ export function ImageGenerateNode(props: NodeProps<ImageGenerateNodeData>) {
   const ratios = selectedModel?.capabilities.imageAspectRatios ?? imageAspectRatios;
   const qualities = options?.availableImageQualities ?? selectedModel?.capabilities.imageQualities ?? ["auto"];
   const formats = options?.availableImageFormats ?? selectedModel?.capabilities.imageFormats ?? ["png"];
+  const selectedQualityTier = imageQualityTiers.includes(props.data.imageSize ?? "")
+    ? props.data.imageSize!
+    : tierForQuality(props.data.imageQuality, qualities);
 
   async function generate() {
     if (!props.data.modelConfigId || !selectedModel) {
@@ -210,64 +256,60 @@ export function ImageGenerateNode(props: NodeProps<ImageGenerateNodeData>) {
     return () => window.removeEventListener("studio:run-node", handleRunNode);
   });
 
-  return (
-    <NodeShell
-      {...props}
-      title={props.data.title}
-      badge="Image AI"
-      width={500}
-      status={statusText(props.data.status)}
-      footer={
-        imageModels.length > 0 ? (
-          <div className="nodrag nopan flex h-[44px] items-center gap-1.5 overflow-hidden">
-            <Select className="h-8 min-w-[126px]" value={props.data.modelConfigId ?? ""} onChange={(event) => update(props.id, { modelConfigId: event.target.value })}>
-              <option value="">选择模型</option>
-              {imageModels.map((model) => <option key={model.id} value={model.id}>{model.displayName}</option>)}
-            </Select>
-            <Select className="h-8 w-[76px]" value={props.data.aspectRatio ?? ratios[0]} onChange={(event) => update(props.id, { aspectRatio: event.target.value, imageSize: undefined })}>{ratios.map((item) => <option key={item}>{item}</option>)}</Select>
-            <Select className="h-8 w-[76px]" value={props.data.imageQuality ?? qualities[0] ?? ""} onChange={(event) => update(props.id, { imageQuality: event.target.value })}>{qualities.map((item) => <option key={item}>{item}</option>)}</Select>
-            <Select className="h-8 w-[68px]" value={props.data.imageFormat ?? formats[0] ?? ""} onChange={(event) => update(props.id, { imageFormat: event.target.value })}>{formats.map((item) => <option key={item}>{item}</option>)}</Select>
-            <Button className="ml-auto h-[34px] min-w-[82px]" variant="primary" disabled={!selectedModel || props.data.status === "generating"} onClick={generate}><Sparkles size={14} /> {generateButtonText(props.data.status)}</Button>
-          </div>
-        ) : null
-      }
-    >
-      {imageModels.length === 0 ? (
-        <div className="nodrag nopan flex h-[190px] flex-col items-center justify-center rounded-xl border border-dashed border-white/[0.08] bg-[linear-gradient(180deg,#232833_0%,#20242d_100%)] text-center">
-          <ImagePlus className="mb-3 text-[#7b8798]" size={32} />
-          <div className="text-[13px] font-semibold text-[#e8edf3]">暂无可用图片模型，请先到设置中心配置 API。</div>
-        </div>
-      ) : (
-        <div className="space-y-2.5">
-          <MediaPreview type="image" title={props.data.title} outputUrl={props.data.outputUrl} aspectRatio={aspectRatioCss(props.data.aspectRatio)}>
-            {props.data.status === "generating" ? (
-              <div className="px-6 text-center text-[12px] text-[#a2acba]">图片生成中...</div>
-            ) : props.data.status === "error" ? (
-              <div className="px-6 text-center text-[12px] leading-5 text-red-300">{props.data.errorMessage || localError || "图片生成失败"}</div>
-            ) : (
-              <ImagePlus className="text-[#7b8798]" size={34} />
-            )}
-          </MediaPreview>
-          <div className="flex h-8 flex-wrap gap-1.5 overflow-hidden">
-            {(Object.keys(modeLabels) as ImageInputMode[]).filter((mode) => availableModes.includes(mode)).map((mode) => (
-              <button key={mode} type="button" onClick={() => update(props.id, { inputMode: mode })} className={`nodrag nopan h-7 rounded-full border px-2.5 text-[12px] font-medium transition ${props.data.inputMode === mode ? "border-[#7c6cf6]/[0.22] bg-[#7c6cf6]/[0.14] text-[#f3f5f7]" : "border-transparent bg-transparent text-[#8c97a7] hover:bg-white/[0.04] hover:text-[#f3f5f7]"}`}>{modeLabels[mode]}</button>
-            ))}
-          </div>
-          <Textarea
-            className="nodrag nopan nowheel h-[88px]"
-            placeholder="描述要生成或修改的图片"
-            value={localPrompt}
-            onChange={handlePromptChange}
-            onCompositionStart={handleCompositionStart}
-            onCompositionEnd={handleCompositionEnd}
-          />
-          {props.data.inputMode !== "text-to-image" && !resolvedInputs.hasImageInput && <div className="text-[12px] text-amber-300">当前模式需要连接一张图片素材。</div>}
-          {options?.warningMessage && <div className="text-[12px] text-amber-300">{options.warningMessage}</div>}
-          <PayloadSummary data={props.data.payloadSummary} />
-          {(props.data.errorMessage || localError) && <div className="text-[12px] text-red-300">{props.data.errorMessage || localError}</div>}
-          {(props.data.errorMessage || localError) && <AgentAnalyzeErrorButton nodeId={props.id} errorMessage={props.data.errorMessage || localError} nodeData={props.data as unknown as Record<string, unknown>} />}
-        </div>
-      )}
-    </NodeShell>
+  function insertPromptContext(value: string) {
+    const prefix = activeTool === "styles" ? `风格：${value}` : activeTool === "camera" ? `摄影机：${value}` : `引用：${value}`;
+    const next = `${localPrompt.trim()}${localPrompt.trim() ? "\n" : ""}${prefix}`;
+    setLocalPrompt(next);
+    update(props.id, { prompt: next });
+  }
+
+  const preview = imageModels.length === 0 ? <div className="creation-preview-empty"><ImagePlus size={29} /><span>请先配置图片模型</span></div> : (
+    <MediaPreview type="image" title={props.data.title} outputUrl={props.data.outputUrl} aspectRatio={aspectRatioCss(props.data.aspectRatio)} className="creation-media-preview">
+      <div className={`creation-preview-empty ${props.data.status === "error" ? "is-error" : ""}`}><ImagePlus size={28} /><span>{props.data.status === "generating" ? "正在生成图片" : props.data.status === "error" ? "图片生成失败" : "图片预览"}</span></div>
+    </MediaPreview>
   );
+
+  const dock = (
+    <div className="creation-dock-content relative">
+      <div className="creation-dock-header">
+        <div className="creation-dock-tools">
+          <button type="button" title="智能辅助" className={activeTool === "styles" ? "is-active" : ""} onClick={() => { setParametersOpen(false); setActiveTool(activeTool === "styles" ? null : "styles"); }}><Sparkles size={15} /></button>
+          <button type="button" title="引用图片" className={activeTool === "assets" ? "is-active" : ""} onClick={() => { setParametersOpen(false); setActiveTool(activeTool === "assets" ? null : "assets"); }}><ImagePlus size={15} /></button>
+          <span className="creation-tool-divider" />
+          <button type="button" title="添加素材" className={activeTool === "assets" ? "is-active" : ""} onClick={() => { setParametersOpen(false); setActiveTool(activeTool === "assets" ? null : "assets"); }}><Plus size={17} /></button>
+        </div>
+        <button type="button" title={expanded ? "收起详情" : "展开详情"} className="creation-detail-toggle" onClick={() => setExpanded((value) => !value)}><Maximize2 size={14} /></button>
+      </div>
+      <div className="creation-dock-composer">
+        {resolvedInputs.imageInputs.length > 0 && <div className="creation-reference-strip">{resolvedInputs.imageInputs.map((input, index) => <span key={`${input.sourceNodeId}-${index}`} title={`引用图片 ${index + 1}`}>{input.url ? <img src={input.url} alt="" /> : <ImagePlus size={13} />}<small>图片 {index + 1}</small></span>)}</div>}
+        <Textarea className="creation-prompt-input nodrag nopan nowheel" placeholder="描述你想生成的内容，或输入 @ 引用素材" value={localPrompt} onChange={handlePromptChange} onCompositionStart={handleCompositionStart} onCompositionEnd={handleCompositionEnd} />
+      </div>
+      {(props.data.errorMessage || localError) && <button type="button" className="creation-error-line" onClick={() => setExpanded(true)}><span>{props.data.errorMessage || localError}</span><strong>诊断</strong></button>}
+      <div className="creation-dock-footer">
+        <div className="creation-dock-identity">
+          <div className="creation-model-field"><ImagePlus size={14} /><Select className="creation-model-select" value={props.data.modelConfigId ?? ""} onChange={(event) => update(props.id, { modelConfigId: event.target.value })}><option value="">选择模型</option>{imageModels.map((model) => <option key={model.id} value={model.id}>{model.displayName}</option>)}</Select></div>
+          <div ref={parameterAnchorRef} className={`creation-parameter-wrap nodrag nopan ${parametersOpen ? "is-open" : ""}`}>
+          <button type="button" className="creation-parameter-pill" onClick={() => { setActiveTool(null); setParametersOpen((value) => !value); }}>{props.data.aspectRatio ?? ratios[0]} · {selectedQualityTier}</button>
+          <NodeParameterPopover open={parametersOpen} anchorRef={parameterAnchorRef} onClose={() => setParametersOpen(false)} sections={[
+            { label: "生成方式", value: props.data.inputMode, options: availableModes, format: (value) => modeLabels[value as ImageInputMode], onChange: (value) => update(props.id, { inputMode: value }) },
+            { label: "比例", value: props.data.aspectRatio ?? ratios[0], options: ratios, onChange: (value) => update(props.id, { aspectRatio: value }) },
+            { label: "画质", value: selectedQualityTier, options: imageQualityTiers, onChange: (value) => update(props.id, { imageSize: String(value), imageQuality: qualityValueForTier(String(value), qualities) }) }
+          ]} />
+          </div>
+          <button type="button" className={`creation-footer-tool ${activeTool === "styles" ? "is-active" : ""}`} onClick={() => { setParametersOpen(false); setActiveTool(activeTool === "styles" ? null : "styles"); }}><Palette size={13} />风格</button>
+          <button type="button" className={`creation-footer-tool ${activeTool === "camera" ? "is-active" : ""}`} onClick={() => { setParametersOpen(false); setActiveTool(activeTool === "camera" ? null : "camera"); }}><Camera size={13} />摄影机控制</button>
+        </div>
+        <div className="creation-dock-actions">
+          <button type="button" title="生成数量" onClick={() => update(props.id, { generateCount: (props.data.generateCount % 4) + 1 })}>{props.data.generateCount || 1}x</button>
+          <button type="button" title={props.data.status === "idle" ? "生成" : generateButtonText(props.data.status)} aria-label={props.data.status === "idle" ? "生成" : generateButtonText(props.data.status)} className="creation-generate-button" disabled={!selectedModel || props.data.status === "generating"} onClick={() => void generate()}><ArrowUp size={16} /></button>
+        </div>
+      </div>
+      <NodeToolPanel tool={activeTool} onClose={() => setActiveTool(null)} onInsert={insertPromptContext} />
+      {expanded && <div className="creation-detail-panel nodrag nopan">{props.data.inputMode !== "text-to-image" && !resolvedInputs.hasImageInput && <div className="creation-detail-copy">当前模式需要连接一张图片素材。</div>}{options?.warningMessage && <div className="creation-detail-copy">{options.warningMessage}</div>}<PayloadSummary data={props.data.payloadSummary} />{(props.data.errorMessage || localError) && <AgentAnalyzeErrorButton nodeId={props.id} errorMessage={props.data.errorMessage || localError} nodeData={props.data as unknown as Record<string, unknown>} />}</div>}
+    </div>
+  );
+
+  return <CreationNodeFrame id={props.id} type={props.type} selected={props.selected} title={props.data.title || "Image"} ratio={props.data.aspectRatio || "1:1"} status={props.data.status} preview={preview} toolbar={<MediaPreviewActions kind="image" url={props.data.outputUrl} assetId={props.data.outputAssetId} title={props.data.title} nodeId={props.id} onSaved={(assetId) => update(props.id, { outputAssetId: assetId })} />} dock={dock} />;
 }
+
+export const ImageGenerateNode = memo(ImageGenerateNodeComponent);

@@ -23,6 +23,7 @@ function ratioToCss(ratio?: string) {
 
 export function MediaPreview({ type, title, previewUrl, originalUrl, outputUrl, thumbnailUrl, aspectRatio, className = "", children, meta }: MediaPreviewProps) {
   const [lightboxOpen, setLightboxOpen] = useState(false);
+  const allowNodeDrag = className.includes("creation-media-preview");
   const previewSrc = useMemo(() => absoluteUploadUrl(previewUrl || outputUrl || originalUrl || thumbnailUrl), [originalUrl, outputUrl, previewUrl, thumbnailUrl]);
   const highResSrc = useMemo(() => {
     const selected = type === "image"
@@ -45,21 +46,31 @@ export function MediaPreview({ type, title, previewUrl, originalUrl, outputUrl, 
   return (
     <>
       <div
-        className={`media-preview nodrag nopan ${className}`}
-        style={{ "--asset-aspect-ratio": ratioToCss(aspectRatio) } as React.CSSProperties}
+        className={`media-preview media-preview-${type} ${allowNodeDrag ? "" : "nodrag nopan"} ${className}`}
+        onClick={(event) => {
+          if (type !== "image" || (!previewSrc && !highResSrc)) return;
+          event.preventDefault();
+          event.stopPropagation();
+          setLightboxOpen(true);
+        }}
         onDoubleClick={(event) => {
           event.preventDefault();
           event.stopPropagation();
           if (previewSrc || highResSrc) setLightboxOpen(true);
         }}
       >
-        {previewSrc ? (
-          type === "image" ? (
-            <img src={previewSrc} alt={title || "图片预览"} />
-          ) : (
-            <video src={previewSrc} controls />
-          )
-        ) : children}
+        <div
+          className="media-preview-frame"
+          style={{ "--asset-aspect-ratio": ratioToCss(aspectRatio) } as React.CSSProperties}
+        >
+          {previewSrc ? (
+            type === "image" ? (
+              <img src={previewSrc} alt={title || "图片预览"} />
+            ) : (
+              <video src={previewSrc} controls />
+            )
+          ) : children}
+        </div>
         {(previewSrc || highResSrc) && (
           <div className="media-actions">
             <button type="button" className="media-action-button" title={type === "image" ? "查看原图" : "全屏查看"} onClick={(event) => { event.preventDefault(); event.stopPropagation(); setLightboxOpen(true); }}>

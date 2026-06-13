@@ -10,3 +10,19 @@ export type Project = {
   nodes: Node[];
   edges: Edge[];
 };
+
+export type ProjectFolder = {
+  id: string;
+  name: string;
+  parentId?: string;
+  createdAt: number;
+  updatedAt: number;
+  sortOrder: number;
+};
+
+export type ProjectMeta = {
+  folderId?: string;
+  isFavorite?: boolean;
+  isArchived?: boolean;
+  coverAssetId?: string;
+};

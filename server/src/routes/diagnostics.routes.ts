@@ -1,34 +1,13 @@
-import { Router, type Request, type Response, type NextFunction } from "express";
+import { Router } from "express";
 import fs from "node:fs";
 import path from "node:path";
 import { applyProxyConfig, applySmartProxyConfig, getProxyConfig, getProxyEnvironmentInfo, getProxyInfo, type ProxyMode } from "../utils/proxy.js";
 import { listModelConfigs } from "../services/modelConfig.service.js";
+import { isLocalAdminRequest, localAdminOnly } from "../utils/localAdminRequest.js";
 
 export const diagnosticsRouter = Router();
 
 type ProviderId = "google" | "azure-openai" | "alibaba" | "openai" | "kling" | "grok" | "seedance";
-
-function isLoopback(value: string) {
-  return (
-    value === "127.0.0.1" ||
-    value === "::1" ||
-    value === "::ffff:127.0.0.1" ||
-    value === "localhost"
-  );
-}
-
-function isLocalAdminRequest(req: Request) {
-  const ip = req.ip || req.socket.remoteAddress || "";
-  const forwarded = String(req.headers["x-forwarded-for"] ?? "").split(",")[0]?.trim();
-  const candidates = [ip, forwarded].filter(Boolean);
-  if (!candidates.length) return false;
-  return candidates.every(isLoopback);
-}
-
-function productionLocalOnly(req: Request, res: Response, next: NextFunction) {
-  if (process.env.NODE_ENV !== "production" || isLocalAdminRequest(req)) return next();
-  res.status(404).json({ status: "not_found", errorMessage: "Not found" });
-}
 
 function veoDebugDir() {
   return path.resolve(process.cwd(), "data/debug/veo-operations");
@@ -63,7 +42,7 @@ function readVeoDebugFiles() {
     .slice(0, 20);
 }
 
-diagnosticsRouter.use(productionLocalOnly);
+diagnosticsRouter.use(localAdminOnly);
 
 diagnosticsRouter.get("/proxy", (_req, res) => {
   res.json({

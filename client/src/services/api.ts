@@ -18,8 +18,10 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
   try {
     response = await fetch(url, {
       ...options,
+      credentials: "include",
       headers: {
         ...(options.body instanceof FormData ? {} : { "Content-Type": "application/json" }),
+        ...(window.localStorage.getItem("aigcnong-active-workspace") ? { "X-Workspace-Id": window.localStorage.getItem("aigcnong-active-workspace")! } : {}),
         ...options.headers
       }
     });
@@ -29,7 +31,12 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({ errorMessage: response.statusText, error: response.statusText }));
-    throw new Error(error.errorMessage ?? error.message ?? error.error ?? response.statusText);
+    const message = error.errorMessage ?? error.message ?? error.error ?? response.statusText;
+    const requestError = new Error(message) as Error & { status?: number; errorCode?: string };
+    requestError.status = response.status;
+    requestError.errorCode = error.errorCode;
+    if (response.status === 401) window.dispatchEvent(new CustomEvent("auth:required"));
+    throw requestError;
   }
 
   if (response.status === 204) return undefined as T;

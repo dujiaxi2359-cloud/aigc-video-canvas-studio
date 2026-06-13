@@ -38,6 +38,18 @@ class AppDatabase {
   async all<T = unknown[]>(sql: string, ...params: unknown[]) {
     return this.database.prepare(sql).all(...normalizeParams(params)) as T;
   }
+
+  async transaction<T>(callback: () => Promise<T>) {
+    this.database.exec("BEGIN IMMEDIATE");
+    try {
+      const result = await callback();
+      this.database.exec("COMMIT");
+      return result;
+    } catch (error) {
+      this.database.exec("ROLLBACK");
+      throw error;
+    }
+  }
 }
 
 function normalizeParams(params: unknown[]): SqliteValue[] {
@@ -52,6 +64,10 @@ function normalizeParams(params: unknown[]): SqliteValue[] {
 }
 
 let db: AppDatabase | null = null;
+
+function customerInviteCode() {
+  return `AIGCNONG-${Math.random().toString(36).slice(2, 6).toUpperCase()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
+}
 
 export async function getDb() {
   if (db) return db;
@@ -79,6 +95,10 @@ export async function getDb() {
     await db.exec("ALTER TABLE model_configs ADD COLUMN requires_api_base_url INTEGER DEFAULT 0");
   }
   const database = db;
+  const ensureColumn = async (table: string, name: string, sql: string) => {
+    const columns = await database.all<Array<{ name: string }>>(`PRAGMA table_info(${table})`);
+    if (!columns.some((column) => column.name === name)) await database.exec(sql);
+  };
   const assetColumns = await database.all<Array<{ name: string }>>("PRAGMA table_info(assets)");
   const addAssetColumn = async (name: string, sql: string) => {
     if (!assetColumns.some((column) => column.name === name)) await database.exec(sql);
@@ -102,5 +122,41 @@ export async function getDb() {
   await addAssetColumn("generation_params_json", "ALTER TABLE assets ADD COLUMN generation_params_json TEXT");
   await addAssetColumn("deleted_at", "ALTER TABLE assets ADD COLUMN deleted_at INTEGER");
   await addAssetColumn("updated_at", "ALTER TABLE assets ADD COLUMN updated_at INTEGER");
+  await ensureColumn("projects", "workspace_id", "ALTER TABLE projects ADD COLUMN workspace_id TEXT");
+  await ensureColumn("projects", "owner_user_id", "ALTER TABLE projects ADD COLUMN owner_user_id TEXT");
+  await ensureColumn("projects", "folder_id", "ALTER TABLE projects ADD COLUMN folder_id TEXT");
+  await ensureColumn("projects", "cover_asset_id", "ALTER TABLE projects ADD COLUMN cover_asset_id TEXT");
+  await ensureColumn("assets", "workspace_id", "ALTER TABLE assets ADD COLUMN workspace_id TEXT");
+  await ensureColumn("assets", "owner_user_id", "ALTER TABLE assets ADD COLUMN owner_user_id TEXT");
+  await ensureColumn("asset_folders", "workspace_id", "ALTER TABLE asset_folders ADD COLUMN workspace_id TEXT");
+  await ensureColumn("generation_history", "workspace_id", "ALTER TABLE generation_history ADD COLUMN workspace_id TEXT");
+  await ensureColumn("generation_history", "user_id", "ALTER TABLE generation_history ADD COLUMN user_id TEXT");
+  await ensureColumn("generation_tasks", "workspace_id", "ALTER TABLE generation_tasks ADD COLUMN workspace_id TEXT");
+  await ensureColumn("generation_tasks", "user_id", "ALTER TABLE generation_tasks ADD COLUMN user_id TEXT");
+  await database.exec("CREATE INDEX IF NOT EXISTS idx_projects_workspace ON projects(workspace_id); CREATE INDEX IF NOT EXISTS idx_assets_workspace ON assets(workspace_id); CREATE INDEX IF NOT EXISTS idx_asset_folders_workspace ON asset_folders(workspace_id); CREATE INDEX IF NOT EXISTS idx_history_workspace ON generation_history(workspace_id)");
+  const timestamp = Date.now();
+  await database.run("INSERT OR IGNORE INTO plans (id, code, name, type, price_monthly, price_yearly, currency, max_members, monthly_credits, storage_limit_mb, features_json, status, created_at, updated_at) VALUES ('plan_free', 'free', 'Free', 'personal', 0, 0, 'CNY', 1, 100, 1024, ?, 'active', ?, ?)", JSON.stringify({ image_generation: true, video_generation: true, agent: true, upload: true, export: true }), timestamp, timestamp);
+  const bootstrapInvite = (process.env.BOOTSTRAP_INVITE_CODE || (process.env.NODE_ENV === "production" ? "" : "AIGCNONG-ACCESS")).trim().toUpperCase();
+  if (bootstrapInvite) {
+    await database.run("INSERT OR IGNORE INTO invite_codes (id, code, name, type, max_uses, used_count, status, created_at, updated_at) VALUES ('invite_bootstrap', ?, 'Bootstrap Access', 'internal', 1000, 0, 'active', ?, ?)", bootstrapInvite, timestamp, timestamp);
+    if (process.env.NODE_ENV !== "production") console.log(`[auth] development invite code: ${bootstrapInvite}`);
+  }
+  const targetCustomerInvites = Number(process.env.DEFAULT_CUSTOMER_INVITE_COUNT || 30);
+  if (targetCustomerInvites > 0) {
+    const existing = await database.get<{ count: number }>("SELECT COUNT(*) AS count FROM invite_codes WHERE type = 'customer'");
+    const missing = Math.max(0, targetCustomerInvites - Number(existing?.count || 0));
+    for (let index = 0; index < missing; index += 1) {
+      let code = customerInviteCode();
+      while (await database.get("SELECT id FROM invite_codes WHERE code = ?", code)) code = customerInviteCode();
+      await database.run(
+        "INSERT INTO invite_codes (id, code, name, type, max_uses, used_count, status, created_at, updated_at) VALUES (?, ?, ?, 'customer', 1, 0, 'active', ?, ?)",
+        `invite_customer_${timestamp}_${index}`,
+        code,
+        `客户邀请码 ${index + 1}`,
+        timestamp,
+        timestamp
+      );
+    }
+  }
   return db;
 }

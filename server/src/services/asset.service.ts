@@ -8,6 +8,7 @@ import { assetTypeFromMime } from "../utils/file.js";
 import { contentTypeForFilename, sanitizeFilename } from "../utils/exportFiles.js";
 import { readGeneratedFileMetadata } from "../utils/mediaMetadata.js";
 import type { Asset, AssetFolder } from "../types/asset.js";
+import { requireRequestContext } from "./requestContext.js";
 
 type AssetRow = Record<string, any>;
 
@@ -169,6 +170,7 @@ export async function createAssetFromUpload(file: Express.Multer.File, input: { 
 
 export async function createAsset(input: CreateAssetInput & { id?: string }) {
   const db = await getDb();
+  const { workspace, user } = requireRequestContext();
   const id = input.id ?? createId("asset");
   const timestamp = now();
   const type = input.type === "generated" ? inferTypeFromPath(input.localPath) : input.type;
@@ -188,11 +190,13 @@ export async function createAsset(input: CreateAssetInput & { id?: string }) {
 
   await db.run(
     `INSERT INTO assets (
-      id, name, type, source, folder_id, file_name, original_name, local_path, url, public_url, download_url,
+      id, workspace_id, owner_user_id, name, type, source, folder_id, file_name, original_name, local_path, url, public_url, download_url,
       size, mime_type, width, height, duration, fps, thumbnail_path, provider_id, model_id, node_id, project_id,
       prompt, negative_prompt, generation_params_json, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     id,
+    workspace.id,
+    user.id,
     input.name || input.originalName.replace(/\.[^.]+$/, ""),
     type,
     input.source ?? "uploaded",
@@ -226,8 +230,8 @@ export async function createAsset(input: CreateAssetInput & { id?: string }) {
 
 export async function listAssets(query: AssetQuery = {}) {
   const db = await getDb();
-  const where = ["deleted_at IS NULL"];
-  const params: unknown[] = [];
+  const where = ["deleted_at IS NULL", "workspace_id = ?"];
+  const params: unknown[] = [requireRequestContext().workspace.id];
   if (query.type) {
     if (query.type === "generated") where.push("source = 'generated'");
     else {
@@ -264,7 +268,7 @@ export async function listAssets(query: AssetQuery = {}) {
 
 export async function getAsset(id: string) {
   const db = await getDb();
-  const row = await db.get("SELECT * FROM assets WHERE id = ? AND deleted_at IS NULL", id);
+  const row = await db.get("SELECT * FROM assets WHERE id = ? AND workspace_id = ? AND deleted_at IS NULL", id, requireRequestContext().workspace.id);
   return row ? toAsset(row as AssetRow) : undefined;
 }
 
@@ -302,18 +306,21 @@ export async function deleteAsset(id: string, physical = false) {
 
 export async function listFolders(projectId?: string) {
   const db = await getDb();
+  const workspaceId = requireRequestContext().workspace.id;
   const rows = projectId
-    ? await db.all("SELECT * FROM asset_folders WHERE deleted_at IS NULL AND (project_id = ? OR project_id IS NULL) ORDER BY name ASC", projectId)
-    : await db.all("SELECT * FROM asset_folders WHERE deleted_at IS NULL ORDER BY name ASC");
+    ? await db.all("SELECT * FROM asset_folders WHERE workspace_id = ? AND deleted_at IS NULL AND (project_id = ? OR project_id IS NULL) ORDER BY name ASC", workspaceId, projectId)
+    : await db.all("SELECT * FROM asset_folders WHERE workspace_id = ? AND deleted_at IS NULL ORDER BY name ASC", workspaceId);
   return (rows as AssetRow[]).map(toFolder);
 }
 
 export async function createFolder(input: { name: string; parentId?: string | null; projectId?: string }) {
   const db = await getDb();
+  const workspaceId = requireRequestContext().workspace.id;
   const name = sanitizeFilename(input.name).trim();
   if (!name) throw new Error("FOLDER_NAME_REQUIRED");
   const duplicate = await db.get(
-    "SELECT id FROM asset_folders WHERE deleted_at IS NULL AND name = ? AND COALESCE(parent_id, '') = COALESCE(?, '')",
+    "SELECT id FROM asset_folders WHERE workspace_id = ? AND deleted_at IS NULL AND name = ? AND COALESCE(parent_id, '') = COALESCE(?, '')",
+    workspaceId,
     name,
     input.parentId ?? null
   );
@@ -321,8 +328,9 @@ export async function createFolder(input: { name: string; parentId?: string | nu
   const id = createId("folder");
   const timestamp = now();
   await db.run(
-    "INSERT INTO asset_folders (id, name, parent_id, project_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
+    "INSERT INTO asset_folders (id, workspace_id, name, parent_id, project_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
     id,
+    workspaceId,
     name,
     input.parentId ?? null,
     input.projectId,
@@ -335,21 +343,23 @@ export async function createFolder(input: { name: string; parentId?: string | nu
 
 export async function updateFolder(id: string, input: { name?: string; parentId?: string | null }) {
   const db = await getDb();
-  const current = await db.get<AssetRow>("SELECT * FROM asset_folders WHERE id = ? AND deleted_at IS NULL", id);
+  const workspaceId = requireRequestContext().workspace.id;
+  const current = await db.get<AssetRow>("SELECT * FROM asset_folders WHERE id = ? AND workspace_id = ? AND deleted_at IS NULL", id, workspaceId);
   if (!current) return undefined;
   const name = input.name ? sanitizeFilename(input.name).trim() : current.name;
   if (!name) throw new Error("FOLDER_NAME_REQUIRED");
-  await db.run("UPDATE asset_folders SET name = ?, parent_id = ?, updated_at = ? WHERE id = ?", name, input.parentId === undefined ? current.parent_id : input.parentId, now(), id);
-  const row = await db.get("SELECT * FROM asset_folders WHERE id = ?", id);
+  await db.run("UPDATE asset_folders SET name = ?, parent_id = ?, updated_at = ? WHERE id = ? AND workspace_id = ?", name, input.parentId === undefined ? current.parent_id : input.parentId, now(), id, workspaceId);
+  const row = await db.get("SELECT * FROM asset_folders WHERE id = ? AND workspace_id = ?", id, workspaceId);
   return toFolder(row as AssetRow);
 }
 
 export async function deleteFolder(id: string) {
   const db = await getDb();
-  const childAssets = await db.get<{ count: number }>("SELECT COUNT(*) as count FROM assets WHERE deleted_at IS NULL AND folder_id = ?", id);
-  const childFolders = await db.get<{ count: number }>("SELECT COUNT(*) as count FROM asset_folders WHERE deleted_at IS NULL AND parent_id = ?", id);
+  const workspaceId = requireRequestContext().workspace.id;
+  const childAssets = await db.get<{ count: number }>("SELECT COUNT(*) as count FROM assets WHERE workspace_id = ? AND deleted_at IS NULL AND folder_id = ?", workspaceId, id);
+  const childFolders = await db.get<{ count: number }>("SELECT COUNT(*) as count FROM asset_folders WHERE workspace_id = ? AND deleted_at IS NULL AND parent_id = ?", workspaceId, id);
   if ((childAssets?.count ?? 0) > 0 || (childFolders?.count ?? 0) > 0) throw new Error("FOLDER_NOT_EMPTY");
-  await db.run("UPDATE asset_folders SET deleted_at = ?, updated_at = ? WHERE id = ?", now(), now(), id);
+  await db.run("UPDATE asset_folders SET deleted_at = ?, updated_at = ? WHERE id = ? AND workspace_id = ?", now(), now(), id, workspaceId);
 }
 
 export async function getAssetDownloadInfo(id: string) {

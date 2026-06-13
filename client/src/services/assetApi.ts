@@ -26,6 +26,8 @@ export const assetApi = {
     if (input.name) formData.append("name", input.name);
     return api.post<Asset>("/api/assets/upload", formData);
   },
+  importGenerated: (input: { url: string; name?: string; nodeId?: string; projectId?: string; prompt?: string }) =>
+    api.post<Asset>("/api/assets/import-generated", input),
   update: (id: string, input: { name?: string; folderId?: string | null }) => api.patch<Asset>(`/api/assets/${id}`, input),
   remove: (id: string) => api.delete(`/api/assets/${id}`),
   downloadUrl: (id: string) => apiUrl(`/api/assets/${id}/download`)

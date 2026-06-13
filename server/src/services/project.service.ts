@@ -1,6 +1,7 @@
 import { getDb } from "../db/database.js";
 import { createId } from "../utils/id.js";
 import { now } from "../utils/time.js";
+import { requireRequestContext } from "./requestContext.js";
 
 function parseProject(row: any) {
   return {
@@ -15,17 +16,21 @@ function parseProject(row: any) {
 
 export async function listProjects() {
   const db = await getDb();
-  const rows = await db.all("SELECT * FROM projects ORDER BY updated_at DESC");
+  const { workspace } = requireRequestContext();
+  const rows = await db.all("SELECT * FROM projects WHERE workspace_id = ? ORDER BY updated_at DESC", workspace.id);
   return rows.map(parseProject);
 }
 
 export async function createProject(name = "未命名项目") {
   const db = await getDb();
+  const { workspace, user } = requireRequestContext();
   const timestamp = now();
   const id = createId("project");
   await db.run(
-    "INSERT INTO projects (id, name, nodes_json, edges_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
+    "INSERT INTO projects (id, workspace_id, owner_user_id, name, nodes_json, edges_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
     id,
+    workspace.id,
+    user.id,
     name,
     "[]",
     "[]",
@@ -37,7 +42,8 @@ export async function createProject(name = "未命名项目") {
 
 export async function getProject(id: string) {
   const db = await getDb();
-  const row = await db.get("SELECT * FROM projects WHERE id = ?", id);
+  const { workspace } = requireRequestContext();
+  const row = await db.get("SELECT * FROM projects WHERE id = ? AND workspace_id = ?", id, workspace.id);
   return row ? parseProject(row) : undefined;
 }
 
@@ -46,17 +52,18 @@ export async function saveProject(id: string, input: { name?: string; nodes: unk
   const existing = await getProject(id);
   if (!existing) throw new Error("Project not found");
   await db.run(
-    "UPDATE projects SET name = ?, nodes_json = ?, edges_json = ?, updated_at = ? WHERE id = ?",
+    "UPDATE projects SET name = ?, nodes_json = ?, edges_json = ?, updated_at = ? WHERE id = ? AND workspace_id = ?",
     input.name ?? existing.name,
     JSON.stringify(input.nodes ?? []),
     JSON.stringify(input.edges ?? []),
     now(),
-    id
+    id,
+    requireRequestContext().workspace.id
   );
   return getProject(id);
 }
 
 export async function deleteProject(id: string) {
   const db = await getDb();
-  await db.run("DELETE FROM projects WHERE id = ?", id);
+  await db.run("DELETE FROM projects WHERE id = ? AND workspace_id = ?", id, requireRequestContext().workspace.id);
 }

@@ -6,6 +6,7 @@ import {
   testModelConfig,
   updateModelConfig
 } from "../services/modelConfig.service.js";
+import { requireAdmin } from "../middleware/auth.js";
 
 export const modelConfigRouter = Router();
 
@@ -17,7 +18,7 @@ modelConfigRouter.get("/", async (_req, res, next) => {
   }
 });
 
-modelConfigRouter.post("/", async (req, res, next) => {
+modelConfigRouter.post("/", requireAdmin, async (req, res, next) => {
   try {
     res.status(201).json(await createModelConfig(req.body));
   } catch (error) {
@@ -25,7 +26,7 @@ modelConfigRouter.post("/", async (req, res, next) => {
   }
 });
 
-modelConfigRouter.put("/:id", async (req, res, next) => {
+modelConfigRouter.put("/:id", requireAdmin, async (req, res, next) => {
   try {
     res.json(await updateModelConfig(req.params.id, req.body));
   } catch (error) {
@@ -33,7 +34,7 @@ modelConfigRouter.put("/:id", async (req, res, next) => {
   }
 });
 
-modelConfigRouter.delete("/:id", async (req, res, next) => {
+modelConfigRouter.delete("/:id", requireAdmin, async (req, res, next) => {
   try {
     await deleteModelConfig(req.params.id);
     res.status(204).end();
@@ -42,7 +43,7 @@ modelConfigRouter.delete("/:id", async (req, res, next) => {
   }
 });
 
-modelConfigRouter.post("/:id/test", async (req, res, next) => {
+modelConfigRouter.post("/:id/test", requireAdmin, async (req, res, next) => {
   try {
     res.json(await testModelConfig(req.params.id, req.body));
   } catch (error) {

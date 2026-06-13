@@ -15,6 +15,10 @@ import { diagnosticsRouter } from "./routes/diagnostics.routes.js";
 import { ossDiagnosticsRouter } from "./routes/ossDiagnostics.routes.js";
 import { agentRouter } from "./routes/agent.routes.js";
 import { exportRouter } from "./routes/export.routes.js";
+import { authRouter } from "./routes/auth.routes.js";
+import { inviteRouter } from "./routes/invite.routes.js";
+import { adminRouter } from "./routes/admin.routes.js";
+import { requireActiveWorkspace, requireAdmin, requireAssetFileAccess } from "./middleware/auth.js";
 import { applySmartProxyConfig } from "./utils/proxy.js";
 import { logOssConfig } from "./services/assets/ossUpload.service.js";
 
@@ -74,6 +78,7 @@ function isPrivateLanOrigin(origin: string) {
 }
 
 app.use(cors({
+  credentials: true,
   origin: (origin, callback) => {
     if (!origin) return callback(null, true);
     const explicitOrigins = allowedOrigins();
@@ -83,9 +88,11 @@ app.use(cors({
   }
 }));
 app.use(express.json({ limit: "10mb" }));
-app.use("/uploads", express.static(uploadDir));
+app.use("/uploads", requireAssetFileAccess, express.static(uploadDir));
 
 app.get("/api/health", (_req, res) => res.json({ ok: true, time: new Date().toISOString(), version: "0.1.0" }));
+app.use("/api/auth", authRouter);
+app.use("/api/invite", inviteRouter);
 app.get("/api/system/share-info", (_req, res) => {
   const localIp = localIpAddress();
   const frontendUrl = process.env.FRONTEND_ORIGIN?.split(",")[0]?.trim() || `http://${localIp}:3001`;
@@ -98,17 +105,18 @@ app.get("/api/system/share-info", (_req, res) => {
     uploadsUrl: `${backendUrl.replace(/\/$/, "")}/uploads`
   });
 });
-app.use("/api/model-configs", modelConfigRouter);
-app.use("/api/projects", projectRouter);
-app.use("/api/assets", assetRouter);
-app.use("/api/generate", generationRouter);
-app.use("/api/history", historyRouter);
-app.use("/api/diagnostics", diagnosticsRouter);
-app.use("/api/diagnostics", ossDiagnosticsRouter);
-app.use("/api/system", ossDiagnosticsRouter);
-app.use("/api/agent", agentRouter);
-app.use("/api/export", exportRouter);
-app.use("/api", capabilityRouter);
+app.use("/api/admin", adminRouter);
+app.use("/api/model-configs", requireActiveWorkspace, modelConfigRouter);
+app.use("/api/projects", requireActiveWorkspace, projectRouter);
+app.use("/api/assets", requireActiveWorkspace, assetRouter);
+app.use("/api/generate", requireActiveWorkspace, generationRouter);
+app.use("/api/history", requireActiveWorkspace, historyRouter);
+app.use("/api/diagnostics", requireActiveWorkspace, requireAdmin, diagnosticsRouter);
+app.use("/api/diagnostics", requireActiveWorkspace, requireAdmin, ossDiagnosticsRouter);
+app.use("/api/system", requireActiveWorkspace, requireAdmin, ossDiagnosticsRouter);
+app.use("/api/agent", requireActiveWorkspace, agentRouter);
+app.use("/api/export", requireActiveWorkspace, exportRouter);
+app.use("/api", requireActiveWorkspace, capabilityRouter);
 
 if (fs.existsSync(clientDistDir)) {
   app.use(express.static(clientDistDir, {

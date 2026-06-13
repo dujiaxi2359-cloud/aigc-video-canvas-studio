@@ -1,26 +1,28 @@
-import { useState } from "react";
-import { EdgeLabelRenderer, type EdgeProps } from "reactflow";
+import { memo, useState } from "react";
+import { BaseEdge, EdgeLabelRenderer, getBezierPath, type EdgeProps } from "reactflow";
 import { X } from "lucide-react";
 import { useCanvasStore } from "../../store/canvasStore";
-import { getStudioBezierPath } from "./useBezierPath";
 
-export function StudioEdge(props: EdgeProps) {
+function StudioEdgeComponent(props: EdgeProps) {
   const [hovered, setHovered] = useState(false);
   const deleteEdge = useCanvasStore((state) => state.deleteEdge);
-  const [edgePath, labelX, labelY] = getStudioBezierPath({
+  const [edgePath, labelX, labelY] = getBezierPath({
     sourceX: props.sourceX,
     sourceY: props.sourceY,
+    sourcePosition: props.sourcePosition,
     targetX: props.targetX,
-    targetY: props.targetY
+    targetY: props.targetY,
+    targetPosition: props.targetPosition,
+    curvature: 0.36
   });
   const stateClass = props.selected ? "is-selected" : hovered ? "is-hovered" : "";
 
   return (
     <g className={`studio-edge ${stateClass}`} onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)}>
       <path className="studio-edge-glow" d={edgePath} fill="none" />
+      <BaseEdge id={props.id} path={edgePath} interactionWidth={18} style={{ stroke: "transparent" }} />
       <path className="studio-edge-base" d={edgePath} fill="none" />
       <path className="studio-edge-flow" d={edgePath} fill="none" />
-      <path d={edgePath} fill="none" stroke="transparent" strokeWidth={18} className="react-flow__edge-interaction" />
       <EdgeLabelRenderer>
         {(hovered || props.selected) && (
           <button
@@ -42,3 +44,5 @@ export function StudioEdge(props: EdgeProps) {
     </g>
   );
 }
+
+export const StudioEdge = memo(StudioEdgeComponent);

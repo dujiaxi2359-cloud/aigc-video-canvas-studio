@@ -1,10 +1,11 @@
 import type { NodeProps } from "reactflow";
 import { ImagePlus, Upload } from "lucide-react";
-import { NodeShell } from "./NodeShell";
+import { CreationNodeFrame } from "./CreationNodeFrame";
 import { MediaPreview } from "../media/MediaPreview";
 import { useAssetStore } from "../../store/assetStore";
 import { useCanvasStore } from "../../store/canvasStore";
 import type { ImageNodeData } from "../../types/node";
+import { MediaPreviewActions } from "./MediaPreviewActions";
 
 export function ImageNode(props: NodeProps<ImageNodeData>) {
   const update = useCanvasStore((state) => state.updateNodeData);
@@ -17,35 +18,22 @@ export function ImageNode(props: NodeProps<ImageNodeData>) {
   }
 
   return (
-    <NodeShell
-      {...props}
-      title={props.data.title}
-      badge="Image"
-      width={440}
-      footer={
-        <div className="flex h-9 items-center justify-between gap-3">
-          <div className="min-w-0 truncate text-[12px] text-[#7d8796]">{props.data.assetId ? "素材已加载" : "等待图片输入"}</div>
-          <label>
-            <input className="nodrag nopan" hidden type="file" accept="image/*" onChange={(event) => onFile(event.target.files?.[0])} />
-            <span className="nodrag nopan inline-flex h-[34px] cursor-pointer items-center gap-2 rounded-[10px] border border-white/[0.08] bg-white/[0.03] px-3 text-[13px] font-medium text-[#eef2f7] transition hover:bg-white/[0.06]">
-              <Upload size={14} strokeWidth={1.8} /> 上传图片
-            </span>
-          </label>
-        </div>
-      }
-    >
-      {props.data.url ? (
-        <MediaPreview type="image" title={props.data.title} previewUrl={props.data.thumbnailUrl || props.data.url} originalUrl={props.data.url} />
-      ) : (
-        <label className="media-preview cursor-pointer">
-          <div className="text-center">
-            <ImagePlus className="mx-auto mb-2 text-[#7b8798]" size={32} strokeWidth={1.7} />
-            <div className="text-[13px] font-semibold text-[#e8edf3]">拖拽图片到这里，或点击上传</div>
-            <div className="mt-1 text-[12px] text-[#7d8796]">产品图 / 参考图 / 首尾帧素材</div>
-          </div>
-          <input className="nodrag nopan" hidden type="file" accept="image/*" onChange={(event) => onFile(event.target.files?.[0])} />
+    <CreationNodeFrame
+      id={props.id}
+      type={props.type}
+      selected={props.selected}
+      title={props.data.title || "Image"}
+      ratio="1:1"
+      status={props.data.assetId ? "success" : "idle"}
+      toolbar={<MediaPreviewActions kind="image" url={props.data.url} assetId={props.data.assetId} title={props.data.title} nodeId={props.id} onSaved={(assetId) => update(props.id, { assetId })} />}
+      preview={
+        props.data.url ? <MediaPreview type="image" title={props.data.title} previewUrl={props.data.thumbnailUrl || props.data.url} originalUrl={props.data.url} aspectRatio="1:1" className="creation-media-preview" /> :
+        <label className="creation-upload-preview nodrag nopan">
+          <ImagePlus size={30} /><span>图片素材</span><small>点击或拖入上传</small>
+          <input hidden type="file" accept="image/*" onChange={(event) => onFile(event.target.files?.[0])} />
         </label>
-      )}
-    </NodeShell>
+      }
+      dock={<div className="creation-asset-dock"><span>{props.data.assetId ? "素材已加载" : "等待图片输入"}</span><label><input hidden type="file" accept="image/*" onChange={(event) => onFile(event.target.files?.[0])} /><strong><Upload size={13} /> 上传</strong></label></div>}
+    />
   );
 }

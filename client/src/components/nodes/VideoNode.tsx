@@ -1,10 +1,9 @@
-import { useEffect, useMemo, useRef, useState, type ChangeEvent, type CompositionEvent } from "react";
+import { memo, useEffect, useMemo, useRef, useState, type ChangeEvent, type CompositionEvent } from "react";
 import type { NodeProps } from "reactflow";
-import { AlertCircle, BoxSelect, Camera, CheckCircle2, CircleDot, Clock3, Copy, Film, Image as ImageIcon, Library, Loader2, Play, Sparkles, UserRound } from "lucide-react";
+import { Activity, AlertCircle, ArrowUp, BoxSelect, Film, Image as ImageIcon, Library, Loader2, Maximize2, Mic, Play, Plus, Sparkles } from "lucide-react";
 import { Button } from "../common/Button";
 import { Select } from "../common/Select";
 import { Textarea } from "../common/Textarea";
-import { NodeShell } from "./NodeShell";
 import { MediaPreview } from "../media/MediaPreview";
 import { generationApi } from "../../services/generationApi";
 import { modelConfigApi } from "../../services/modelConfigApi";
@@ -16,6 +15,10 @@ import { AgentAnalyzeErrorButton } from "../agent/AgentAnalyzeErrorButton";
 import type { AvailableVideoOptions, ModelConfig, VideoInputMode } from "../../types/model";
 import type { VideoNodeData } from "../../types/node";
 import { categoryForOfficialVideoMode, legacyInputModeToOfficialMode, officialModeToLegacyInputMode, officialVideoCategoryLabels, officialVideoModeLabels, type OfficialVideoCategory, type OfficialVideoMode } from "../../types/videoModes";
+import { NodeParameterPopover } from "./NodeParameterPopover";
+import { CreationNodeFrame } from "./CreationNodeFrame";
+import { MediaPreviewActions } from "./MediaPreviewActions";
+import { NodeToolPanel, type NodeTool } from "./NodeToolPanel";
 
 const modeLabels: Record<VideoInputMode, string> = {
   "text-to-video": "文生视频",
@@ -24,13 +27,6 @@ const modeLabels: Record<VideoInputMode, string> = {
   "reference-to-video": "图片参考",
   "video-to-video": "视频参考"
 };
-
-const tools = [
-  { label: "标记", icon: CircleDot },
-  { label: "运镜", icon: Camera },
-  { label: "角色库", icon: UserRound },
-  { label: "引用素材", icon: Library }
-];
 
 const emptyVideoModes: VideoInputMode[] = ["text-to-video"];
 const emptyOfficialVideoModes: OfficialVideoMode[] = ["text_to_video"];
@@ -274,7 +270,7 @@ function stringList(value: unknown) {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string" && Boolean(item.trim())) : [];
 }
 
-export function VideoNode(props: NodeProps<VideoNodeData>) {
+function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
   const update = useCanvasStore((state) => state.updateNodeData);
   const edges = useCanvasStore((state) => state.edges);
   const nodes = useCanvasStore((state) => state.nodes);
@@ -287,11 +283,37 @@ export function VideoNode(props: NodeProps<VideoNodeData>) {
   const [dynamicOptions, setDynamicOptions] = useState<AvailableVideoOptions | null>(null);
   const [localError, setLocalError] = useState("");
   const [localPrompt, setLocalPrompt] = useState(props.data.prompt || "");
+  const [parametersOpen, setParametersOpen] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+  const [activeTool, setActiveTool] = useState<NodeTool>(null);
+  const [listening, setListening] = useState(false);
   const isComposingRef = useRef(false);
+  const parameterAnchorRef = useRef<HTMLDivElement | null>(null);
 
   const selectedModel = models.find((model) => model.id === props.data.modelConfigId);
   const staleModel = props.data.modelConfigId && !allModels.some((model) => model.id === props.data.modelConfigId && model.enabled);
   const resolvedInputs = useMemo(() => resolveVideoNodeInputs(props.id, nodes, edges), [edges, nodes, props.id]);
+
+  useEffect(() => {
+    function closeFloatingPanels(event: PointerEvent) {
+      if ((event.target as HTMLElement | null)?.closest(".creation-dock, .node-parameter-popover")) return;
+      setParametersOpen(false);
+      setActiveTool(null);
+      setExpanded(false);
+    }
+    function closeOnEscape(event: KeyboardEvent) {
+      if (event.key !== "Escape") return;
+      setParametersOpen(false);
+      setActiveTool(null);
+      setExpanded(false);
+    }
+    window.addEventListener("pointerdown", closeFloatingPanels);
+    window.addEventListener("keydown", closeOnEscape);
+    return () => {
+      window.removeEventListener("pointerdown", closeFloatingPanels);
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, []);
 
   useEffect(() => {
     const currentCategory = categoryForOfficialVideoMode(props.data.videoMode ?? legacyInputModeToOfficialMode(props.data.inputMode));
@@ -492,198 +514,72 @@ export function VideoNode(props: NodeProps<VideoNodeData>) {
     return () => window.removeEventListener("studio:run-node", handleRunNode);
   });
 
-  return (
-    <NodeShell
-      {...props}
-      title={props.data.title}
-      badge="视频生成"
-      width={500}
-      status={statusText(props.data.status)}
-      footer={
-        <div className="nodrag nopan space-y-1.5">
-          <div className="flex gap-1 overflow-x-auto">
-            {videoCategories.map((category) => {
-              const disabledReason = disabledCategoryReason(selectedModel, category);
-              return (
-                <button
-                  key={category}
-                  type="button"
-                  disabled={Boolean(disabledReason)}
-                  title={disabledReason}
-                  onClick={(event) => {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    changeVideoCategory(category);
-                  }}
-                  className={`nodrag nopan h-7 shrink-0 rounded-full border px-2.5 text-[11px] transition disabled:cursor-not-allowed disabled:border-white/[0.035] disabled:bg-white/[0.015] disabled:text-[#535c69] ${videoCategory === category ? "border-[#8b7cf6]/40 bg-[#7c6cf6]/20 text-white" : "border-white/[0.06] bg-white/[0.025] text-[#8c97a7] hover:bg-white/[0.06] hover:text-white"}`}
-                >
-                  {officialVideoCategoryLabels[category]}
-                </button>
-              );
-            })}
-          </div>
-        {models.length > 0 ? (
-          <div className="nodrag nopan flex h-[44px] items-center gap-1.5 overflow-hidden">
-            <Select className="h-8 min-w-[112px]" value={props.data.modelConfigId ?? ""} onChange={(event) => update(props.id, { modelConfigId: event.target.value })}>
-              <option value="">选择模型</option>
-              {models.map((model) => <option key={model.id} value={model.id}>{model.displayName}</option>)}
-            </Select>
-            <Select className="h-8 w-[66px]" value={props.data.aspectRatio ?? availableRatios[0] ?? ""} onChange={(event) => update(props.id, { aspectRatio: event.target.value })}>{availableRatios.map((item) => <option key={item}>{item}</option>)}</Select>
-            <Select className="h-8 w-[74px]" value={props.data.resolution ?? availableResolutions[0] ?? ""} onChange={(event) => update(props.id, { resolution: event.target.value })}>{availableResolutions.map((item) => <option key={item}>{item}</option>)}</Select>
-            <Select className="h-8 w-[62px]" value={props.data.duration ?? availableDurations[0] ?? ""} onChange={(event) => update(props.id, { duration: Number(event.target.value) })}>{availableDurations.map((item) => <option key={item} value={item}>{item}s</option>)}</Select>
-            <Select className="h-8 w-[58px]" value={props.data.generateCount} onChange={(event) => update(props.id, { generateCount: Number(event.target.value) })}>{[1, 2, 3, 4].map((item) => <option key={item} value={item}>{item}个</option>)}</Select>
-            <Button className="ml-auto h-[34px] min-w-[86px]" variant="primary" disabled={!selectedModel || availableVideoModes.length === 0 || props.data.status === "generating"} onClick={() => void generate()}>
-              <Sparkles size={14} strokeWidth={1.8} /> {generateButtonLabel(props.data.status)}
-            </Button>
-          </div>
-        ) : <div className="text-[12px] text-amber-300">当前分类暂无已启用的官方视频模型。</div>}
-        </div>
-      }
-    >
-      {models.length === 0 ? (
-        <div className="nodrag nopan flex h-[210px] flex-col items-center justify-center rounded-xl border border-dashed border-white/[0.08] bg-[linear-gradient(180deg,#232833_0%,#20242d_100%)] text-center">
-          <Film className="mb-3 text-[#7b8798]" size={32} strokeWidth={1.7} />
-          <div className="text-[13px] font-semibold text-[#e8edf3]">暂无可用模型，请先到设置中心配置 API。</div>
-        </div>
-      ) : (
-        <div className="space-y-2.5">
-          <MediaPreview type="video" title={props.data.title} outputUrl={outputIsVideo ? props.data.outputUrl : undefined} aspectRatio={aspectRatioCss(props.data.aspectRatio)}>
-            {props.data.status === "generating" ? (
-              <div className="text-center">
-                <div className="mx-auto grid h-11 w-11 place-items-center rounded-full border border-white/[0.08] bg-white/[0.05] text-[#cfd6e1]">
-                  <Loader2 className="animate-spin" size={22} strokeWidth={1.8} />
-                </div>
-                <div className="mt-2 text-[13px] font-medium text-[#e8edf3]">{selectedModel?.providerId === "google" ? "Veo 正在生成视频..." : "正在生成视频..."}</div>
-              </div>
-            ) : props.data.status === "error" ? (
-              <div className="px-6 text-center">
-                <div className="mx-auto grid h-11 w-11 place-items-center rounded-full border border-red-300/[0.16] bg-red-400/[0.08] text-red-200">
-                  <AlertCircle size={22} strokeWidth={1.8} />
-                </div>
-                <div className="mt-2 text-[13px] font-semibold text-red-200">生成失败</div>
-                <div className="mt-1 max-w-[360px] text-[12px] leading-5 text-[#a2acba]">{props.data.errorMessage || localError || "请重试生成。"}</div>
-              </div>
-            ) : props.data.status === "success" && props.data.outputUrl ? (
-              <div className="mx-4 w-full max-w-[420px] rounded-xl border border-emerald-300/[0.14] bg-emerald-400/[0.07] p-4">
-                <div className="flex items-center gap-2 text-[14px] font-semibold text-emerald-100">
-                  <CheckCircle2 size={18} strokeWidth={1.8} /> 模拟生成完成
-                </div>
-                <p className="mt-2 text-[12px] leading-5 text-[#cfd6e1]">已生成一条 mock 结果，真实视频 API 接入后这里会显示视频预览。</p>
-                <div className="mt-3 flex gap-2">
-                  <Button className="h-8" variant="secondary" onClick={() => navigator.clipboard.writeText(outputUrl)}>
-                    <Copy size={13} strokeWidth={1.8} /> 复制链接
-                  </Button>
-                  <Button className="h-8" variant="ghost" onClick={() => window.dispatchEvent(new CustomEvent("navigate", { detail: "history" }))}>
-                    <Clock3 size={13} strokeWidth={1.8} /> 查看历史
-                  </Button>
-                </div>
-              </div>
-            ) : (
-              <div className="text-center">
-                <div className="mx-auto grid h-11 w-11 place-items-center rounded-full border border-white/[0.08] bg-white/[0.05] text-[#cfd6e1]">
-                  <Play size={21} fill="currentColor" />
-                </div>
-                <div className="mt-2 text-[13px] font-medium text-[#a2acba]">视频预览区</div>
-              </div>
-            )}
-          </MediaPreview>
-          {actualOutputInfo && props.data.status === "success" ? (
-            <div className={`nodrag nopan rounded-xl border px-3 py-2 text-[11px] leading-5 ${actualOutputInfo.lowerThanRequested ? "border-amber-300/15 bg-amber-300/[0.08] text-amber-100" : "border-white/[0.06] bg-black/[0.16] text-[#a8b3c2]"}`}>
-              <span className="font-semibold text-[#e8edf3]">实际输出：</span>
-              {actualOutputInfo.width && actualOutputInfo.height ? `${actualOutputInfo.width}×${actualOutputInfo.height}` : "未知尺寸"}
-              {actualOutputInfo.ratio ? ` · ${actualOutputInfo.ratio}` : ""}
-              {actualOutputInfo.duration ? ` · ${actualOutputInfo.duration.toFixed(1)}s` : ""}
-              {actualOutputInfo.fileSizeLabel ? ` · ${actualOutputInfo.fileSizeLabel}` : ""}
-              {actualOutputInfo.bitrate ? ` · ${actualOutputInfo.bitrate}` : ""}
-              {actualOutputInfo.transformed ? ` · 已按所选比例转码${actualOutputInfo.originalWidth && actualOutputInfo.originalHeight ? `（原始 ${actualOutputInfo.originalWidth}×${actualOutputInfo.originalHeight}）` : ""}` : ""}
-              {actualOutputInfo.lowerThanRequested ? " · 中转返回低于所选清晰度" : ""}
-            </div>
-          ) : null}
+  function insertPromptContext(value: string) {
+    const prefix = activeTool === "tags" ? `#${value}` : activeTool === "camera" ? `运镜：${value}` : activeTool === "characters" ? `角色：${value}` : `引用：${value}`;
+    const next = `${localPrompt.trim()}${localPrompt.trim() ? "\n" : ""}${prefix}`;
+    setLocalPrompt(next);
+    update(props.id, { prompt: next });
+  }
 
-          <div className="nodrag nopan flex h-8 flex-wrap gap-1.5 overflow-hidden">
-            {availableVideoModes.filter((mode) => categoryForOfficialVideoMode(mode) === videoCategory).map((mode) => {
-              const enabled = availableVideoModes.includes(mode);
-              const legacyMode = officialModeToLegacyInputMode(mode);
-              if (!enabled && selectedModel) return null;
-              return (
-                <button
-                  key={mode}
-                  type="button"
-                  disabled={!enabled}
-                  onClick={() => update(props.id, { videoMode: mode, inputMode: legacyMode })}
-                  className={`nodrag nopan h-7 rounded-full border px-2.5 text-[12px] font-medium transition ${(props.data.videoMode ?? legacyInputModeToOfficialMode(props.data.inputMode)) === mode ? "border-[#7c6cf6]/[0.22] bg-[#7c6cf6]/[0.14] text-[#f3f5f7]" : "border-transparent bg-transparent text-[#8c97a7] hover:bg-white/[0.04] hover:text-[#f3f5f7] disabled:opacity-35"}`}
-                >
-                  {dynamicOptions?.videoModeLabels?.[mode] ?? officialVideoModeLabels[mode]}
-                </button>
-              );
-            })}
-          </div>
-
-          <div className="nodrag nopan rounded-xl border border-white/[0.06] bg-[#11141b] p-2">
-            <div className="mb-1.5 flex flex-wrap gap-1.5">
-              {tools.map((tool) => {
-                const Icon = tool.icon;
-                return (
-                  <button key={tool.label} type="button" className="nodrag nopan inline-flex h-6 items-center gap-1.5 rounded-lg border border-white/[0.06] bg-white/[0.03] px-2 text-[11px] text-[#8b95a5] hover:bg-white/[0.05] hover:text-[#f3f5f7]">
-                    <Icon size={12} strokeWidth={1.8} /> {tool.label}
-                  </button>
-                );
-              })}
-            </div>
-            <Textarea
-              className="nodrag nopan nowheel h-[76px]"
-              placeholder="描述你想要生成的画面内容，可引用素材"
-              value={localPrompt}
-              onChange={handlePromptChange}
-              onCompositionStart={handleCompositionStart}
-              onCompositionEnd={handleCompositionEnd}
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-2 text-[12px]">
-            {inputStatusItems.map((item) => {
-              const Icon = item.icon;
-              return (
-                <div key={item.label} className="flex items-center gap-2 rounded-[10px] border border-white/[0.05] bg-black/[0.14] px-3 py-1.5 text-[#8b95a5]">
-                  <Icon size={14} strokeWidth={1.8} /> {item.label}：{item.connected ? "已连接" : "未连接"}
-                </div>
-              );
-            })}
-          </div>
-
-          <PayloadSummary data={props.data.payloadSummary} />
-          {dynamicOptions?.warningMessage && <div className="text-[12px] text-amber-300">{dynamicOptions.warningMessage}</div>}
-          {staleModel && <div className="text-[12px] text-red-300">当前模型配置已失效，请重新选择模型。</div>}
-          {selectedModel?.providerId === "google" && <div className="text-[12px] leading-5 text-[#8f9bad]">Veo 仅支持成年虚构人物，不能使用名人脸、未成年人、政治人物或未授权真人肖像。</div>}
-          {props.data.inputMode === "image-to-video" && !inputContext.hasImageInput && <div className="text-[12px] text-amber-300">图生视频需要连接一张图片素材。</div>}
-          {props.data.inputMode === "reference-to-video" && !inputContext.hasReferenceImage && <div className="text-[12px] text-amber-300">图片参考模式需要至少一张参考图片。</div>}
-          {props.data.inputMode === "video-to-video" && !inputContext.hasVideoInput && <div className="text-[12px] text-amber-300">视频参考模式需要连接一个视频素材。</div>}
-          {props.data.inputMode === "first-last-frame" && inputContext.hasImageInput && !resolvedInputs.hasLastFrame && <div className="text-[12px] text-amber-300">已连接首帧，还需要一张尾帧图片。</div>}
-          {props.data.inputMode === "first-last-frame" && !inputContext.hasImageInput && <div className="text-[12px] text-amber-300">首尾帧模式需要连接起始帧和结束帧图片。</div>}
-          {isVeoRaiFiltered && (
-            <div className="nodrag nopan rounded-xl border border-amber-300/15 bg-amber-300/[0.08] p-3">
-              <div className="text-[12px] font-semibold text-amber-100">Google Veo 安全过滤</div>
-              <p className="mt-1 text-[12px] leading-5 text-amber-100/80">
-                当前画面或提示词可能包含真人肖像、名人相似、未成年人、危险动作、版权或音频风险。系统已为你生成安全改写版本。
-              </p>
-              {veoRaiReasons.length > 0 && <div className="mt-2 text-[11px] leading-5 text-amber-100/64">原因：{veoRaiReasons.join("；")}</div>}
-              <div className="mt-3 flex flex-wrap gap-2">
-                <Button className="h-8 px-2.5" variant="secondary" type="button" onClick={() => retryWithPrompt(veoSafePrompt || props.data.prompt)}>
-                  使用安全改写重试
-                </Button>
-                <Button className="h-8 px-2.5" variant="secondary" type="button" onClick={() => retryWithPrompt(veoProductOnlyPrompt)}>
-                  去掉人物重试
-                </Button>
-                <Button className="h-8 px-2.5" variant="ghost" type="button" onClick={switchOtherVideoModel}>
-                  切换其他视频模型
-                </Button>
-              </div>
-            </div>
-          )}
-          {(props.data.errorMessage || localError) && <div className="text-[12px] text-red-300">{props.data.errorMessage || localError}</div>}
-          {(props.data.errorMessage || localError) && <AgentAnalyzeErrorButton nodeId={props.id} errorMessage={props.data.errorMessage || localError} nodeData={props.data as unknown as Record<string, unknown>} />}
-        </div>
-      )}
-    </NodeShell>
+  const preview = models.length === 0 ? (
+    <div className="creation-preview-empty"><Film size={29} /><span>请先配置视频模型</span></div>
+  ) : (
+    <MediaPreview type="video" title={props.data.title} outputUrl={outputIsVideo ? props.data.outputUrl : undefined} aspectRatio={aspectRatioCss(props.data.aspectRatio)} className="creation-media-preview">
+      {props.data.status === "generating" ? <div className="creation-preview-empty"><Loader2 className="animate-spin" size={25} /><span>正在生成视频</span></div> : props.data.status === "error" ? <div className="creation-preview-empty is-error"><AlertCircle size={25} /><span>生成失败</span></div> : <div className="creation-preview-empty"><Play size={24} fill="currentColor" /><span>视频预览</span></div>}
+    </MediaPreview>
   );
+
+  const referencedInputs = [...resolvedInputs.imageInputs, ...resolvedInputs.videoInputs, ...resolvedInputs.audioInputs];
+  const dock = (
+    <div className="creation-dock-content relative">
+      <div className="creation-dock-header">
+        <div className="creation-dock-tools">
+          <button type="button" title="智能辅助" className={activeTool === "tags" ? "is-active" : ""} onClick={() => { setParametersOpen(false); setActiveTool(activeTool === "tags" ? null : "tags"); }}><Sparkles size={15} /></button>
+          <button type="button" title="引用图片" className={activeTool === "assets" ? "is-active" : ""} onClick={() => { setParametersOpen(false); setActiveTool(activeTool === "assets" ? null : "assets"); }}><ImageIcon size={15} /></button>
+          <span className="creation-tool-swap">⇄</span>
+          <button type="button" title="添加素材或能力" className={activeTool === "quick" ? "is-active" : ""} onClick={() => { setParametersOpen(false); setActiveTool(activeTool === "quick" ? null : "quick"); }}><Plus size={17} /></button>
+        </div>
+        <button type="button" title={expanded ? "收起详情" : "展开详情"} className="creation-detail-toggle" onClick={() => setExpanded((value) => !value)}><Maximize2 size={14} /></button>
+      </div>
+      <div className="creation-dock-composer">
+        {referencedInputs.length > 0 && <div className="creation-reference-strip">{referencedInputs.map((input, index) => <span key={`${input.sourceNodeId}-${index}`} title={`引用素材 ${index + 1}`}>{input.url && input.mimeType?.startsWith("image") ? <img src={absoluteUploadUrl(input.url)} alt="" /> : <Library size={13} />}<small>素材 {index + 1}</small></span>)}</div>}
+        <Textarea className="creation-prompt-input nodrag nopan nowheel" placeholder="描述你想生成的画面，或输入 @ 引用素材" value={localPrompt} onChange={handlePromptChange} onCompositionStart={handleCompositionStart} onCompositionEnd={handleCompositionEnd} />
+      </div>
+      {(props.data.errorMessage || localError) && <button type="button" className="creation-error-line" onClick={() => setExpanded(true)}><AlertCircle size={12} /><span>{props.data.errorMessage || localError}</span><strong>诊断</strong></button>}
+      <div className="creation-dock-footer">
+        <div className="creation-dock-identity">
+          <div className="creation-model-field"><Activity size={14} /><Select className="creation-model-select" value={props.data.modelConfigId ?? ""} onChange={(event) => update(props.id, { modelConfigId: event.target.value })}><option value="">选择模型</option>{models.map((model) => <option key={model.id} value={model.id}>{model.displayName}</option>)}</Select></div>
+          <div ref={parameterAnchorRef} className={`creation-parameter-wrap nodrag nopan ${parametersOpen ? "is-open" : ""}`}>
+          <button type="button" className="creation-parameter-pill" onClick={() => { setActiveTool(null); setParametersOpen((value) => !value); }}>{props.data.aspectRatio ?? availableRatios[0] ?? "比例"} · {props.data.resolution ?? availableResolutions[0] ?? "清晰度"} · {props.data.duration ?? availableDurations[0] ?? "-"}s</button>
+          <NodeParameterPopover open={parametersOpen} anchorRef={parameterAnchorRef} onClose={() => setParametersOpen(false)} sections={[
+            { label: "生成方式", value: props.data.videoMode ?? legacyInputModeToOfficialMode(props.data.inputMode), options: availableVideoModes, format: (value) => dynamicOptions?.videoModeLabels?.[value as OfficialVideoMode] ?? officialVideoModeLabels[value as OfficialVideoMode], onChange: (value) => update(props.id, { videoMode: value, inputMode: officialModeToLegacyInputMode(value as OfficialVideoMode) }) },
+            { label: "比例", value: props.data.aspectRatio ?? availableRatios[0], options: availableRatios, onChange: (value) => update(props.id, { aspectRatio: value }) },
+            { label: "清晰度", value: props.data.resolution ?? availableResolutions[0], options: availableResolutions, onChange: (value) => update(props.id, { resolution: value }) },
+            { label: "生成时长", value: props.data.duration ?? availableDurations[0], options: availableDurations, format: (value) => `${value}s`, onChange: (value) => update(props.id, { duration: Number(value) }) },
+            { label: "生成数量", value: props.data.generateCount, options: [1, 2, 3, 4], format: (value) => `${value} 个`, onChange: (value) => update(props.id, { generateCount: Number(value) }) }
+          ]} />
+          </div>
+        </div>
+        <div className="creation-dock-actions">
+          <button type="button" title="语音输入" className={listening ? "is-active" : ""} onClick={() => setListening((value) => !value)}><Mic size={14} /></button>
+          <button type="button" title="生成数量" onClick={() => update(props.id, { generateCount: (props.data.generateCount % 4) + 1 })}>{props.data.generateCount || 1}x</button>
+          <button type="button" title={props.data.status === "idle" ? "生成" : generateButtonLabel(props.data.status)} aria-label={props.data.status === "idle" ? "生成" : generateButtonLabel(props.data.status)} className="creation-generate-button" disabled={!selectedModel || availableVideoModes.length === 0 || props.data.status === "generating"} onClick={() => void generate()}><ArrowUp size={16} /></button>
+        </div>
+      </div>
+      <NodeToolPanel tool={activeTool} onClose={() => setActiveTool(null)} onInsert={insertPromptContext} />
+      {expanded && <div className="creation-detail-panel nodrag nopan">
+        <div className="creation-detail-section"><strong>生成方式</strong><div className="flex flex-wrap gap-1.5">{videoCategories.map((category) => { const disabledReason = disabledCategoryReason(selectedModel, category); return <button key={category} disabled={Boolean(disabledReason)} title={disabledReason} className={videoCategory === category ? "is-active" : ""} onClick={() => changeVideoCategory(category)}>{officialVideoCategoryLabels[category]}</button>; })}</div></div>
+        {actualOutputInfo && props.data.status === "success" && <div className="creation-detail-copy">实际输出：{actualOutputInfo.width && actualOutputInfo.height ? `${actualOutputInfo.width}×${actualOutputInfo.height}` : "未知尺寸"}{actualOutputInfo.ratio ? ` · ${actualOutputInfo.ratio}` : ""}{actualOutputInfo.duration ? ` · ${actualOutputInfo.duration.toFixed(1)}s` : ""}</div>}
+        {dynamicOptions?.warningMessage && <div className="creation-detail-copy">{dynamicOptions.warningMessage}</div>}
+        {staleModel && <div className="creation-detail-copy is-error">当前模型配置已失效，请重新选择模型。</div>}
+        {isVeoRaiFiltered && <div className="creation-detail-copy">安全过滤：{veoRaiReasons.join("；") || "当前内容需要安全改写"}<div className="mt-2 flex gap-2"><Button className="h-7" variant="secondary" onClick={() => retryWithPrompt(veoSafePrompt || props.data.prompt)}>安全改写重试</Button><Button className="h-7" variant="ghost" onClick={switchOtherVideoModel}>切换模型</Button></div></div>}
+        <PayloadSummary data={props.data.payloadSummary} />
+        {(props.data.errorMessage || localError) && <AgentAnalyzeErrorButton nodeId={props.id} errorMessage={props.data.errorMessage || localError} nodeData={props.data as unknown as Record<string, unknown>} />}
+      </div>}
+    </div>
+  );
+
+  return <CreationNodeFrame id={props.id} type={props.type} selected={props.selected} title={props.data.title || "Video"} ratio={props.data.aspectRatio || "16:9"} status={props.data.status} preview={preview} toolbar={<MediaPreviewActions kind="video" url={outputIsVideo ? props.data.outputUrl : undefined} assetId={props.data.outputAssetId} title={props.data.title} nodeId={props.id} onSaved={(assetId) => update(props.id, { outputAssetId: assetId })} />} dock={dock} />;
 }
+
+export const VideoNode = memo(VideoNodeComponent);

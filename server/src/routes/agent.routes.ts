@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { createAgentWorkflowPlan, diagnoseAgentCanvas, explainAgentNodeError } from "../services/agent/agent.service.js";
 import { isProviderError } from "../utils/providerErrors.js";
+import { assertCreditsAvailable, assertWorkspaceFeature, consumeCredits } from "../services/billing.service.js";
 
 export const agentRouter = Router();
 
@@ -24,7 +25,8 @@ function agentError(error: unknown) {
 
 agentRouter.post("/plan", async (req, res) => {
   try {
-    res.json(await createAgentWorkflowPlan(req.body));
+    await assertWorkspaceFeature("agent"); await assertCreditsAvailable(1);
+    const result = await createAgentWorkflowPlan(req.body); await consumeCredits({ actionType: "agent", metadata: { operation: "plan" } }); res.json(result);
   } catch (error) {
     res.json(agentError(error));
   }
@@ -32,7 +34,8 @@ agentRouter.post("/plan", async (req, res) => {
 
 agentRouter.post("/diagnose", async (req, res) => {
   try {
-    res.json(await diagnoseAgentCanvas(req.body));
+    await assertWorkspaceFeature("agent"); await assertCreditsAvailable(1);
+    const result = await diagnoseAgentCanvas(req.body); await consumeCredits({ actionType: "agent", metadata: { operation: "diagnose" } }); res.json(result);
   } catch (error) {
     res.json(agentError(error));
   }
@@ -40,9 +43,9 @@ agentRouter.post("/diagnose", async (req, res) => {
 
 agentRouter.post("/explain-error", async (req, res) => {
   try {
-    res.json(await explainAgentNodeError(req.body));
+    await assertWorkspaceFeature("agent"); await assertCreditsAvailable(1);
+    const result = await explainAgentNodeError(req.body); await consumeCredits({ actionType: "agent", metadata: { operation: "explain-error" } }); res.json(result);
   } catch (error) {
     res.json(agentError(error));
   }
 });
-

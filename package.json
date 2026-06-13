@@ -8,6 +8,7 @@
     "tunnel": "node scripts/start-cloudflare-tunnel.cjs",
     "tunnel:http2": "node scripts/start-cloudflare-tunnel.cjs --protocol http2",
     "typecheck": "npm run typecheck --workspace client && npm run typecheck --workspace server",
+    "test:email": "npm run test:email --workspace server --",
     "test:video-official": "npm run test:video-official --workspace server",
     "test:quality-parity": "npm run test:quality-parity --workspace server",
     "test:official-video-categories": "npm run test:official-video-categories --workspace server",

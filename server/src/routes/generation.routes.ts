@@ -2,6 +2,7 @@ import { Router } from "express";
 import { getGenerationTask } from "../services/generationTask.service.js";
 import { generateImage, generateText, generateVideo } from "../services/model.service.js";
 import { isProviderError } from "../utils/providerErrors.js";
+import { assertCreditsAvailable, assertWorkspaceFeature, consumeCredits } from "../services/billing.service.js";
 
 export const generationRouter = Router();
 
@@ -26,24 +27,36 @@ function generationError(error: unknown) {
 
 generationRouter.post("/video", async (req, res) => {
   try {
-    res.json(await generateVideo(req.body));
+    await assertWorkspaceFeature("video_generation"); await assertCreditsAvailable(1);
+    const result = await generateVideo(req.body);
+    if ((result as any)?.status !== "error") await consumeCredits({ actionType: "video_generation", provider: req.body?.provider, modelId: req.body?.modelId || req.body?.modelConfigId, metadata: { projectId: req.body?.projectId, nodeId: req.body?.nodeId } });
+    res.json(result);
   } catch (error) {
+    if (error instanceof Error && error.message === "INSUFFICIENT_CREDITS") return res.status(402).json({ status: "error", errorCode: "INSUFFICIENT_CREDITS", errorMessage: "当前工作空间额度不足。" });
     res.json(generationError(error));
   }
 });
 
 generationRouter.post("/image", async (req, res) => {
   try {
-    res.json(await generateImage(req.body));
+    await assertWorkspaceFeature("image_generation"); await assertCreditsAvailable(1);
+    const result = await generateImage(req.body);
+    if ((result as any)?.status !== "error") await consumeCredits({ actionType: "image_generation", provider: req.body?.provider, modelId: req.body?.modelId || req.body?.modelConfigId, metadata: { projectId: req.body?.projectId, nodeId: req.body?.nodeId } });
+    res.json(result);
   } catch (error) {
+    if (error instanceof Error && error.message === "INSUFFICIENT_CREDITS") return res.status(402).json({ status: "error", errorCode: "INSUFFICIENT_CREDITS", errorMessage: "当前工作空间额度不足。" });
     res.json(generationError(error));
   }
 });
 
 generationRouter.post("/text", async (req, res) => {
   try {
-    res.json(await generateText(req.body));
+    await assertWorkspaceFeature("agent"); await assertCreditsAvailable(1);
+    const result = await generateText(req.body);
+    if ((result as any)?.status !== "error") await consumeCredits({ actionType: "agent", provider: req.body?.provider, modelId: req.body?.modelId || req.body?.modelConfigId });
+    res.json(result);
   } catch (error) {
+    if (error instanceof Error && error.message === "INSUFFICIENT_CREDITS") return res.status(402).json({ status: "error", errorCode: "INSUFFICIENT_CREDITS", errorMessage: "当前工作空间额度不足。" });
     res.json(generationError(error));
   }
 });

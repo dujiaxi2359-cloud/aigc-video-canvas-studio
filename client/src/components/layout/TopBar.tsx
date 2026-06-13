@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Play, Save } from "lucide-react";
+import { Bell, Play, Save, Settings2 } from "lucide-react";
 import { Button } from "../common/Button";
 import { useCanvasStore } from "../../store/canvasStore";
 import { useProjectStore } from "../../store/projectStore";
@@ -38,16 +38,28 @@ export function TopBar() {
   }
 
   return (
-    <header className="fixed left-0 right-0 top-0 z-30 flex h-[52px] items-center justify-between border-b border-white/[0.055] bg-[#020203]/[0.68] px-5 backdrop-blur-[20px]">
-      <div className="pl-[78px]">
-        <div className="text-[11px] font-medium text-white/32">当前项目</div>
-        <div className="text-[15px] font-semibold leading-5 text-white/82">{currentProject?.name ?? "AIGC 视频工作流"}</div>
+    <header className="fixed left-0 right-0 top-0 z-30 flex h-[58px] items-center justify-between border-b border-white/[0.07] bg-[#08080a]/[0.78] px-4 backdrop-blur-2xl">
+      <div className="flex items-center gap-4 pl-[74px]">
+        <div className="flex h-9 items-center gap-2 rounded-full border border-white/[0.08] bg-white/[0.035] px-3">
+          <span className="grid h-5 w-5 place-items-center rounded-full bg-cyan-300 text-[10px] font-black text-black">N</span>
+          <span className="text-[13px] font-extrabold tracking-[0.08em] text-white">AIGCNONG</span>
+        </div>
+        <div className="hidden h-8 items-center gap-2 rounded-full bg-white/[0.035] px-3 text-[13px] text-white/72 md:flex">
+          <span className="text-white/34">工作空间</span>
+          <span className="max-w-[280px] truncate font-semibold text-white/86">{currentProject?.name ?? "AIGC 视频工作流"}</span>
+        </div>
       </div>
       <div className="flex items-center gap-2">
-        <Button className="h-9" variant="secondary" disabled={saveStatus === "saving"} onClick={handleSaveProject}>
+        <button type="button" title="通知" className="grid h-9 w-9 place-items-center rounded-full text-white/62 transition hover:bg-white/[0.06] hover:text-white">
+          <Bell size={17} />
+        </button>
+        <button type="button" title="设置" onClick={() => window.dispatchEvent(new CustomEvent("navigate", { detail: "settings" }))} className="grid h-9 w-9 place-items-center rounded-full text-white/62 transition hover:bg-white/[0.06] hover:text-white">
+          <Settings2 size={17} />
+        </button>
+        <Button className="h-9 rounded-full" variant="secondary" disabled={saveStatus === "saving"} onClick={handleSaveProject}>
           <Save size={14} /> {saveStatus === "saving" ? "保存中..." : saveStatus === "saved" ? "已保存" : "保存项目"}
         </Button>
-        <Button className="h-9" variant="primary" onClick={runSelectedNode}>
+        <Button className="h-9 rounded-full bg-cyan-300 text-black shadow-[0_0_24px_rgba(34,211,238,0.26)] hover:bg-cyan-200" variant="primary" onClick={runSelectedNode}>
           <Play size={14} /> 运行当前节点
         </Button>
         <ExportMenu nodes={nodes} edges={edges} currentProject={currentProject} />

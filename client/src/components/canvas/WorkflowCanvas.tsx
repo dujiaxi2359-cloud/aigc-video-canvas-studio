@@ -1,16 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import ReactFlow, { Background, BackgroundVariant, ConnectionLineType, Panel, useReactFlow, type ReactFlowInstance } from "reactflow";
-import { Minus, Plus, Scan } from "lucide-react";
-import { CanvasContextMenu, type CanvasMenuState } from "./CanvasContextMenu";
+import { CircleHelp, Grid3X3, Map, Scan } from "lucide-react";
 import { ConnectionCreateMenu, type ConnectionCreateMenuState } from "./ConnectionCreateMenu";
 import { nodeTypes } from "./nodeTypes";
 import { StudioEdge } from "./StudioEdge";
 import { StudioConnectionLine } from "./StudioConnectionLine";
 import { useCanvasHotkeys } from "./useCanvasHotkeys";
 import { useCanvasStore } from "../../store/canvasStore";
-import { AgentFloatingButton } from "../agent/AgentFloatingButton";
-import { AgentPanel } from "../agent/AgentPanel";
-import { ObsidianBackground } from "../visual/ObsidianBackground";
 import type { WorkflowNodeType } from "../../types/node";
 
 type PendingConnection = {
@@ -28,21 +24,31 @@ type PendingConnection = {
 
 const ReactFlowWithExtras = ReactFlow as unknown as React.ComponentType<any>;
 const edgeTypes = { studioEdge: StudioEdge };
+const nodeDragHandleSelector = ".drag-handle, .node-drag-handle";
 
-function ZoomControls() {
-  const { zoomIn, zoomOut, fitView } = useReactFlow();
+function ZoomControls({ showGrid, onToggleGrid }: { showGrid: boolean; onToggleGrid: () => void }) {
+  const { fitView, zoomTo } = useReactFlow();
+  const [zoom, setZoom] = useState(0.85);
+  const zoomFrameRef = useRef<number | null>(null);
+
+  function handleZoomChange(event: ChangeEvent<HTMLInputElement>) {
+    const next = Number(event.target.value) / 100;
+    setZoom(next);
+    if (zoomFrameRef.current) cancelAnimationFrame(zoomFrameRef.current);
+    zoomFrameRef.current = requestAnimationFrame(() => {
+      zoomTo(next);
+      zoomFrameRef.current = null;
+    });
+  }
+
   return (
-    <Panel position="bottom-right" className="!m-5">
-      <div className="canvas-glass-pill flex overflow-hidden">
-        <button className="grid h-10 w-10 place-items-center text-[#d2d9e3] transition hover:bg-white/[0.045] hover:text-white" onClick={() => zoomOut()}>
-          <Minus size={16} strokeWidth={1.8} />
-        </button>
-        <button className="grid h-10 w-10 place-items-center border-x border-white/[0.08] text-[#d2d9e3] transition hover:bg-white/[0.045] hover:text-white" onClick={() => fitView({ padding: 0.28 })}>
-          <Scan size={16} strokeWidth={1.8} />
-        </button>
-        <button className="grid h-10 w-10 place-items-center text-[#d2d9e3] transition hover:bg-white/[0.045] hover:text-white" onClick={() => zoomIn()}>
-          <Plus size={16} strokeWidth={1.8} />
-        </button>
+    <Panel position="bottom-left" className="!bottom-1 !left-1 !m-0">
+      <div className="canvas-view-controls">
+        <button title="小地图"><Map size={16} /></button>
+        <button title={showGrid ? "隐藏点阵" : "显示点阵"} className={showGrid ? "is-active" : ""} onClick={onToggleGrid}><Grid3X3 size={16} /></button>
+        <button title="适应画布" onClick={() => fitView({ padding: 0.28 })}><Scan size={16} /></button>
+        <input title="缩放" type="range" min="30" max="140" value={Math.round(zoom * 100)} onChange={handleZoomChange} />
+        <button title="帮助" onClick={() => window.dispatchEvent(new CustomEvent("studio:open-help"))}><CircleHelp size={16} /></button>
       </div>
     </Panel>
   );
@@ -78,8 +84,8 @@ function nearestTargetHandle(point: { x: number; y: number }, sourceNodeId: stri
   return nearest;
 }
 
-export function WorkflowCanvas() {
-  const { nodes, edges, onNodesChange, onEdgesChange, connectNodes, addConnectedNode, addAssetNode, selectEdge, selectNode, clearSelection } = useCanvasStore();
+export function WorkflowCanvas({ showGrid = true, onToggleGrid = () => undefined }: { showGrid?: boolean; onToggleGrid?: () => void }) {
+  const { nodes, edges, onNodesChange, onEdgesChange, connectNodes, addConnectedNode, addAssetNode, selectEdge, clearSelection } = useCanvasStore();
   const reactFlowWrapper = useRef<HTMLDivElement | null>(null);
   const connectingNodeRef = useRef<{ nodeId: string | null; handleId?: string | null }>({ nodeId: null, handleId: null });
   const didConnectRef = useRef(false);
@@ -88,17 +94,20 @@ export function WorkflowCanvas() {
   const [pendingConnection, setPendingConnection] = useState<PendingConnection | null>(null);
   const [connectionMenuOpen, setConnectionMenuOpen] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
-  const [contextMenu, setContextMenu] = useState<CanvasMenuState | null>(null);
+  const [isCanvasInteracting, setIsCanvasInteracting] = useState(false);
+  const stableNodeTypes = useRef(nodeTypes).current;
+  const stableEdgeTypes = useRef(edgeTypes).current;
   useCanvasHotkeys();
   const defaultEdgeOptions = useMemo(
     () => ({
       type: "studioEdge",
-      animated: true
+      animated: false
     }),
     []
   );
 
-  const displayEdges = useMemo(() => edges.map((edge) => ({ ...edge, type: "studioEdge" })), [edges]);
+  const displayEdges = useMemo(() => edges.map((edge) => ({ ...edge, type: "studioEdge", animated: false })), [edges]);
+  const displayNodes = useMemo(() => nodes.map((node) => ({ ...node, dragHandle: nodeDragHandleSelector })), [nodes]);
 
   const screenToFlow = useCallback(
     (position: { x: number; y: number }) => {
@@ -123,7 +132,6 @@ export function WorkflowCanvas() {
 
   const closeMenus = useCallback(() => {
     closeConnectionMenu();
-    setContextMenu(null);
   }, [closeConnectionMenu]);
 
   const openMenuForSource = useCallback(
@@ -247,7 +255,12 @@ export function WorkflowCanvas() {
   return (
     <div
       ref={reactFlowWrapper}
-      className={`canvas-space relative h-full w-full bg-[#020203] ${isConnecting ? "is-connecting" : ""}`}
+      className={`canvas-space relative h-full w-full bg-[#020203] ${isConnecting ? "is-connecting" : ""} ${isCanvasInteracting ? "is-interacting" : ""}`}
+      onDoubleClick={(event) => {
+        const target = event.target as HTMLElement | null;
+        if (target?.classList.contains("react-flow__pane")) window.dispatchEvent(new CustomEvent("studio:open-add-node"));
+      }}
+      onContextMenu={(event) => event.preventDefault()}
       onDragOver={(event) => {
         if (event.dataTransfer.types.includes("application/aigc-asset")) event.preventDefault();
       }}
@@ -263,14 +276,12 @@ export function WorkflowCanvas() {
         }
       }}
     >
-      <ObsidianBackground variant="canvas" portalGlow />
-      <div className="obsidian-noise pointer-events-none absolute inset-0 z-[1]" />
       <ReactFlowWithExtras
         className="studio-flow"
-        nodes={nodes}
+        nodes={displayNodes}
         edges={displayEdges}
-        nodeTypes={nodeTypes}
-        edgeTypes={edgeTypes}
+        nodeTypes={stableNodeTypes}
+        edgeTypes={stableEdgeTypes}
         onInit={setReactFlow}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
@@ -281,30 +292,6 @@ export function WorkflowCanvas() {
           event.stopPropagation();
           selectEdge(edge.id);
           closeConnectionMenu();
-          setContextMenu(null);
-        }}
-        onEdgeContextMenu={(event: MouseEvent, edge: any) => {
-          if (isConnecting) return;
-          event.preventDefault();
-          event.stopPropagation();
-          selectEdge(edge.id);
-          const relatedNode = nodes.find((node) => node.id === edge.target) ?? nodes.find((node) => node.id === edge.source);
-          setContextMenu({ type: "edge", edge, node: relatedNode, position: { x: event.clientX, y: event.clientY } });
-          closeConnectionMenu();
-        }}
-        onNodeContextMenu={(event: MouseEvent, node: any) => {
-          if (isConnecting) return;
-          event.preventDefault();
-          event.stopPropagation();
-          selectNode(node.id);
-          setContextMenu({ type: "node", node, position: { x: event.clientX, y: event.clientY } });
-          closeConnectionMenu();
-        }}
-        onPaneContextMenu={(event: MouseEvent) => {
-          if (isConnecting) return;
-          event.preventDefault();
-          setContextMenu({ type: "pane", position: { x: event.clientX, y: event.clientY } });
-          closeConnectionMenu();
         }}
         onPaneClick={() => {
           if (ignoreNextPaneClickRef.current) {
@@ -314,11 +301,22 @@ export function WorkflowCanvas() {
           clearSelection();
           closeMenus();
         }}
-        selectionOnDrag
+        nodesDraggable
+        nodeDragHandle={nodeDragHandleSelector}
+        onNodeDragStart={() => setIsCanvasInteracting(true)}
+        onNodeDragStop={() => setIsCanvasInteracting(false)}
+        onMoveStart={() => setIsCanvasInteracting(true)}
+        onMoveEnd={() => setIsCanvasInteracting(false)}
+        panOnDrag={[1, 2]}
+        zoomOnScroll
+        zoomOnPinch
+        zoomOnDoubleClick={false}
+        noDragClassName="nodrag"
+        noWheelClassName="nowheel"
+        selectionOnDrag={false}
         selectionKeyCode="Shift"
         multiSelectionKeyCode={["Shift", "Meta", "Control"]}
         deleteKeyCode={null}
-        nodeDragHandle=".node-drag-handle"
         defaultViewport={{ x: 120, y: 80, zoom: 0.85 }}
         minZoom={0.3}
         maxZoom={1.4}
@@ -328,12 +326,9 @@ export function WorkflowCanvas() {
         proOptions={{ hideAttribution: true }}
         defaultEdgeOptions={defaultEdgeOptions}
       >
-        <Background color="rgba(255,255,255,0.03)" gap={40} size={1} variant={BackgroundVariant.Dots} />
-        <ZoomControls />
+        {showGrid && <Background color="rgba(255,255,255,0.105)" gap={22} size={1} variant={BackgroundVariant.Dots} />}
+        <ZoomControls showGrid={showGrid} onToggleGrid={onToggleGrid} />
       </ReactFlowWithExtras>
-      <AgentFloatingButton />
-      <AgentPanel />
-      {contextMenu && <CanvasContextMenu menu={contextMenu} onClose={() => setContextMenu(null)} />}
 
       {connectionMenuOpen && menu && (
         <ConnectionCreateMenu

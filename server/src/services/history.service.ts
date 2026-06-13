@@ -1,6 +1,7 @@
 import { getDb } from "../db/database.js";
 import { createId } from "../utils/id.js";
 import { now } from "../utils/time.js";
+import { requireRequestContext } from "./requestContext.js";
 
 function toHistory(row: any) {
   return {
@@ -24,19 +25,22 @@ function toHistory(row: any) {
 
 export async function listHistory() {
   const db = await getDb();
-  const rows = await db.all("SELECT * FROM generation_history ORDER BY created_at DESC");
+  const rows = await db.all("SELECT * FROM generation_history WHERE workspace_id = ? ORDER BY created_at DESC", requireRequestContext().workspace.id);
   return rows.map(toHistory);
 }
 
 export async function addHistory(input: any) {
   const db = await getDb();
+  const { workspace, user } = requireRequestContext();
   const id = createId("history");
   await db.run(
     `INSERT INTO generation_history
-     (id, generation_type, project_id, node_id, model_config_id, model_display_name, input_mode, prompt, duration,
+     (id, workspace_id, user_id, generation_type, project_id, node_id, model_config_id, model_display_name, input_mode, prompt, duration,
       aspect_ratio, resolution, status, output_path, output_url, error_message, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     id,
+    workspace.id,
+    user.id,
     input.generationType,
     input.projectId,
     input.nodeId,
@@ -58,5 +62,5 @@ export async function addHistory(input: any) {
 
 export async function deleteHistory(id: string) {
   const db = await getDb();
-  await db.run("DELETE FROM generation_history WHERE id = ?", id);
+  await db.run("DELETE FROM generation_history WHERE id = ? AND workspace_id = ?", id, requireRequestContext().workspace.id);
 }
