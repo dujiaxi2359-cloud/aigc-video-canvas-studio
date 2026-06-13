@@ -8,7 +8,8 @@ const links: Array<[Page, string]> = [
   ["photos", "图文创作"],
   ["video", "视频画布"],
   ["workspace", "工作空间"],
-  ["assets", "素材库"]
+  ["assets", "素材库"],
+  ["settings", "API 设置"]
 ];
 
 export function HomeTopNav({ page, onNavigate }: { page: Page; onNavigate: (page: Page, projectId?: string) => void }) {

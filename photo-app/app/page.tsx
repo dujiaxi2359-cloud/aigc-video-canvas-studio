@@ -1819,6 +1819,7 @@ export default function Home() {
         <nav className="absolute right-6 top-6 z-[60] flex items-center gap-2">
           <a href="/" className="studio-secondary-button">统一首页</a>
           <a href="/video" className="studio-secondary-button">视频画布</a>
+          <a href="/settings" className="studio-secondary-button">API 设置</a>
         </nav>
         <motion.div
           className="absolute inset-0 z-0 pointer-events-none"
