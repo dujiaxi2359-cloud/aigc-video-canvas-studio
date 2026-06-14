@@ -1,4 +1,6 @@
 import crypto from "node:crypto";
+import dns from "node:dns";
+import net from "node:net";
 import nodemailer from "nodemailer";
 import { getDb } from "../db/database.js";
 import type { AuthUser, AuthWorkspace } from "../types/auth.js";
@@ -7,6 +9,7 @@ import { now } from "../utils/time.js";
 
 const SESSION_TTL = 30 * 24 * 60 * 60 * 1000;
 const CODE_TTL = 10 * 60 * 1000;
+dns.setDefaultResultOrder("ipv4first");
 type MailProfile = {
   id: string;
   host: string;
@@ -56,43 +59,51 @@ function mailProfile(id: string, prefix: string): MailProfile | undefined {
 }
 
 export function configuredMailProfiles() {
-  const profiles = [
+  return [
     mailProfile("primary", "SMTP_"),
     mailProfile("qq", "SMTP_QQ_"),
     mailProfile("gmail", "SMTP_GMAIL_"),
     mailProfile("fallback", "SMTP_FALLBACK_")
   ].filter(Boolean) as MailProfile[];
-  const seen = new Set<string>();
-  return profiles.filter((profile) => {
-    const key = `${profile.host}|${profile.user || ""}|${profile.from}`;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
 }
 
-function profilesForRecipient(email: string) {
+function profileForRecipient(email: string) {
   const profiles = configuredMailProfiles();
   const domain = email.split("@")[1] || "";
-  const preferred = domain === "gmail.com" || domain === "googlemail.com"
+  const requiredProfile = domain === "gmail.com" || domain === "googlemail.com"
     ? "gmail"
     : domain === "qq.com"
       ? "qq"
       : "primary";
-  return [...profiles].sort((a, b) => {
-    const score = (profile: MailProfile) => profile.id === preferred ? 0 : profile.id === "primary" ? 1 : 2;
-    return score(a) - score(b);
-  });
+  return profiles.find((profile) => profile.id === requiredProfile);
 }
 
-function transportFor(profile: MailProfile) {
-  const key = `${profile.id}:${profile.host}:${profile.port}:${profile.user || ""}`;
+async function addressesForProfile(profile: MailProfile) {
+  if (net.isIP(profile.host)) return [profile.host];
+  if (profile.id === "gmail") {
+    const lookups = await Promise.allSettled(["1.1.1.1", "8.8.8.8"].map(async (server) => {
+      const resolver = new dns.promises.Resolver();
+      resolver.setServers([server]);
+      return resolver.resolve4(profile.host);
+    }));
+    const addresses = lookups.flatMap((result) => result.status === "fulfilled" ? result.value : []);
+    if (addresses.length) return [...new Set(addresses)];
+  }
+  return [(await dns.promises.lookup(profile.host, { family: 4 })).address];
+}
+
+function transportFor(profile: MailProfile, address: string) {
+  const key = `${profile.id}:${address}:${profile.port}:${profile.user || ""}`;
   const existing = mailTransports.get(key);
   if (existing) return existing;
   const transport = nodemailer.createTransport({
-    host: profile.host,
+    host: address,
     port: profile.port,
     secure: profile.port === 465,
+    connectionTimeout: 10_000,
+    greetingTimeout: 10_000,
+    socketTimeout: 20_000,
+    tls: { servername: profile.host },
     auth: profile.user && profile.pass ? { user: profile.user, pass: profile.pass } : undefined
   });
   mailTransports.set(key, transport);
@@ -100,12 +111,12 @@ function transportFor(profile: MailProfile) {
 }
 
 async function sendLoginCode(email: string, code: string) {
-  const profiles = profilesForRecipient(email);
-  if (profiles.length > 0) {
-    let lastError: unknown;
-    for (const profile of profiles) {
+  const profile = profileForRecipient(email);
+  if (profile) {
+    const addresses = await addressesForProfile(profile);
+    for (const address of addresses) {
       try {
-        await transportFor(profile).sendMail({
+        await transportFor(profile, address).sendMail({
           from: profile.from,
           to: email,
           subject: "AIGCNONG 登录验证码",
@@ -114,11 +125,10 @@ async function sendLoginCode(email: string, code: string) {
         });
         return { delivery: `smtp:${profile.id}` as const };
       } catch (error) {
-        lastError = error;
-        console.error(`[auth:email-send-failed:${profile.id}]`, error instanceof Error ? error.message : error);
+        console.error(`[auth:email-send-failed:${profile.id}:${address}]`, error instanceof Error ? error.message : error);
       }
     }
-    throw lastError instanceof Error && lastError.message === "EMAIL_NOT_CONFIGURED" ? lastError : new Error("EMAIL_SEND_FAILED");
+    throw new Error("EMAIL_SEND_FAILED");
   }
   if (process.env.AUTH_ALLOW_MOCK_EMAIL === "true" && process.env.NODE_ENV !== "production") {
     console.log(`[auth:mock-email] ${email} login code: ${code}`);
