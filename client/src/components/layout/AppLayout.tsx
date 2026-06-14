@@ -1,6 +1,5 @@
 import type { Page } from "../../App";
 import type { ReactNode } from "react";
-import { IcpFooter } from "../common/IcpFooter";
 
 export function AppLayout({
   page,
@@ -14,7 +13,6 @@ export function AppLayout({
   return (
     <div className="relative h-screen overflow-hidden bg-[#050608] text-[#f3f5f7]" data-page={page}>
       <main className="h-full">{children}</main>
-      {page !== "home" && <IcpFooter />}
     </div>
   );
 }
