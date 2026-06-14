@@ -106,6 +106,7 @@ function maxImagesForMode(model: ModelConfig | undefined, mode: OfficialVideoMod
     if (model.modelName === "omni_flash-10s") return 7;
     if (model.providerId === "grok") return 7;
     if (model.providerId === "kling") return 4;
+    if (model.providerId === "seedance") return 3;
     if (model.providerId === "google") return 3;
     if (model.modelName === "happyhorse-1.0-r2v" || model.modelName === "wan2.7-r2v") return 5;
   }
@@ -436,7 +437,10 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
 
   const inputStatusItems = useMemo(() => {
     const mode = props.data.videoMode ?? legacyInputModeToOfficialMode(props.data.inputMode);
-    if (mode === "reference_images_to_video") return [{ icon: ImageIcon, label: "参考图片", connected: resolvedInputs.hasReferenceImage }];
+    if (mode === "reference_images_to_video") {
+      const label = selectedModel?.providerId === "seedance" || selectedModel?.modelName === "kling-v3-omni" ? "全能参考素材" : "参考图片";
+      return [{ icon: ImageIcon, label, connected: resolvedInputs.hasReferenceImage }];
+    }
     if (mode === "image_to_video_first_last_frame") {
       return [
         { icon: ImageIcon, label: "首帧", connected: resolvedInputs.hasFirstFrame },
@@ -469,7 +473,10 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
       const maxImages = maxImagesForMode(selectedModel, videoMode);
       if (maxImages && resolvedInputs.imageInputs.length > maxImages) throw new Error(`当前模式最多支持 ${maxImages} 张图片。你当前连接了 ${resolvedInputs.imageInputs.length} 张，请删除多余图片或切换到支持多参考图的模型。`);
       if (videoMode === "image_to_video_first_frame" && !resolvedInputs.hasImageInput) throw new Error("首帧图生视频需要连接一张首帧图片。");
-      if (videoMode === "reference_images_to_video" && !resolvedInputs.hasReferenceImage) throw new Error("参考图生视频需要至少一张参考图片。");
+      if (videoMode === "reference_images_to_video" && !resolvedInputs.hasReferenceImage) {
+        const isOmniReference = selectedModel.providerId === "seedance" || selectedModel.modelName === "kling-v3-omni";
+        throw new Error(isOmniReference ? "全能参考需要至少连接一张参考图片。" : "参考图生视频需要至少一张参考图片。");
+      }
       if (videoMode === "image_to_video_first_last_frame" && !resolvedInputs.hasFirstFrame) throw new Error("首尾帧模式需要连接首帧图片。");
       if (videoMode === "image_to_video_first_last_frame" && !resolvedInputs.hasLastFrame) throw new Error("首尾帧模式已连接首帧，还需要一张尾帧图片。");
       if ((videoMode === "video_to_video" || videoMode === "video_edit" || videoMode === "video_continuation") && !resolvedInputs.hasVideoInput) throw new Error("当前模式需要连接视频素材。");

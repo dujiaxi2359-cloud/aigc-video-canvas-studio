@@ -155,8 +155,10 @@ export async function generateVideoWithKling(params: VideoProviderParams): Promi
       body.image = images[0];
       body.image_tail = images[1];
     }
-    if (mode === "reference_images_to_video" && !omniVideo) {
-      body.image_list = images.map((image) => ({ image }));
+    if (mode === "reference_images_to_video") {
+      body.image_list = omniVideo
+        ? images.map((image) => ({ image_url: image }))
+        : images.map((image) => ({ image }));
     }
 
     const token = klingBearerToken(params.apiKey);

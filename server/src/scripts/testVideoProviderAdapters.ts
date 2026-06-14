@@ -138,8 +138,13 @@ assert(grokRelay15s?.supportedDurations.join(",") === "15", "Relay Grok 1.5 Vide
 
 const klingReference = getVideoModelCapability("kling", "kling-3-0", "kling-v3-omni", "reference_images_to_video");
 assert(klingReference?.supportedModes.some((mode) => mode.mode === "image_to_video_first_last_frame"), "Kling should expose first/last frame mode");
+assert(klingReference?.supportedModes.find((mode) => mode.mode === "reference_images_to_video")?.label === "全能参考", "Kling 3.0 Omni should expose the omni reference label");
 assert(klingReference?.maxReferenceImages === 4, "Kling reference mode should allow up to four images");
 assert(klingReference?.supportedDurations.join(",") === "5,10,15", "Kling 3.0 should expose 5s, 10s, and 15s durations");
+
+const seedanceReference = getVideoModelCapability("seedance", "seedance-2-0", "seedance-2.0", "reference_images_to_video");
+assert(seedanceReference?.supportedModes.find((mode) => mode.mode === "reference_images_to_video")?.label === "全能参考", "Seedance 2.0 should expose the omni reference label");
+assert(seedanceReference?.runtimeStatus === "experimental", "Seedance 2.0 adapter should be available experimentally");
 
 const klingLegacy = getVideoModelCapability("kling", "kling-1-6", "kling-v1-6", "image_to_video_first_frame");
 assert(klingLegacy?.supportedDurations.join(",") === "5,10", "Kling 1.6 should be available with official durations");

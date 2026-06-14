@@ -152,14 +152,14 @@ function videoUrl(value: unknown, preferred = false): string | undefined {
 export async function generateVideoWithSeedance(params: VideoProviderParams): Promise<ProviderGenerateResult> {
   const mode = params.videoMode ?? legacyInputModeToOfficialMode(params.inputMode, "seedance");
   if (!["text_to_video", "image_to_video_first_frame", "reference_images_to_video", "video_edit"].includes(mode)) {
-    throw new ProviderError("MODEL_MODE_UNSUPPORTED", "Seedance 中转当前支持文生视频、图生视频、参考图生视频和视频编辑。");
+    throw new ProviderError("MODEL_MODE_UNSUPPORTED", "Seedance 中转当前支持文生视频、图生视频、全能参考和视频参考。");
   }
 
   try {
     const images = await assetDataUrls(params.imageAssetIds, params.aspectRatio);
     const videos = await assetDataUrls(params.videoAssetIds);
     if (["image_to_video_first_frame", "reference_images_to_video"].includes(mode) && !images.length) {
-      throw new ProviderError("MISSING_INPUT_ASSET", "Seedance 图生视频需要连接参考图片。");
+      throw new ProviderError("MISSING_INPUT_ASSET", mode === "reference_images_to_video" ? "Seedance 全能参考需要连接至少一张参考图片。" : "Seedance 图生视频需要连接参考图片。");
     }
     if (mode === "video_edit" && !videos.length) {
       throw new ProviderError("MISSING_VIDEO_INPUT", "Seedance 视频编辑需要连接视频素材。");

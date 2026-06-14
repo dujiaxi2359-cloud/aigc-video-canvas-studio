@@ -117,7 +117,10 @@ function calculateOfficialVideoOptions(
     availableInputModes,
     availableVideoModes,
     unavailableVideoModes,
-    videoModeLabels: officialVideoModeLabels,
+    videoModeLabels: {
+      ...officialVideoModeLabels,
+      ...Object.fromEntries(capability.supportedModes.map((mode) => [mode.mode, mode.label]))
+    },
     lockedFields,
     warningMessage,
     normalizedSelection: {

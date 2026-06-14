@@ -108,6 +108,12 @@ function klingModesForDurations(supportedDurations: number[]) {
   ];
 }
 
+function klingOmniModes(supportedDurations: number[]) {
+  return klingModesForDurations(supportedDurations).map((item) =>
+    item.mode === "reference_images_to_video" ? { ...item, label: "全能参考" } : item
+  );
+}
+
 function klingCapability(input: {
   modelId: string;
   modelName: string;
@@ -411,7 +417,7 @@ export const videoModelCapabilities: VideoModelCapability[] = [
   grokCapability({ modelId: "grok-1-5-video-6s", modelName: "grok-1.5-video-6s", displayName: "Grok 1.5 Video 6s（中转）", supportedDurations: [6], defaultDuration: 6 }),
   grokCapability({ modelId: "grok-1-5-video-10s", modelName: "grok-1.5-video-10s", displayName: "Grok 1.5 Video 10s（中转）", supportedDurations: [10], defaultDuration: 10 }),
   grokCapability({ modelId: "grok-1-5-video-15s", modelName: "grok-1.5-video-15s", displayName: "Grok 1.5 Video 15s（中转）", supportedDurations: [15], defaultDuration: 15 }),
-  klingCapability({ modelId: "kling-3-0", modelName: "kling-v3-omni", displayName: "可灵 Kling 3.0 Omni", supportedDurations: klingLongDurations }),
+  klingCapability({ modelId: "kling-3-0", modelName: "kling-v3-omni", displayName: "可灵 Kling 3.0 Omni", supportedDurations: klingLongDurations, supportedModes: klingOmniModes(klingLongDurations) }),
   klingCapability({ modelId: "kling-2-6", modelName: "kling-v2-6", displayName: "可灵 Kling 2.6", supportedDurations: klingLongDurations }),
   klingCapability({ modelId: "kling-2-5", modelName: "kling-v2-5-turbo", displayName: "可灵 Kling 2.5 Turbo", qualityTier: "turbo", supportedModes: klingModesForDurations(klingStandardDurations).filter((item) => item.mode !== "reference_images_to_video"), supportsReferenceImages: false, maxImages: 2 }),
   klingCapability({ modelId: "kling-2-1-master", modelName: "kling-v2-1-master", displayName: "可灵 Kling 2.1 Master", supportedDurations: klingLongDurations }),
@@ -428,11 +434,13 @@ export const videoModelCapabilities: VideoModelCapability[] = [
     displayName: "Seedance 2.0",
     officialMode: "text_to_video",
     adapterName: "seedanceVideo",
-    runtimeStatus: "not_implemented",
+    runtimeStatus: "experimental",
     qualityTier: "full",
     supportedModes: [
       mode({ mode: "text_to_video", label: "文生视频", requiredInputs: ["prompt"] }),
-      mode({ mode: "image_to_video_first_frame", label: "图生视频", requiredInputs: ["prompt", "first_frame"], minImages: 1, maxImages: 1 })
+      mode({ mode: "image_to_video_first_frame", label: "图生视频", requiredInputs: ["prompt", "first_frame"], minImages: 1, maxImages: 1 }),
+      mode({ mode: "reference_images_to_video", label: "全能参考", requiredInputs: ["prompt", "reference_images"], minImages: 1, maxImages: 3 }),
+      mode({ mode: "video_edit", label: "视频参考", requiredInputs: ["prompt", "video"], minVideos: 1, maxVideos: 1 })
     ],
     supportedAspectRatios: ["21:9", "16:9", "4:3", "1:1", "3:4", "9:16"],
     supportedDurations: range(4, 15),
@@ -446,6 +454,8 @@ export const videoModelCapabilities: VideoModelCapability[] = [
     supportsSeed: true,
     supportsReferenceImages: true,
     maxReferenceImages: 3,
+    maxImages: 3,
+    maxVideos: 1,
     resultType: "async_task"
   })
 ];

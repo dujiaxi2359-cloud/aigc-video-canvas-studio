@@ -25,5 +25,6 @@ assert(veo916.aspectRatio === "9:16", "Veo 9:16 aspectRatio must stay 9:16.");
 
 const seedance = byId.get("seedance-2-0");
 assert(seedance?.supportedDurations.includes(15), "Seedance 2.0 must expose 15s duration.");
+assert(seedance?.supportedModes.some((item) => item.mode === "reference_images_to_video" && item.label === "全能参考"), "Seedance 2.0 must expose omni reference mode.");
 
 console.log("[test:video-official] ok");
