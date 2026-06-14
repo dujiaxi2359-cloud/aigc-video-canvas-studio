@@ -16,6 +16,7 @@ import type { WorkflowNodeType } from "../../types/node";
 import { absoluteUploadUrl } from "../../utils/file";
 import { MediaLightbox } from "../media/MediaLightbox";
 import { AssetFolderTree } from "../assets/AssetFolderTree";
+import { MoonLogo } from "../common/BrandIdentity";
 
 export type DrawerName = "assets" | "templates" | "history" | null;
 
@@ -59,11 +60,14 @@ export function CanvasTopBar({ onNavigate, onShare }: { onNavigate: (page: Page,
 
   return (
     <div className="pointer-events-none fixed inset-x-0 top-0 z-[80] flex h-[78px] items-start justify-between px-5 pt-4">
-      <button type="button" onClick={() => onNavigate("home")} className="pointer-events-auto flex items-center gap-3 text-left">
-        <span className="studio-brand-mark">N</span>
-        <span>
-          <span className="canvas-project-title block max-w-[260px] truncate">{currentProject?.name || "Untitled"}</span>
-          <span className="canvas-project-status mt-0.5 block">上次修改于 刚刚</span>
+      <button type="button" onClick={() => onNavigate("home")} className="canvas-project-card pointer-events-auto text-left">
+        <span className="canvas-project-mark">
+          <MoonLogo className="canvas-project-logo" />
+        </span>
+        <span className="min-w-0">
+          <span className="canvas-project-brand block">AIGC | 创作平台</span>
+          <span className="canvas-project-title block max-w-[260px] truncate">{currentProject?.name || "未命名项目"}</span>
+          <span className="canvas-project-status mt-0.5 block">刚刚保存</span>
         </span>
       </button>
       <div className="pointer-events-auto flex items-center gap-2">

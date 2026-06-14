@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Bell, ChevronDown, LogIn, LogOut, Settings, UserRound, WalletCards } from "lucide-react";
 import type { Page } from "../../App";
 import { useAuthStore } from "../../store/authStore";
+import { BrandIdentity } from "../common/BrandIdentity";
 
 const links: Array<[Page, string]> = [
   ["home", "首页"],
@@ -20,12 +21,11 @@ export function HomeTopNav({ page, onNavigate }: { page: Page; onNavigate: (page
   return (
     <header className="studio-home-nav fixed inset-x-0 top-0 z-50 flex h-[72px] items-center px-5 md:px-8">
       <button type="button" onClick={() => onNavigate("home")} className="flex items-center gap-2.5">
-        <span className="studio-brand-mark">N</span>
-        <span className="text-[12px] font-semibold text-white sm:text-[14px]">AIGC｜创作平台</span>
+        <BrandIdentity />
       </button>
       <nav className="absolute left-1/2 hidden -translate-x-1/2 items-center gap-1 rounded-full border border-white/[0.07] bg-white/[0.035] p-1 md:flex">
         {links.map(([target, label]) => (
-          <button key={target} type="button" onClick={() => target === "photos" ? window.location.assign("/photos") : onNavigate(target)} className={`h-9 rounded-full px-4 text-[13px] transition ${page === target ? "bg-white/[0.12] font-medium text-white" : "text-white/48 hover:bg-white/[0.06] hover:text-white"}`}>{label}</button>
+          <button key={target} type="button" onClick={() => onNavigate(target)} className={`h-9 rounded-full px-4 text-[13px] transition ${page === target ? "bg-white/[0.12] font-medium text-white" : "text-white/48 hover:bg-white/[0.06] hover:text-white"}`}>{label}</button>
         ))}
       </nav>
       <div className="ml-auto flex items-center gap-1.5">

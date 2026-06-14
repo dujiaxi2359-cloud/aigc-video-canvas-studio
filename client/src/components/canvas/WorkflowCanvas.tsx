@@ -95,6 +95,7 @@ export function WorkflowCanvas({ showGrid = true, onToggleGrid = () => undefined
   const [connectionMenuOpen, setConnectionMenuOpen] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
   const [isCanvasInteracting, setIsCanvasInteracting] = useState(false);
+  const interactionTimeoutRef = useRef<number | null>(null);
   const stableNodeTypes = useRef(nodeTypes).current;
   const stableEdgeTypes = useRef(edgeTypes).current;
   useCanvasHotkeys();
@@ -108,6 +109,26 @@ export function WorkflowCanvas({ showGrid = true, onToggleGrid = () => undefined
 
   const displayEdges = useMemo(() => edges.map((edge) => ({ ...edge, type: "studioEdge", animated: false })), [edges]);
   const displayNodes = useMemo(() => nodes.map((node) => ({ ...node, dragHandle: nodeDragHandleSelector })), [nodes]);
+
+  const beginCanvasInteraction = useCallback(() => {
+    if (interactionTimeoutRef.current) {
+      window.clearTimeout(interactionTimeoutRef.current);
+      interactionTimeoutRef.current = null;
+    }
+    setIsCanvasInteracting(true);
+  }, []);
+
+  const endCanvasInteraction = useCallback(() => {
+    if (interactionTimeoutRef.current) window.clearTimeout(interactionTimeoutRef.current);
+    interactionTimeoutRef.current = window.setTimeout(() => {
+      setIsCanvasInteracting(false);
+      interactionTimeoutRef.current = null;
+    }, 120);
+  }, []);
+
+  useEffect(() => () => {
+    if (interactionTimeoutRef.current) window.clearTimeout(interactionTimeoutRef.current);
+  }, []);
 
   const screenToFlow = useCallback(
     (position: { x: number; y: number }) => {
@@ -280,6 +301,7 @@ export function WorkflowCanvas({ showGrid = true, onToggleGrid = () => undefined
         className="studio-flow"
         nodes={displayNodes}
         edges={displayEdges}
+        onlyRenderVisibleElements
         nodeTypes={stableNodeTypes}
         edgeTypes={stableEdgeTypes}
         onInit={setReactFlow}
@@ -303,11 +325,11 @@ export function WorkflowCanvas({ showGrid = true, onToggleGrid = () => undefined
         }}
         nodesDraggable
         nodeDragHandle={nodeDragHandleSelector}
-        onNodeDragStart={() => setIsCanvasInteracting(true)}
-        onNodeDragStop={() => setIsCanvasInteracting(false)}
-        onMoveStart={() => setIsCanvasInteracting(true)}
-        onMoveEnd={() => setIsCanvasInteracting(false)}
-        panOnDrag={[1, 2]}
+        onNodeDragStart={beginCanvasInteraction}
+        onNodeDragStop={endCanvasInteraction}
+        onMoveStart={beginCanvasInteraction}
+        onMoveEnd={endCanvasInteraction}
+        panOnDrag={[0, 1, 2]}
         zoomOnScroll
         zoomOnPinch
         zoomOnDoubleClick={false}
@@ -326,7 +348,7 @@ export function WorkflowCanvas({ showGrid = true, onToggleGrid = () => undefined
         proOptions={{ hideAttribution: true }}
         defaultEdgeOptions={defaultEdgeOptions}
       >
-        {showGrid && <Background color="rgba(255,255,255,0.105)" gap={22} size={1} variant={BackgroundVariant.Dots} />}
+        {showGrid && !isCanvasInteracting && <Background color="rgba(255,255,255,0.085)" gap={28} size={1} variant={BackgroundVariant.Dots} />}
         <ZoomControls showGrid={showGrid} onToggleGrid={onToggleGrid} />
       </ReactFlowWithExtras>
 
