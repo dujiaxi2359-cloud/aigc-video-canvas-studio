@@ -537,6 +537,7 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
   );
 
   const referencedInputs = [...resolvedInputs.imageInputs, ...resolvedInputs.videoInputs, ...resolvedInputs.audioInputs];
+  const referencedImageNodeIds = new Set(resolvedInputs.imageInputs.map((input) => input.sourceNodeId));
   const dock = (
     <div className="creation-dock-content relative">
       <div className="creation-dock-header">
@@ -549,7 +550,7 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
         <button type="button" title={expanded ? "收起详情" : "展开详情"} className="creation-detail-toggle" onClick={() => setExpanded((value) => !value)}><Maximize2 size={14} /></button>
       </div>
       <div className="creation-dock-composer">
-        {referencedInputs.length > 0 && <div className="creation-reference-strip">{referencedInputs.map((input, index) => <span key={`${input.sourceNodeId}-${index}`} title={`引用素材 ${index + 1}`}>{input.url && input.mimeType?.startsWith("image") ? <img src={absoluteUploadUrl(input.url)} alt="" /> : <Library size={13} />}<small>素材 {index + 1}</small></span>)}</div>}
+        {referencedInputs.length > 0 && <div className="creation-reference-strip">{referencedInputs.map((input, index) => <span key={`${input.sourceNodeId}-${index}`} title={`引用素材 ${index + 1}`}>{input.url && referencedImageNodeIds.has(input.sourceNodeId) ? <img src={absoluteUploadUrl(input.url)} alt="" /> : <Library size={13} />}<small>素材 {index + 1}</small></span>)}</div>}
         <Textarea className="creation-prompt-input nodrag nopan nowheel" placeholder="描述你想生成的画面，或输入 @ 引用素材" value={localPrompt} onChange={handlePromptChange} onCompositionStart={handleCompositionStart} onCompositionEnd={handleCompositionEnd} />
       </div>
       {(props.data.errorMessage || localError) && <button type="button" className="creation-error-line" onClick={() => setExpanded(true)}><AlertCircle size={12} /><span>{props.data.errorMessage || localError}</span><strong>诊断</strong></button>}

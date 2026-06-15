@@ -12,10 +12,10 @@ function openCreateMenu(event: React.MouseEvent | React.PointerEvent, id: string
 function previewWidth(ratio?: string) {
   const [width, height] = (ratio || "16:9").split(":").map(Number);
   const value = (width || 16) / (height || 9);
-  if (value < 0.7) return 206;
-  if (value < 1) return 258;
-  if (value > 1.45) return 390;
-  return 300;
+  if (value < 0.7) return 250;
+  if (value < 1) return 300;
+  if (value > 1.45) return 430;
+  return 360;
 }
 
 function CreationNodeFrameComponent({ id, type, selected, title, ratio, status, preview, toolbar, dock }: {
@@ -27,7 +27,7 @@ function CreationNodeFrameComponent({ id, type, selected, title, ratio, status, 
   status?: string;
   preview: ReactNode;
   toolbar?: ReactNode;
-  dock: ReactNode;
+  dock?: ReactNode;
 }) {
   const deleteNode = useCanvasStore((state) => state.deleteNode);
   const width = previewWidth(ratio);
@@ -50,14 +50,16 @@ function CreationNodeFrameComponent({ id, type, selected, title, ratio, status, 
           {status && <span className={`creation-preview-status is-${status}`}>{status === "generating" ? "生成中" : status === "success" ? "已完成" : status === "error" ? "失败" : "未生成"}</span>}
         </div>
       </div>
-      <div
-        className="creation-dock drag-handle"
-        onPointerDown={(event) => {
-          if ((event.target as HTMLElement).closest("button, input, textarea, select, .nodrag")) event.stopPropagation();
-        }}
-      >
-        {dock}
-      </div>
+      {dock && (
+        <div
+          className="creation-dock drag-handle"
+          onPointerDown={(event) => {
+            if ((event.target as HTMLElement).closest("button, input, textarea, select, .nodrag")) event.stopPropagation();
+          }}
+        >
+          {dock}
+        </div>
+      )}
     </div>
   );
 }

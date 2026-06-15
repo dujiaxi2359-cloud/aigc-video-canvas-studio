@@ -12,6 +12,7 @@ type MediaPreviewProps = {
   thumbnailUrl?: string;
   aspectRatio?: string;
   className?: string;
+  showInlineActions?: boolean;
   children?: React.ReactNode;
   meta?: Array<{ label: string; value?: string | number | null }>;
 };
@@ -21,7 +22,7 @@ function ratioToCss(ratio?: string) {
   return ratio.replace(":", " / ");
 }
 
-export function MediaPreview({ type, title, previewUrl, originalUrl, outputUrl, thumbnailUrl, aspectRatio, className = "", children, meta }: MediaPreviewProps) {
+export function MediaPreview({ type, title, previewUrl, originalUrl, outputUrl, thumbnailUrl, aspectRatio, className = "", showInlineActions = true, children, meta }: MediaPreviewProps) {
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const allowNodeDrag = className.includes("creation-media-preview");
   const previewSrc = useMemo(() => absoluteUploadUrl(previewUrl || outputUrl || originalUrl || thumbnailUrl), [originalUrl, outputUrl, previewUrl, thumbnailUrl]);
@@ -48,6 +49,7 @@ export function MediaPreview({ type, title, previewUrl, originalUrl, outputUrl, 
       <div
         className={`media-preview media-preview-${type} ${allowNodeDrag ? "" : "nodrag nopan"} ${className}`}
         onClick={(event) => {
+          if (allowNodeDrag) return;
           if (type !== "image" || (!previewSrc && !highResSrc)) return;
           event.preventDefault();
           event.stopPropagation();
@@ -65,13 +67,13 @@ export function MediaPreview({ type, title, previewUrl, originalUrl, outputUrl, 
         >
           {previewSrc ? (
             type === "image" ? (
-              <img src={previewSrc} alt={title || "图片预览"} />
+              <img src={previewSrc} alt={title || "图片预览"} draggable={false} />
             ) : (
-              <video src={previewSrc} controls />
+              <video src={previewSrc} controls draggable={false} />
             )
           ) : children}
         </div>
-        {(previewSrc || highResSrc) && (
+        {showInlineActions && (previewSrc || highResSrc) && (
           <div className="media-actions">
             <button type="button" className="media-action-button" title={type === "image" ? "查看原图" : "全屏查看"} onClick={(event) => { event.preventDefault(); event.stopPropagation(); setLightboxOpen(true); }}>
               <Maximize2 size={14} />

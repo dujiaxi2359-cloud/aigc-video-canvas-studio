@@ -279,7 +279,11 @@ export function WorkflowCanvas({ showGrid = true, onToggleGrid = () => undefined
       className={`canvas-space relative h-full w-full bg-[#020203] ${isConnecting ? "is-connecting" : ""} ${isCanvasInteracting ? "is-interacting" : ""}`}
       onDoubleClick={(event) => {
         const target = event.target as HTMLElement | null;
-        if (target?.classList.contains("react-flow__pane")) window.dispatchEvent(new CustomEvent("studio:open-add-node"));
+        if (target?.classList.contains("react-flow__pane")) {
+          window.dispatchEvent(new CustomEvent("studio:open-add-node", {
+            detail: { position: screenToFlow({ x: event.clientX, y: event.clientY }) }
+          }));
+        }
       }}
       onContextMenu={(event) => event.preventDefault()}
       onDragOver={(event) => {
@@ -330,7 +334,9 @@ export function WorkflowCanvas({ showGrid = true, onToggleGrid = () => undefined
         onMoveStart={beginCanvasInteraction}
         onMoveEnd={endCanvasInteraction}
         panOnDrag={[0, 1, 2]}
-        zoomOnScroll
+        panOnScroll
+        panOnScrollSpeed={0.8}
+        zoomOnScroll={false}
         zoomOnPinch
         zoomOnDoubleClick={false}
         noDragClassName="nodrag"

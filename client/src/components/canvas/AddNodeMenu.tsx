@@ -14,7 +14,7 @@ const items: Array<{ type: WorkflowNodeType; label: string; description: string;
   { type: "image", label: "上传素材", description: "从本地添加图片素材", icon: Upload, group: "添加资源" }
 ];
 
-export function AddNodeMenu({ open, onClose }: { open: boolean; onClose: () => void }) {
+export function AddNodeMenu({ open, onClose, nodePosition }: { open: boolean; onClose: () => void; nodePosition?: { x: number; y: number } }) {
   const addNode = useCanvasStore((state) => state.addNode);
 
   useEffect(() => {
@@ -45,7 +45,7 @@ export function AddNodeMenu({ open, onClose }: { open: boolean; onClose: () => v
                 onClick={(event) => {
                   event.preventDefault();
                   event.stopPropagation();
-                  addNode(item.type);
+                  addNode(item.type, nodePosition);
                   onClose();
                 }}
                 className="group flex min-h-[52px] w-full items-center gap-3 rounded-[9px] px-2.5 py-2 text-left transition hover:bg-white/[0.08]"

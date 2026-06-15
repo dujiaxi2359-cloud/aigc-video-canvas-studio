@@ -12,6 +12,7 @@ import { projectApi } from "../services/projectApi";
 export function CanvasPage({ onNavigate }: { onNavigate: (page: Page, projectId?: string) => void }) {
   const [drawer, setDrawer] = useState<DrawerName>(null);
   const [addOpen, setAddOpen] = useState(false);
+  const [addPosition, setAddPosition] = useState<{ x: number; y: number }>();
   const [shareOpen, setShareOpen] = useState(false);
   const [showGrid, setShowGrid] = useState(true);
   const nodes = useCanvasStore((state) => state.nodes);
@@ -82,8 +83,10 @@ export function CanvasPage({ onNavigate }: { onNavigate: (page: Page, projectId?
   }, []);
 
   useEffect(() => {
-    const openAdd = () => {
+    const openAdd = (event: Event) => {
+      const position = (event as CustomEvent<{ position?: { x: number; y: number } }>).detail?.position;
       setDrawer(null);
+      setAddPosition(position);
       setAddOpen(true);
     };
     const openDrawer = (event: Event) => {
@@ -128,6 +131,7 @@ export function CanvasPage({ onNavigate }: { onNavigate: (page: Page, projectId?
         addOpen={addOpen}
         onAdd={() => {
           setDrawer(null);
+          setAddPosition(undefined);
           setAddOpen((value) => !value);
         }}
         onDrawer={toggleDrawer}
@@ -137,7 +141,7 @@ export function CanvasPage({ onNavigate }: { onNavigate: (page: Page, projectId?
           openAgent();
         }}
       />
-      <AddNodeMenu open={addOpen} onClose={() => setAddOpen(false)} />
+      <AddNodeMenu open={addOpen} nodePosition={addPosition} onClose={() => setAddOpen(false)} />
       <CanvasDrawer drawer={drawer} onClose={() => setDrawer(null)} onNavigate={onNavigate} />
       {nodes.length === 0 && <CanvasEmptyGuide onAdd={addNode} onTemplates={() => toggleDrawer("templates")} />}
       <button type="button" title="AIGCNONG 创作助手" onClick={() => openAgent()} className="canvas-brand-orb">N</button>
