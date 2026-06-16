@@ -394,6 +394,61 @@ const unifiedConfig = resolveVideoRequestConfig({
 assert(unifiedConfig.apiFamily === "unified_video_create", "Unified video create should be explicitly configurable");
 assert(unifiedConfig.finalUrl === "https://ai.ai666.net/v1/video/create", "Unified video create should submit to /v1/video/create");
 assert(unifiedConfig.pollEndpoint === "/v1/video/query?id={taskId}", "Unified video create should keep its query poll endpoint");
+const unifiedBody = buildProxyBody({
+  providerId: "openai-video",
+  modelName: "viduq2",
+  apiBaseUrl: "https://ai.ai666.net/v1",
+  apiKey: "sk-test-key",
+  prompt: "test",
+  projectId: "project",
+  nodeId: "node",
+  modelConfigId: "model",
+  inputMode: "image-to-video",
+  imageAssetIds: ["asset"],
+  duration: 8,
+  aspectRatio: "9:16",
+  resolution: "720p",
+  generateCount: 1
+}, {
+  apiFamily: "unified_video_create",
+  mode: "image_to_video_first_frame",
+  images: ["https://assets.example/frame.png"],
+  videos: [],
+  audios: [],
+  aspectRatio: "9:16",
+  resolution: "720p",
+  seconds: "8"
+}) as Record<string, any>;
+assert(Array.isArray(unifiedBody.images), "Generic unified video create should send images");
+assert(unifiedBody.images[0]?.url === "https://assets.example/frame.png", "Generic unified video create should keep object image references");
+const runApiBody = buildProxyBody({
+  providerId: "google",
+  modelName: "veo3-pro",
+  apiBaseUrl: "https://runapi.co",
+  apiKey: "sk-test-key",
+  prompt: "test",
+  projectId: "project",
+  nodeId: "node",
+  modelConfigId: "model",
+  inputMode: "image-to-video",
+  imageAssetIds: ["asset"],
+  duration: 8,
+  aspectRatio: "9:16",
+  resolution: "720p",
+  generateCount: 1
+}, {
+  apiFamily: "unified_video_create",
+  mode: "image_to_video_first_frame",
+  images: ["https://assets.example/frame.png"],
+  videos: [],
+  audios: [],
+  aspectRatio: "9:16",
+  resolution: "720p",
+  seconds: "8"
+}) as Record<string, any>;
+assert(runApiBody.images[0] === "https://assets.example/frame.png", "RunAPI video create should send images as string[]");
+assert(runApiBody.duration === "8", "RunAPI video create should send duration");
+assert(runApiBody.size === "720P", "RunAPI video create should send size");
 assert(
   veoProxyCreateEndpoint("POST https://relay.example/v1/video/create") === "https://relay.example/v1/video/create",
   "Google unified video relay endpoint should ignore a pasted HTTP method prefix"

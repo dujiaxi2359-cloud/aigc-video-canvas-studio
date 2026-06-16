@@ -569,6 +569,11 @@ function seedanceImageRole(mode: string, index: number) {
   return "reference_image";
 }
 
+function isRunApiVideoCreate(params: SeedanceProviderParams) {
+  const value = `${params.apiBaseUrl} ${params.videoRequestConfig?.baseUrl ?? ""} ${params.videoRequestConfig?.finalUrl ?? ""}`.toLowerCase();
+  return /runapi\.co/.test(value);
+}
+
 export function buildProxyBody(params: SeedanceProviderParams, refs: {
   apiFamily: VideoApiFamily;
   mode: string;
@@ -623,6 +628,20 @@ export function buildProxyBody(params: SeedanceProviderParams, refs: {
   }
 
   if (refs.apiFamily === "unified_video_create") {
+    if (isRunApiVideoCreate(params)) {
+      return compactObject({
+        ...base,
+        prompt: params.prompt,
+        images: refs.images,
+        url: refs.videos[0],
+        video: refs.videos[0],
+        audio: refs.audios[0],
+        aspect_ratio: refs.aspectRatio,
+        duration: refs.seconds === "auto" ? undefined : refs.seconds,
+        size: refs.resolution.toUpperCase(),
+        resolution: refs.resolution
+      });
+    }
     return compactObject({
       ...base,
       prompt: params.prompt,
