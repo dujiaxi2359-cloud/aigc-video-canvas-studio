@@ -6,6 +6,7 @@ import { Check, X } from "lucide-react";
 type Option = string | number;
 type Section = {
   label: string;
+  description?: string;
   value?: Option;
   options: Option[];
   format?: (value: Option) => string;
@@ -53,6 +54,7 @@ export function NodeParameterPopover({ open, title = "生成参数", sections, o
         {visibleSections.map((section) => (
           <div key={section.label}>
             <div className="node-parameter-label">{section.label}</div>
+            {section.description ? <div className="node-parameter-description">{section.description}</div> : null}
             <div className="node-parameter-segment">
               {section.options.map((option) => {
                 const active = String(section.value) === String(option);

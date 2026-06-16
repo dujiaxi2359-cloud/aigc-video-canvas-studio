@@ -10,7 +10,7 @@ import { modelConfigApi } from "../../services/modelConfigApi";
 import { useCanvasStore } from "../../store/canvasStore";
 import { useModelConfigStore } from "../../store/modelConfigStore";
 import { absoluteUploadUrl } from "../../utils/file";
-import { compactAssetIds, resolvePromptReferencedVideoInputs, resolveVideoNodeInputs } from "../../utils/workflowInputs";
+import { buildReferenceAwareVideoPrompt, compactAssetIds, resolvePromptReferencedVideoInputs, resolveVideoNodeInputs } from "../../utils/workflowInputs";
 import { diagnoseVideoChannel } from "../../utils/videoChannelCapability";
 import { dedupeModelConfigsForSelect, findCanonicalModelConfig } from "../../utils/modelConfigSelection";
 import { AgentAnalyzeErrorButton } from "../agent/AgentAnalyzeErrorButton";
@@ -150,6 +150,17 @@ function maxImagesForMode(model: ModelConfig | undefined, mode: OfficialVideoMod
 
 function durationLabel(value: string | number) {
   return Number(value) === 0 ? "Auto" : `${value}s`;
+}
+
+function universalReferenceDescription(model: ModelConfig | undefined) {
+  if (!supportsUniversalReference(model)) return undefined;
+  const images = model?.capabilities.maxReferenceImages ?? (isSeedanceModel(model) ? 9 : 4);
+  const videos = model?.capabilities.maxReferenceVideos ?? (isSeedanceModel(model) ? 3 : undefined);
+  const audios = model?.capabilities.maxReferenceAudios ?? (isSeedanceModel(model) ? 3 : undefined);
+  const parts = [`最多${images}张图`];
+  if (videos) parts.push(`最多${videos}个视频`);
+  if (audios) parts.push(`最多${audios}段音频`);
+  return parts.join(" + ");
 }
 
 function parameterValue<T>(selected: T | undefined, available: T[]) {
@@ -564,6 +575,12 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
         ? resolvePromptReferencedVideoInputs(promptForRequest, resolvedInputs)
         : { ...resolvedInputs, hasPromptReferences: false, missingPromptReferences: [] as string[] };
       const requestInputs = promptReferencedInputs.hasPromptReferences ? promptReferencedInputs : resolvedInputs;
+      const referenceBindings = promptReferencedInputs.hasPromptReferences
+        ? promptReferencedInputs.referenceBindings ?? []
+        : [];
+      const promptForProvider = supportsUniversalReference(selectedModel) && videoMode === "reference_images_to_video"
+        ? (promptReferencedInputs.referencePrompt ?? buildReferenceAwareVideoPrompt(promptForRequest, requestInputs))
+        : promptForRequest;
       if (promptReferencedInputs.missingPromptReferences.length) {
         throw new Error(`提示词中的引用不存在：${promptReferencedInputs.missingPromptReferences.join("、")}。请使用 @素材1、@图像1、@视频1 或 @音频1。`);
       }
@@ -593,7 +610,8 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
         modelConfigId: props.data.modelConfigId,
         inputMode: props.data.inputMode,
         videoMode,
-        prompt: promptForRequest,
+        prompt: promptForProvider,
+        referenceBindings,
         imageAssetIds: compactAssetIds(requestInputs.imageInputs),
         videoAssetIds: compactAssetIds(requestInputs.videoInputs),
         audioAssetIds: compactAssetIds(requestInputs.audioInputs),
@@ -723,7 +741,7 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
           <div ref={parameterAnchorRef} className={`creation-parameter-wrap nodrag nopan ${parametersOpen ? "is-open" : ""}`}>
           <button type="button" className="creation-parameter-pill" onClick={() => { setActiveTool(null); setParametersOpen((value) => !value); }}>{parameterSummary({ aspectRatio: selectedAspectRatio, resolution: selectedResolution, duration: selectedDuration, ratios: availableRatios, resolutions: availableResolutions, durations: availableDurations })}</button>
           <NodeParameterPopover open={parametersOpen} anchorRef={parameterAnchorRef} onClose={() => setParametersOpen(false)} sections={[
-            { label: "生成方式", value: props.data.videoMode ?? legacyInputModeToOfficialMode(props.data.inputMode), options: availableVideoModes, format: (value) => videoModeLabelForModel(selectedModel, value as OfficialVideoMode, dynamicOptions?.videoModeLabels?.[value as OfficialVideoMode]), onChange: (value) => update(props.id, { videoMode: value, inputMode: officialModeToLegacyInputMode(value as OfficialVideoMode) }) },
+            { label: "生成方式", description: (props.data.videoMode ?? legacyInputModeToOfficialMode(props.data.inputMode)) === "reference_images_to_video" ? universalReferenceDescription(selectedModel) : undefined, value: props.data.videoMode ?? legacyInputModeToOfficialMode(props.data.inputMode), options: availableVideoModes, format: (value) => videoModeLabelForModel(selectedModel, value as OfficialVideoMode, dynamicOptions?.videoModeLabels?.[value as OfficialVideoMode]), onChange: (value) => update(props.id, { videoMode: value, inputMode: officialModeToLegacyInputMode(value as OfficialVideoMode) }) },
             { label: "比例", value: selectedAspectRatio, options: availableRatios, onChange: (value) => update(props.id, { aspectRatio: value }) },
             { label: "清晰度", value: selectedResolution, options: availableResolutions, onChange: (value) => update(props.id, { resolution: value }) },
             { label: "生成时长", value: selectedDuration, options: availableDurations, format: durationLabel, onChange: (value) => update(props.id, { duration: Number(value) }) },

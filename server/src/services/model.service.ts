@@ -46,6 +46,17 @@ export type GenerateVideoRequest = {
   inputMode: VideoNodeContext["inputMode"];
   videoMode?: OfficialVideoMode;
   prompt: string;
+  referenceBindings?: Array<{
+    token?: string;
+    label?: string;
+    kind?: "image" | "video" | "audio";
+    kindLabel?: string;
+    kindIndex?: number;
+    globalIndex?: number;
+    sourceNodeId?: string;
+    assetId?: string;
+    title?: string;
+  }>;
   imageAssetIds?: string[];
   videoAssetIds?: string[];
   audioAssetIds?: string[];

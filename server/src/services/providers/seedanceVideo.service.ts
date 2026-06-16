@@ -700,6 +700,7 @@ export function buildProxyBody(params: SeedanceProviderParams, refs: {
         duration: refs.seconds === "auto" ? -1 : Number(refs.seconds),
         ratio: refs.aspectRatio,
         resolution: refs.resolution.toLowerCase(),
+        watermark: false,
         generate_audio: refs.audios.length ? true : undefined
       })
     };
@@ -740,7 +741,8 @@ export function buildProxyBody(params: SeedanceProviderParams, refs: {
         aspect_ratio: refs.aspectRatio,
         duration: refs.seconds === "auto" ? undefined : Number(refs.seconds),
         size: refs.resolution.toUpperCase(),
-        resolution: refs.resolution
+        resolution: refs.resolution,
+        watermark: false
       });
     }
     return compactObject({
@@ -754,7 +756,8 @@ export function buildProxyBody(params: SeedanceProviderParams, refs: {
       orientation: orientationFor(refs.aspectRatio),
       aspect_ratio: refs.aspectRatio,
       seconds: refs.seconds === "auto" ? undefined : refs.seconds,
-      resolution: refs.resolution
+      resolution: refs.resolution,
+      watermark: false
     });
   }
 
@@ -1066,7 +1069,14 @@ export async function generateVideoWithSeedance(params: SeedanceProviderParams):
       outputUrl: saved.outputUrl,
       localPath: saved.localPath,
       rawResponse: task,
-      payloadSummary: { endpoint, taskId: id, model: params.modelName, mode }
+      payloadSummary: {
+        endpoint,
+        taskId: id,
+        model: params.modelName,
+        mode,
+        watermark: false,
+        referenceBindingCount: params.referenceBindings?.length ?? 0
+      }
     };
   } catch (error) {
     if (error instanceof ProviderError) throw error;

@@ -89,6 +89,18 @@ export function compactAssetIds(inputs: AssetInput[]) {
 
 export type ResolvedVideoInputs = ReturnType<typeof resolveVideoNodeInputs>;
 
+export type PromptReferenceBinding = {
+  token: string;
+  label: string;
+  kind: "image" | "video" | "audio";
+  kindLabel: string;
+  kindIndex: number;
+  globalIndex: number;
+  sourceNodeId: string;
+  assetId?: string;
+  title?: string;
+};
+
 function appendUnique(target: AssetInput[], input: AssetInput | undefined) {
   if (!input) return;
   const key = input.assetId ?? input.sourceNodeId ?? input.nodeId;
@@ -101,11 +113,35 @@ export function resolvePromptReferencedVideoInputs(prompt: string, resolved: Res
   const videoInputs: AssetInput[] = [];
   const audioInputs: AssetInput[] = [];
   const allInputs = [
-    ...resolved.imageInputs.map((input) => ({ type: "image" as const, input })),
-    ...resolved.videoInputs.map((input) => ({ type: "video" as const, input })),
-    ...resolved.audioInputs.map((input) => ({ type: "audio" as const, input }))
+    ...resolved.imageInputs.map((input, index) => ({ type: "image" as const, input, kindIndex: index + 1 })),
+    ...resolved.videoInputs.map((input, index) => ({ type: "video" as const, input, kindIndex: index + 1 })),
+    ...resolved.audioInputs.map((input, index) => ({ type: "audio" as const, input, kindIndex: index + 1 }))
   ];
   const missing: string[] = [];
+  const bindings: PromptReferenceBinding[] = [];
+
+  const kindLabel = (type: PromptReferenceBinding["kind"]) => type === "image" ? "图片" : type === "video" ? "视频" : "音频";
+  const addBinding = (
+    type: PromptReferenceBinding["kind"],
+    input: AssetInput,
+    token: string,
+    kindIndex: number,
+    globalIndex: number
+  ) => {
+    const key = `${token}:${input.assetId ?? input.sourceNodeId ?? input.nodeId}`;
+    if (bindings.some((binding) => `${binding.token}:${binding.assetId ?? binding.sourceNodeId}` === key)) return;
+    bindings.push({
+      token,
+      label: `参考素材${globalIndex}`,
+      kind: type,
+      kindLabel: kindLabel(type),
+      kindIndex,
+      globalIndex,
+      sourceNodeId: input.sourceNodeId,
+      assetId: input.assetId,
+      title: input.title
+    });
+  };
 
   const addByType = (type: "image" | "video" | "audio", index: number, label: string) => {
     const source = type === "image" ? resolved.imageInputs[index] : type === "video" ? resolved.videoInputs[index] : resolved.audioInputs[index];
@@ -116,6 +152,8 @@ export function resolvePromptReferencedVideoInputs(prompt: string, resolved: Res
     if (type === "image") appendUnique(imageInputs, source);
     if (type === "video") appendUnique(videoInputs, source);
     if (type === "audio") appendUnique(audioInputs, source);
+    const globalIndex = allInputs.findIndex((item) => item.input === source) + 1;
+    addBinding(type, source, label, index + 1, globalIndex || index + 1);
   };
 
   for (const match of prompt.matchAll(/@(?:素材|参考素材)\s*(\d+)/gi)) {
@@ -127,6 +165,7 @@ export function resolvePromptReferencedVideoInputs(prompt: string, resolved: Res
       if (item.type === "image") appendUnique(imageInputs, item.input);
       if (item.type === "video") appendUnique(videoInputs, item.input);
       if (item.type === "audio") appendUnique(audioInputs, item.input);
+      addBinding(item.type, item.input, label, item.kindIndex, Math.max(1, Number(match[1])));
     }
   }
   for (const match of prompt.matchAll(/@(?:图像|图片|参考图|image)\s*(\d+)/gi)) addByType("image", Math.max(0, Number(match[1]) - 1), match[0] ?? "");
@@ -147,6 +186,68 @@ export function resolvePromptReferencedVideoInputs(prompt: string, resolved: Res
     hasLastFrame: imageInputs.length > 1,
     hasFirstLastFrame: imageInputs.length > 1,
     hasPromptReferences: true,
-    missingPromptReferences: missing
+    missingPromptReferences: missing,
+    referenceBindings: bindings,
+    referencePrompt: buildReferenceAwareVideoPrompt(prompt, bindings)
   };
+}
+
+function readableAssetTitle(input?: Pick<AssetInput, "title" | "sourceNodeId" | "assetId">) {
+  const title = String(input?.title ?? "").trim();
+  if (title) return title.slice(0, 48);
+  return input?.assetId ?? input?.sourceNodeId ?? "未命名素材";
+}
+
+function buildAutoReferenceBindings(resolved: Pick<ResolvedVideoInputs, "imageInputs" | "videoInputs" | "audioInputs">): PromptReferenceBinding[] {
+  const bindings: PromptReferenceBinding[] = [];
+  let globalIndex = 1;
+  const push = (kind: PromptReferenceBinding["kind"], inputs: AssetInput[]) => {
+    inputs.forEach((input, index) => {
+      bindings.push({
+        token: `@素材${globalIndex}`,
+        label: `参考素材${globalIndex}`,
+        kind,
+        kindLabel: kind === "image" ? "图片" : kind === "video" ? "视频" : "音频",
+        kindIndex: index + 1,
+        globalIndex,
+        sourceNodeId: input.sourceNodeId,
+        assetId: input.assetId,
+        title: input.title
+      });
+      globalIndex += 1;
+    });
+  };
+  push("image", resolved.imageInputs);
+  push("video", resolved.videoInputs);
+  push("audio", resolved.audioInputs);
+  return bindings;
+}
+
+export function buildReferenceAwareVideoPrompt(prompt: string, bindingsOrInputs: PromptReferenceBinding[] | Pick<ResolvedVideoInputs, "imageInputs" | "videoInputs" | "audioInputs">) {
+  const bindings = Array.isArray(bindingsOrInputs) ? bindingsOrInputs : buildAutoReferenceBindings(bindingsOrInputs);
+  if (!bindings.length) return prompt;
+
+  let normalizedPrompt = prompt;
+  const sorted = [...bindings].sort((a, b) => b.token.length - a.token.length);
+  for (const binding of sorted) {
+    normalizedPrompt = normalizedPrompt.split(binding.token).join(binding.label);
+  }
+
+  const seen = new Set<string>();
+  const rows = bindings
+    .filter((binding) => {
+      const key = `${binding.label}:${binding.assetId ?? binding.sourceNodeId}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .map((binding) => `${binding.label} = ${binding.kindLabel}${binding.kindIndex}「${readableAssetTitle(binding)}」`);
+
+  return [
+    "【全能参考绑定】",
+    ...rows,
+    "请严格按照用户描述中的参考素材编号理解主体、场景、动作、风格、构图和音频关系。例如“参考素材2 在 参考素材1”表示把参考素材2中的主体/元素放入或作用于参考素材1提供的画面语境。",
+    "",
+    `【用户创意】${normalizedPrompt.trim() || "请根据参考素材生成自然连贯的视频。"}`
+  ].join("\n");
 }
