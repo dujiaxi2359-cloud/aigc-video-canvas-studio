@@ -158,8 +158,9 @@ function defaultCreateEndpoint(channel: VideoChannel, baseUrl: string, capabilit
   return "/v1/videos";
 }
 
-function defaultPollEndpoint(createEndpoint: string, capabilities: ModelCapabilities, apiFamily: VideoApiFamily) {
+function defaultPollEndpoint(baseUrl: string, createEndpoint: string, capabilities: ModelCapabilities, apiFamily: VideoApiFamily) {
   if (capabilities.pollEndpoint) return capabilities.pollEndpoint;
+  if (/runapi\.co/i.test(baseUrl)) return "/v1/videos/{taskId}";
   if (apiFamily === "unified_video_create" || /\/v1\/video\/create\/?$/i.test(createEndpoint)) return "/v1/video/query?id={taskId}";
   if (apiFamily === "seedance2_native") return "/v1/video/generations/{taskId}";
   return `${createEndpoint.replace(/\/+$/g, "")}/{taskId}`;
@@ -224,7 +225,7 @@ export function resolveVideoRequestConfig(params: VideoProviderParams, capabilit
     authType: effectiveCapabilities.authType ?? "bearer",
     requestFormat,
     taskMode: "async",
-    pollEndpoint: defaultPollEndpoint(createEndpoint, effectiveCapabilities, apiFamily),
+    pollEndpoint: defaultPollEndpoint(params.apiBaseUrl, createEndpoint, effectiveCapabilities, apiFamily),
     idField: effectiveCapabilities.idField ?? taskIdField,
     taskIdField,
     statusField: effectiveCapabilities.statusField ?? "status",

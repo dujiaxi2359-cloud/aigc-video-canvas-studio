@@ -449,6 +449,29 @@ const runApiBody = buildProxyBody({
 assert(runApiBody.images[0] === "https://assets.example/frame.png", "RunAPI video create should send images as string[]");
 assert(runApiBody.duration === 8, "RunAPI video create should send numeric duration");
 assert(runApiBody.size === "720P", "RunAPI video create should send size");
+const runApiConfig = resolveVideoRequestConfig({
+  providerId: "google",
+  modelName: "veo3.1-fast",
+  apiBaseUrl: "https://runapi.co",
+  apiKey: "sk-test-key",
+  prompt: "test",
+  projectId: "project",
+  nodeId: "node",
+  modelConfigId: "model",
+  inputMode: "image-to-video",
+  imageAssetIds: ["asset"],
+  duration: 8,
+  aspectRatio: "16:9",
+  resolution: "720p",
+  generateCount: 1
+}, {
+  inputModes: ["text-to-video", "image-to-video"],
+  aspectRatios: ["16:9", "9:16"],
+  resolutions: ["720p"],
+  duration: { type: "enum", values: [4, 6, 8] }
+});
+assert(runApiConfig.finalUrl === "https://runapi.co/v1/video/create", "RunAPI should submit video tasks to /v1/video/create");
+assert(runApiConfig.pollEndpoint === "/v1/videos/{taskId}", "RunAPI should query video tasks through /v1/videos/{taskId}");
 assert(
   veoProxyCreateEndpoint("POST https://relay.example/v1/video/create") === "https://relay.example/v1/video/create",
   "Google unified video relay endpoint should ignore a pasted HTTP method prefix"

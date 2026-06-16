@@ -537,6 +537,7 @@ function orientationFor(aspectRatio: string) {
 
 function materializePollEndpoint(config: VideoRequestConfig | undefined, createEndpoint: string, taskIdValue: string) {
   if (!config) return seedancePollEndpoint(createEndpoint, taskIdValue);
+  if (/runapi\.co/i.test(config.baseUrl)) return joinUrl(config.baseUrl, `/v1/videos/${encodeURIComponent(taskIdValue)}`);
   const encoded = encodeURIComponent(taskIdValue);
   const template = config.pollEndpoint || "";
   if (!template) return seedancePollEndpoint(createEndpoint, taskIdValue);
@@ -595,8 +596,13 @@ function runApiQueryEndpoint(params: SeedanceProviderParams) {
 
 function runApiPollAttempts(params: SeedanceProviderParams, taskIdValue: string): Array<{ endpoint: string; init: RequestInit }> {
   const queryEndpoint = runApiQueryEndpoint(params);
+  const videosEndpoint = joinUrl(params.videoRequestConfig?.baseUrl ?? params.apiBaseUrl, `/v1/videos/${encodeURIComponent(taskIdValue)}`);
   const encoded = encodeURIComponent(taskIdValue);
   return [
+    {
+      endpoint: videosEndpoint,
+      init: { method: "GET", headers: pollHeaders(params) }
+    },
     {
       endpoint: `${queryEndpoint}?id=${encoded}`,
       init: { method: "GET", headers: pollHeaders(params) }
@@ -612,10 +618,6 @@ function runApiPollAttempts(params: SeedanceProviderParams, taskIdValue: string)
     {
       endpoint: queryEndpoint,
       init: { method: "POST", headers: pollHeaders(params, true), body: JSON.stringify({ task_id: taskIdValue }) }
-    },
-    {
-      endpoint: joinUrl(queryEndpoint, encoded),
-      init: { method: "GET", headers: pollHeaders(params) }
     }
   ];
 }

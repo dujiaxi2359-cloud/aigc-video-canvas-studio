@@ -206,7 +206,7 @@ function videoCapabilitiesForChannel(modelName: string, baseUrl: string): ModelC
       apiFamily: "unified_video_create",
       createEndpoint: "/v1/video/create",
       endpoint: "/v1/video/create",
-      pollEndpoint: "/v1/video/query?id={taskId}",
+      pollEndpoint: "/v1/videos/{taskId}",
       requestFormat: "json",
       imageTransport: capabilities.supportedInputs?.some((input) => ["image", "first_frame", "reference_image", "first_last_frame"].includes(input)) ? "url" : "unsupported",
       videoTransport: capabilities.supportedInputs?.includes("video") ? "url_or_base64_json" : capabilities.videoTransport
