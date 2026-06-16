@@ -84,6 +84,18 @@ async function assetMultipartFiles(assetIds?: string[], aspectRatio?: string) {
 
 type SeedanceProviderParams = VideoProviderParams & { imageTransport?: VideoImageTransport; videoTransport?: VideoTransport; videoRequestConfig?: VideoRequestConfig };
 
+function proxyVideoLabel(params: SeedanceProviderParams) {
+  const provider = (params.videoRequestConfig?.provider ?? params.providerId ?? "").toLowerCase();
+  const model = (params.modelName ?? "").toLowerCase();
+  if (provider.includes("google") || provider.includes("veo") || model.includes("veo")) return "Veo";
+  if (provider.includes("grok") || provider.includes("xai") || model.includes("grok")) return "Grok";
+  if (provider.includes("kling") || model.includes("kling")) return "可灵";
+  if (provider.includes("wan") || provider.includes("alibaba") || model.includes("wan")) return "Wan";
+  if (provider.includes("omni") || model.includes("omni")) return "Omni";
+  if (provider.includes("seedance") || model.includes("seedance") || model.includes("doubao")) return "Seedance";
+  return params.videoRequestConfig?.provider || params.providerId || "视频";
+}
+
 async function assetJsonReferences(assetIds: string[] | undefined, aspectRatio: string | undefined, imageTransport: VideoImageTransport | undefined) {
   if (!["url", "url_or_asset"].includes(imageTransport ?? "")) return assetDataUrls(assetIds, aspectRatio);
   const urls: string[] = [];
@@ -690,9 +702,10 @@ function maskKey(apiKey: string) {
 }
 
 export async function generateVideoWithSeedance(params: SeedanceProviderParams): Promise<ProviderGenerateResult> {
+  const label = proxyVideoLabel(params);
   const mode = params.videoMode ?? legacyInputModeToOfficialMode(params.inputMode, "seedance");
   if (!["text_to_video", "image_to_video_first_frame", "image_to_video_first_last_frame", "reference_images_to_video", "video_edit", "video_extension"].includes(mode)) {
-    throw new ProviderError("MODEL_MODE_UNSUPPORTED", "Seedance 2.0 当前支持文生视频、图生视频、首尾帧、全能参考、视频编辑和视频延展。");
+    throw new ProviderError("MODEL_MODE_UNSUPPORTED", `${label} 当前通道不支持这个视频生成模式。`);
   }
 
   try {
@@ -721,16 +734,16 @@ export async function generateVideoWithSeedance(params: SeedanceProviderParams):
     }
     const imageCount = images.length + multipartFiles.length;
     if (mode === "image_to_video_first_frame" && !imageCount) {
-      throw new ProviderError("MISSING_INPUT_ASSET", "Seedance 图生视频需要连接参考图片。");
+      throw new ProviderError("MISSING_INPUT_ASSET", `${label} 图生视频需要连接参考图片。`);
     }
     if (mode === "image_to_video_first_last_frame" && imageCount < 2) {
-      throw new ProviderError("MISSING_INPUT_ASSET", "Seedance 首尾帧模式需要连接首帧和尾帧两张图片。");
+      throw new ProviderError("MISSING_INPUT_ASSET", `${label} 首尾帧模式需要连接首帧和尾帧两张图片。`);
     }
     if (mode === "reference_images_to_video" && imageCount + videos.length + audios.length === 0) {
-      throw new ProviderError("MISSING_INPUT_ASSET", "Seedance 全能参考至少需要连接一张图片、一个视频或一段音频。");
+      throw new ProviderError("MISSING_INPUT_ASSET", `${label} 全能参考至少需要连接一张图片、一个视频或一段音频。`);
     }
     if (["video_edit", "video_extension"].includes(mode) && !videos.length) {
-      throw new ProviderError("MISSING_VIDEO_INPUT", mode === "video_extension" ? "Seedance 视频延展需要连接原视频。" : "Seedance 视频编辑需要连接视频素材。");
+      throw new ProviderError("MISSING_VIDEO_INPUT", mode === "video_extension" ? `${label} 视频延展需要连接原视频。` : `${label} 视频编辑需要连接视频素材。`);
     }
 
     const normalizedRatio = normalizeVideoAspectRatio(params.aspectRatio);
@@ -829,14 +842,14 @@ export async function generateVideoWithSeedance(params: SeedanceProviderParams):
               { endpoint, whyBlocked: "noPublicImageUrl", upstreamResponse: task }
             );
           }
-          createError = new ProviderError("PROVIDER_ERROR", `Seedance 中转任务创建失败：${errorMessage(task)}`, preview(task), { endpoint });
+          createError = new ProviderError("PROVIDER_ERROR", `${label} 中转任务创建失败：${errorMessage(task)}`, preview(task), { endpoint });
           if (params.videoRequestConfig) break;
           continue;
         }
         remoteUrl = videoUrl(configuredResult(task, params.videoRequestConfig));
         id = configuredTaskId(task, params.videoRequestConfig);
         if (remoteUrl || id) break;
-        createError = new ProviderError("PROVIDER_ERROR", "Seedance 中转没有返回 task_id 或视频地址。", preview(task), { endpoint, response: task });
+        createError = new ProviderError("PROVIDER_ERROR", `${label} 中转没有返回 task_id 或视频地址。`, preview(task), { endpoint, response: task });
       }
       if (remoteUrl || id) break;
       if (params.videoRequestConfig) break;
@@ -844,7 +857,7 @@ export async function generateVideoWithSeedance(params: SeedanceProviderParams):
 
     if (createError && !remoteUrl && !id) throw createError;
     if (!remoteUrl && !id) {
-      throw new ProviderError("PROVIDER_ERROR", "Seedance 中转没有返回 task_id 或视频地址。", preview(task), { endpoint, response: task });
+      throw new ProviderError("PROVIDER_ERROR", `${label} 中转没有返回 task_id 或视频地址。`, preview(task), { endpoint, response: task });
     }
 
     if (id) {
@@ -871,11 +884,11 @@ export async function generateVideoWithSeedance(params: SeedanceProviderParams):
       while (!remoteUrl && !["completed", "succeeded", "success", "done", "finished"].includes(configuredStatus(task, params.videoRequestConfig))) {
         if (["failed", "error", "cancelled", "canceled"].includes(configuredStatus(task, params.videoRequestConfig))) {
           await saveGenerationTask({ id, status: "failed", result: task, errorMessage: errorMessage(task) });
-          throw new ProviderError("VEO_OPERATION_FAILED", `Seedance 中转任务失败：${errorMessage(task)}`, preview(task));
+          throw new ProviderError("VEO_OPERATION_FAILED", `${label} 中转任务失败：${errorMessage(task)}`, preview(task));
         }
         if (Date.now() - startedAt > 20 * 60 * 1000) {
-          await saveGenerationTask({ id, status: "timeout", result: task, errorMessage: "Seedance 中转任务超过 20 分钟仍未完成。" });
-          throw new ProviderError("VEO_OPERATION_TIMEOUT", "Seedance 中转任务超过 20 分钟仍未完成。");
+          await saveGenerationTask({ id, status: "timeout", result: task, errorMessage: `${label} 中转任务超过 20 分钟仍未完成。` });
+          throw new ProviderError("VEO_OPERATION_TIMEOUT", `${label} 中转任务超过 20 分钟仍未完成。`);
         }
         await sleep(5000);
         const pollResponse = await fetch(pollEndpoint, {
@@ -883,15 +896,15 @@ export async function generateVideoWithSeedance(params: SeedanceProviderParams):
         });
         task = await responsePayload(pollResponse);
         await saveGenerationTask({ id, status: configuredStatus(task, params.videoRequestConfig) || "processing", result: task });
-        if (!pollResponse.ok) throw new ProviderError("PROVIDER_ERROR", `Seedance 中转任务查询失败：${errorMessage(task)}`, preview(task));
+        if (!pollResponse.ok) throw new ProviderError("PROVIDER_ERROR", `${label} 中转任务查询失败：${errorMessage(task)}`, preview(task));
         remoteUrl = videoUrl(configuredResult(task, params.videoRequestConfig));
       }
       if (remoteUrl) await saveGenerationTask({ id, status: "success", progress: 100, result: task });
     }
 
     if (!remoteUrl) {
-      if (id) await saveGenerationTask({ id, status: "completed_without_video_url", result: task, errorMessage: "Seedance 中转任务已完成，但响应中没有视频 URL。" });
-      throw new ProviderError("VEO_OPERATION_NO_VIDEO_IN_RESPONSE", "Seedance 中转任务已完成，但响应中没有视频 URL。", preview(task), {
+      if (id) await saveGenerationTask({ id, status: "completed_without_video_url", result: task, errorMessage: `${label} 中转任务已完成，但响应中没有视频 URL。` });
+      throw new ProviderError("VEO_OPERATION_NO_VIDEO_IN_RESPONSE", `${label} 中转任务已完成，但响应中没有视频 URL。`, preview(task), {
         endpoint,
         taskId: id,
         configuredModel: params.modelName,
@@ -911,8 +924,8 @@ export async function generateVideoWithSeedance(params: SeedanceProviderParams):
     if (error instanceof ProviderError) throw error;
     const message = rawErrorMessage(error);
     if (/fetch failed|network|econn|dns|timeout/i.test(message)) {
-      throw new ProviderError("NETWORK_ERROR", "Seedance 中转网络请求失败，请检查 Base URL、中转服务和后端网络。", message);
+      throw new ProviderError("NETWORK_ERROR", `${proxyVideoLabel(params)} 中转网络请求失败，请检查 Base URL、中转服务和后端网络。`, message);
     }
-    throw new ProviderError("PROVIDER_ERROR", "Seedance 中转接口调用失败。", message);
+    throw new ProviderError("PROVIDER_ERROR", `${proxyVideoLabel(params)} 中转接口调用失败。`, message);
   }
 }
