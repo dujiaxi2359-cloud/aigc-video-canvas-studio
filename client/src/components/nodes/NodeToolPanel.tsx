@@ -6,6 +6,7 @@ export type ReferenceMenuItem = {
   typedToken: string;
   label: string;
   kind: string;
+  name?: string;
   previewUrl?: string;
 };
 
@@ -44,7 +45,7 @@ export function NodeToolPanel({ tool, onClose, onInsert, referenceItems = [] }: 
               <button key={`${item.token}-${item.typedToken}`} type="button" title={`插入 ${item.token}，也可输入 ${item.typedToken}`} onClick={() => { onInsert(item.token); onClose(); }}>
                 {item.previewUrl ? <img src={item.previewUrl} alt="" /> : <Library size={16} />}
                 <span>{item.label}</span>
-                <small>{item.typedToken}</small>
+                <small>{item.name ? `${item.typedToken} · ${item.name}` : item.typedToken}</small>
               </button>
             ))}
             {!referenceItems.length && <div className="node-reference-empty">先把图片、视频或音频素材连接到视频节点，再用 @ 精确引用。</div>}

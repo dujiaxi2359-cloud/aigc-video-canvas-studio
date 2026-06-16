@@ -11,13 +11,13 @@ import { MediaPreviewActions } from "./MediaPreviewActions";
 function ratioFromDimensions(width?: number, height?: number) {
   if (!width || !height) return undefined;
   const value = width / height;
-  if (Math.abs(value - 9 / 16) < 0.04) return "9:16";
-  if (Math.abs(value - 16 / 9) < 0.04) return "16:9";
-  if (Math.abs(value - 1) < 0.04) return "1:1";
-  if (Math.abs(value - 3 / 4) < 0.04) return "3:4";
-  if (Math.abs(value - 4 / 3) < 0.04) return "4:3";
-  if (Math.abs(value - 2 / 3) < 0.04) return "2:3";
-  if (Math.abs(value - 3 / 2) < 0.04) return "3:2";
+  if (Math.abs(value - 9 / 16) < 0.006) return "9:16";
+  if (Math.abs(value - 16 / 9) < 0.006) return "16:9";
+  if (Math.abs(value - 1) < 0.006) return "1:1";
+  if (Math.abs(value - 3 / 4) < 0.006) return "3:4";
+  if (Math.abs(value - 4 / 3) < 0.006) return "4:3";
+  if (Math.abs(value - 2 / 3) < 0.006) return "2:3";
+  if (Math.abs(value - 3 / 2) < 0.006) return "3:2";
   const gcd = (a: number, b: number): number => (b ? gcd(b, a % b) : a);
   const divisor = gcd(Math.round(width), Math.round(height)) || 1;
   return `${Math.round(width / divisor)}:${Math.round(height / divisor)}`;
@@ -26,7 +26,7 @@ function ratioFromDimensions(width?: number, height?: number) {
 export function ImageNode(props: NodeProps<ImageNodeData>) {
   const update = useCanvasStore((state) => state.updateNodeData);
   const upload = useAssetStore((state) => state.uploadAsset);
-  const previewUrl = props.data.thumbnailUrl || props.data.url;
+  const previewUrl = props.data.url || props.data.thumbnailUrl;
   const ratio = useMemo(() => props.data.aspectRatio || ratioFromDimensions(props.data.width, props.data.height) || "9:16", [props.data.aspectRatio, props.data.height, props.data.width]);
 
   useEffect(() => {

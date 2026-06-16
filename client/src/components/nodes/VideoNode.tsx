@@ -197,6 +197,11 @@ function generateButtonLabel(status: VideoNodeData["status"]) {
   return "生成视频";
 }
 
+function compactName(value?: string, fallback = "素材") {
+  const text = value?.trim() || fallback;
+  return text.length > 18 ? `${text.slice(0, 17)}...` : text;
+}
+
 function statusText(status: VideoNodeData["status"]) {
   return { idle: "未生成", generating: "生成中", success: "已完成", error: "失败" }[status];
 }
@@ -648,12 +653,34 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
     ...resolvedInputs.audioInputs.map((input, index) => ({ input, kind: "音频", kindIndex: index + 1, genericToken: `@素材${resolvedInputs.imageInputs.length + resolvedInputs.videoInputs.length + index + 1}`, typedToken: `@音频${index + 1}` }))
   ];
   const referencedImageNodeIds = new Set(resolvedInputs.imageInputs.map((input) => input.sourceNodeId));
-  const referenceMenuItems: ReferenceMenuItem[] = referencedInputs.map((item) => ({
+  const referenceVisualItems = referencedInputs.map((item) => ({
+    ...item,
+    name: compactName(item.input.title, `${item.kind}${item.kindIndex}`),
+    previewUrl: item.input.url && referencedImageNodeIds.has(item.input.sourceNodeId) ? absoluteUploadUrl(item.input.url) : undefined
+  }));
+  const mentionedReferences = useMemo(() => {
+    const byGeneric = new Map(referenceVisualItems.map((item) => [item.genericToken, item]));
+    const byTyped = new Map(referenceVisualItems.map((item) => [item.typedToken, item]));
+    const picked: typeof referenceVisualItems = [];
+    const seen = new Set<string>();
+    const add = (item: typeof referenceVisualItems[number] | undefined) => {
+      if (!item || seen.has(item.genericToken)) return;
+      seen.add(item.genericToken);
+      picked.push(item);
+    };
+    for (const match of localPrompt.matchAll(/@(?:素材|参考素材)\s*(\d+)/gi)) add(byGeneric.get(`@素材${Number(match[1])}`));
+    for (const match of localPrompt.matchAll(/@(?:图像|图片|参考图|image)\s*(\d+)/gi)) add(byTyped.get(`@图像${Number(match[1])}`));
+    for (const match of localPrompt.matchAll(/@(?:视频|video)\s*(\d+)/gi)) add(byTyped.get(`@视频${Number(match[1])}`));
+    for (const match of localPrompt.matchAll(/@(?:音频|audio)\s*(\d+)/gi)) add(byTyped.get(`@音频${Number(match[1])}`));
+    return picked;
+  }, [localPrompt, referenceVisualItems]);
+  const referenceMenuItems: ReferenceMenuItem[] = referenceVisualItems.map((item) => ({
     token: item.genericToken,
     typedToken: item.typedToken,
-    label: `${item.kind} ${item.kindIndex}`,
+    label: `${item.genericToken.replace("@", "")} · ${item.kind}${item.kindIndex}`,
     kind: item.kind,
-    previewUrl: item.input.url && referencedImageNodeIds.has(item.input.sourceNodeId) ? absoluteUploadUrl(item.input.url) : undefined
+    name: item.name,
+    previewUrl: item.previewUrl
   }));
   const dock = (
     <div className="creation-dock-content relative">
@@ -667,8 +694,22 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
         <button type="button" title={expanded ? "收起详情" : "展开详情"} className="creation-detail-toggle" onClick={() => setExpanded((value) => !value)}><Maximize2 size={14} /></button>
       </div>
       <div className="creation-dock-composer">
-        {referencedInputs.length > 0 && <div className="creation-reference-strip">{referencedInputs.map((item, index) => <button type="button" key={`${item.input.sourceNodeId}-${index}`} title={`点击插入 ${item.genericToken}，也可手动输入 ${item.typedToken}`} onClick={() => insertReferenceToken(item.genericToken)}>{item.input.url && referencedImageNodeIds.has(item.input.sourceNodeId) ? <img src={absoluteUploadUrl(item.input.url)} alt="" /> : <Library size={13} />}<small>{item.genericToken.replace("@", "")} · {item.kind}{item.kindIndex}</small></button>)}</div>}
-        <Textarea className="creation-prompt-input nodrag nopan nowheel" placeholder="描述你想生成的画面，或输入 @ 引用素材" value={localPrompt} onChange={handlePromptChange} onCompositionStart={handleCompositionStart} onCompositionEnd={handleCompositionEnd} />
+        {referenceVisualItems.length > 0 && <div className="creation-reference-strip">{referenceVisualItems.map((item, index) => <button type="button" key={`${item.input.sourceNodeId}-${index}`} title={`点击插入 ${item.genericToken} · ${item.name}，也可手动输入 ${item.typedToken}`} onClick={() => insertReferenceToken(item.genericToken)}>{item.previewUrl ? <img src={item.previewUrl} alt="" /> : <Library size={13} />}<small><b>{item.genericToken.replace("@", "")}</b><span>{item.name}</span></small></button>)}</div>}
+        <div className="creation-prompt-stack">
+          {mentionedReferences.length > 0 && (
+            <div className="creation-mentioned-references">
+              {mentionedReferences.map((item) => (
+                <button type="button" key={item.genericToken} title={`${item.genericToken} · ${item.name}`} onClick={() => insertReferenceToken(item.genericToken)}>
+                  {item.previewUrl ? <img src={item.previewUrl} alt="" /> : <Library size={13} />}
+                  <span>{item.kind}</span>
+                  <strong>{item.name}</strong>
+                  <small>{item.genericToken}</small>
+                </button>
+              ))}
+            </div>
+          )}
+          <Textarea className="creation-prompt-input nodrag nopan nowheel" placeholder="描述你想生成的画面，或输入 @ 引用素材" value={localPrompt} onChange={handlePromptChange} onCompositionStart={handleCompositionStart} onCompositionEnd={handleCompositionEnd} />
+        </div>
       </div>
       {(props.data.errorMessage || localError) && <button type="button" className="creation-error-line" onClick={() => setExpanded(true)}><AlertCircle size={12} /><span>{props.data.errorMessage || localError}</span><strong>诊断</strong></button>}
       <div className="creation-dock-footer">

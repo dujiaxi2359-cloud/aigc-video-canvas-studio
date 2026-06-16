@@ -32,7 +32,7 @@ function CreationNodeFrameComponent({ id, type, selected, title, ratio, status, 
   const deleteNode = useCanvasStore((state) => state.deleteNode);
   const width = previewWidth(ratio);
   return (
-    <div className={`creation-node ${selected ? "is-selected" : ""}`} style={{ width: 640 }}>
+    <div className={`creation-node ${selected ? "is-selected" : ""}`} data-node-type={type} style={{ width: 640 }}>
       <div className="creation-node-preview-wrap">
         {toolbar}
         <div className="creation-node-label node-floating-label drag-handle mb-2 flex cursor-grab items-center gap-1.5 active:cursor-grabbing"><span className="h-2.5 w-2.5 rounded-[3px] border border-white/20" />{title}</div>
@@ -44,7 +44,9 @@ function CreationNodeFrameComponent({ id, type, selected, title, ratio, status, 
           }}
         >
           <Handle id="in-0" type="target" position={Position.Left} className="studio-handle studio-handle-in" />
+          <Handle id="in-right" type="target" position={Position.Right} className="studio-handle studio-handle-in-right studio-handle-catch" />
           <Handle id="out" type="source" position={Position.Right} className="studio-handle studio-handle-out" onClick={(event) => openCreateMenu(event, id, type)} />
+          <Handle id="out-left" type="source" position={Position.Left} className="studio-handle studio-handle-out-left studio-handle-catch" onClick={(event) => openCreateMenu(event, id, type)} />
           <button type="button" title="删除节点" className="creation-node-delete nodrag nopan" onClick={() => deleteNode(id)}><Trash2 size={13} /></button>
           {preview}
           {status && <span className={`creation-preview-status is-${status}`}>{status === "generating" ? "生成中" : status === "success" ? "已完成" : status === "error" ? "失败" : "未生成"}</span>}

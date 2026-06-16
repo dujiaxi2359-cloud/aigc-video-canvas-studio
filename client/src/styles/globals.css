@@ -4104,6 +4104,10 @@ select {
   object-fit: cover !important;
 }
 
+.creation-node[data-node-type="image"] .creation-media-preview .media-preview-frame img {
+  object-fit: contain !important;
+}
+
 .studio-handle {
   width: 28px !important;
   height: 28px !important;
@@ -4121,6 +4125,40 @@ select {
 
 .studio-handle-out {
   right: -14px !important;
+}
+
+.studio-handle-catch {
+  width: 42px !important;
+  height: 64px !important;
+  opacity: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.studio-handle-catch::before,
+.studio-handle-catch::after {
+  display: none !important;
+}
+
+.studio-handle-out-left {
+  left: -20px !important;
+  top: 68% !important;
+}
+
+.studio-handle-in-right {
+  right: -20px !important;
+  top: 32% !important;
+}
+
+.studio-edge-add {
+  opacity: 0.92;
+}
+
+.studio-edge:hover .studio-edge-add,
+.studio-edge.is-selected .studio-edge-add,
+.studio-edge.is-hovered .studio-edge-add {
+  opacity: 1;
 }
 
 .studio-edge-base {
@@ -4144,4 +4182,85 @@ select {
 .node-command-list button:hover,
 .node-open-library:hover {
   background: rgba(226, 232, 240, 0.09) !important;
+}
+
+.creation-prompt-stack {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.creation-mentioned-references {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.creation-mentioned-references button {
+  display: inline-flex;
+  max-width: 210px;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid rgba(226, 232, 240, 0.12);
+  border-radius: 8px;
+  background: rgba(226, 232, 240, 0.075);
+  padding: 3px 6px 3px 3px;
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 11px;
+  transition: border-color 160ms ease, background 160ms ease, transform 160ms ease;
+}
+
+.creation-mentioned-references button:hover {
+  border-color: rgba(226, 232, 240, 0.4);
+  background: rgba(226, 232, 240, 0.13);
+  transform: translateY(-1px);
+}
+
+.creation-mentioned-references img,
+.creation-mentioned-references svg {
+  width: 22px;
+  height: 22px;
+  flex: 0 0 auto;
+  border-radius: 6px;
+  object-fit: cover;
+}
+
+.creation-mentioned-references span {
+  color: rgba(226, 232, 240, 0.58);
+}
+
+.creation-mentioned-references strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 650;
+}
+
+.creation-mentioned-references small {
+  color: rgba(226, 232, 240, 0.42);
+  font-size: 10px;
+}
+
+.creation-reference-strip small {
+  display: grid;
+  max-width: 76px !important;
+  gap: 1px;
+  line-height: 1.1;
+}
+
+.creation-reference-strip small b,
+.creation-reference-strip small span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.creation-reference-strip small b {
+  color: rgba(255, 255, 255, 0.82);
+  font-weight: 700;
 }

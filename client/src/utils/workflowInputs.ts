@@ -5,6 +5,7 @@ export type AssetInput = {
   sourceNodeId: string;
   nodeType?: string;
   sourceNodeType?: string;
+  title?: string;
   assetId?: string;
   url?: string;
   localPath?: string;
@@ -19,6 +20,7 @@ function toAssetInput(node: Node): AssetInput {
     sourceNodeId: node.id,
     nodeType: node.type,
     sourceNodeType: node.type,
+    title: (data.title ?? data.name ?? data.fileName) as string | undefined,
     assetId: (data.assetId ?? data.outputAssetId) as string | undefined,
     url: (data.url ?? data.imageUrl ?? data.outputUrl) as string | undefined,
     localPath: data.localPath as string | undefined,
