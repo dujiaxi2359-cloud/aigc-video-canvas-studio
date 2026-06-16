@@ -1,25 +1,17 @@
 import type { MouseEvent } from "react";
-import { useMemo, useState } from "react";
-import { motion, useReducedMotion } from "framer-motion";
+import { useEffect, useRef, useState } from "react";
+import { motion } from "framer-motion";
 import {
-  ArrowRight,
-  Check,
   Clapperboard,
-  Database,
   Image,
   Link2,
   Palette,
-  Play,
   Send,
-  ShieldCheck,
   Sparkles,
-  UsersRound,
-  Video,
   type LucideIcon
 } from "lucide-react";
 import type { Page } from "../App";
 import { HomeTopNav } from "../components/home/HomeTopNav";
-import { HomeLaunchIntro } from "../components/home/HomeLaunchIntro";
 import { useCanvasStore } from "../store/canvasStore";
 import { useProjectStore } from "../store/projectStore";
 
@@ -30,12 +22,6 @@ const quickPrompts = [
   { label: "电商主图", prompt: "为新品生成一组高级电商主图，突出材质、卖点和使用场景。", mode: "photos" as const },
   { label: "产品视频", prompt: "把产品主图生成 15 秒竖屏商业短视频，包含开场、卖点展示和结尾定格。", mode: "video" as const },
   { label: "图生视频", prompt: "基于商品图片生成短视频镜头，风格干净高级，适合投放和社媒展示。", mode: "video" as const }
-];
-
-const proofItems: Array<{ label: string; value: string; icon: LucideIcon }> = [
-  { label: "Unified API", value: "一次配置，图文视频共用", icon: ShieldCheck },
-  { label: "Asset Logic", value: "素材与项目集中管理", icon: Database },
-  { label: "Team Flow", value: "流程沉淀，团队复用", icon: UsersRound }
 ];
 
 const toolCards: Array<{
@@ -94,93 +80,23 @@ function inferMode(prompt: string): "photos" | "video" {
   return "video";
 }
 
-function ProductPreview({ type }: { type: "photos" | "video" }) {
-  if (type === "photos") {
-    return (
-      <div className="home-product-preview home-product-preview-photos">
-        <div className="home-preview-titlebar">
-          <div className="home-preview-dots" aria-hidden="true">
-            <span />
-            <span />
-            <span />
-          </div>
-          <span className="home-preview-title">商品主图 · 1:1</span>
-          <span className="home-preview-status">已同步</span>
-        </div>
-        <div className="home-preview-frame home-preview-frame-photos">
-          <div className="home-preview-rail">
-            {[Image, Palette, Sparkles].map((Tool, index) => (
-              <Tool key={index} size={17} className={index === 0 ? "text-white" : "text-white/42"} />
-            ))}
-          </div>
-          <div className="home-preview-photo-stage">
-            <img src="/home-assets/commerce-image-studio.jpg" alt="商品视觉生产预览" />
-            <div className="home-preview-photo-label">NEW SEASON</div>
-          </div>
-          <div className="home-preview-props">
-            <div className="home-preview-props-title">属性</div>
-            <div className="home-preview-bars">
-              {[72, 54, 82].map((width) => (
-                <span key={width}>
-                  <i style={{ width: `${width}%` }} />
-                </span>
-              ))}
-            </div>
-            <div className="home-preview-swatches">
-              {["#dfe7e2", "#76b9ad", "#25292b"].map((color) => (
-                <span key={color} style={{ backgroundColor: color }} />
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="home-product-preview home-product-preview-video">
-      <div className="home-preview-titlebar">
-        <Play size={15} className="text-[#f3a077]" />
-        <span className="home-preview-title">商品短视频 · 00:15</span>
-        <span className="home-preview-resolution">1080 × 1920</span>
-      </div>
-      <div className="home-preview-frame home-preview-frame-video">
-        <img src="/home-assets/video-workflow.jpg" alt="无限画布视频流程预览" className="home-preview-video-image" />
-        <div className="home-preview-video-grid" />
-        <svg className="home-preview-flow-line" viewBox="0 0 420 210" preserveAspectRatio="none" aria-hidden="true">
-          <path d="M76 116 C128 116 132 64 178 64 S232 136 278 136 S326 88 374 88" />
-        </svg>
-        <div className="home-preview-node home-preview-node-a">
-          <strong>商品素材</strong>
-          <span />
-        </div>
-        <div className="home-preview-node home-preview-node-b">
-          <strong>镜头生成</strong>
-          <span />
-        </div>
-        <div className="home-preview-node home-preview-node-c">
-          <strong>成片输出</strong>
-          <span />
-        </div>
-        <div className="home-preview-timeline">
-          <span />
-          <span />
-          <span />
-          <i />
-        </div>
-      </div>
-    </div>
-  );
-}
-
 export function BrandGatewayPage({ onNavigate }: { onNavigate: (page: Page, projectId?: string) => void }) {
-  const reduceMotion = useReducedMotion();
   const [prompt, setPrompt] = useState("");
+  const promptInputRef = useRef<HTMLInputElement>(null);
+  const promptSectionRef = useRef<HTMLElement>(null);
   const clearCanvas = useCanvasStore((state) => state.clearCanvas);
   const addNode = useCanvasStore((state) => state.addNode);
   const updateNodeData = useCanvasStore((state) => state.updateNodeData);
   const createProject = useProjectStore((state) => state.createProject);
-  const heroTitle = useMemo(() => ["一套工作台", "完成商业内容生产"], []);
+
+  useEffect(() => {
+    const focusPrompt = () => {
+      promptSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      window.setTimeout(() => promptInputRef.current?.focus(), 220);
+    };
+    window.addEventListener("home:focusPrompt", focusPrompt);
+    return () => window.removeEventListener("home:focusPrompt", focusPrompt);
+  }, []);
 
   function updateSpotlight(event: MouseEvent<HTMLDivElement>) {
     const rect = event.currentTarget.getBoundingClientRect();
@@ -243,107 +159,17 @@ export function BrandGatewayPage({ onNavigate }: { onNavigate: (page: Page, proj
       transition={{ duration: 0.28 }}
       onMouseMove={updateSpotlight}
     >
-      <HomeLaunchIntro />
       <HomeTopNav page="home" onNavigate={onNavigate} />
 
       <main className="home-flagship-content">
-        <section className="mx-auto grid min-h-[calc(100vh-72px)] max-w-[1480px] items-center gap-16 px-5 pb-24 pt-32 md:px-10 lg:grid-cols-[0.84fr_1.16fr]">
-          <motion.div variants={fadeUp} initial="hidden" animate="show" transition={{ duration: 0.62, ease: [0.22, 1, 0.36, 1] }}>
-            <div className="home-eyebrow">
-              <span className="h-px w-10 bg-white/18" />
-              <span>Enterprise AIGC OS</span>
-            </div>
-            <h1 className="mt-8 max-w-[720px] text-[44px] font-black leading-[1.04] tracking-[-0.045em] text-white md:text-[68px] xl:text-[82px]">
-              <span className="block">{heroTitle[0]}</span>
-              <span className="block text-white/36">{heroTitle[1]}</span>
-            </h1>
-            <p className="mt-7 max-w-[650px] text-[16px] leading-8 text-white/48 md:text-[19px]">
-              面向电商品牌、内容团队与专业创作者，统一完成商品主图、详情页、营销海报与短视频生产。客户只需要配置一次 API，图文与视频能力即可在同一套工作台中复用。
-            </p>
-            <div className="mt-10 flex flex-wrap gap-4">
-              <button type="button" className="studio-primary-button h-12 px-6" onClick={() => void beginPhotos()}>
-                开始图文制作 <ArrowRight size={17} />
-              </button>
-              <button type="button" className="studio-secondary-button h-12 px-6" onClick={() => void beginVideo()}>
-                进入视频工作流 <Video size={17} />
-              </button>
-            </div>
-            <div className="mt-14 grid max-w-[700px] grid-cols-1 gap-6 border-t border-white/[0.07] pt-8 sm:grid-cols-3">
-              {proofItems.map((item) => {
-                const Icon = item.icon;
-                return (
-                  <div key={item.label} className="min-w-0">
-                    <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.28em] text-white/22">
-                      <Icon size={12} /> {item.label}
-                    </div>
-                    <div className="mt-3 text-[14px] font-semibold text-white/76">{item.value}</div>
-                  </div>
-                );
-              })}
-            </div>
-          </motion.div>
-
-          <motion.div
-            className="grid gap-7 xl:grid-cols-2"
-            variants={{ hidden: {}, show: { transition: { staggerChildren: 0.1 } } }}
-            initial="hidden"
-            animate="show"
-          >
-            <motion.button
-              type="button"
-              onClick={() => void beginPhotos()}
-              className="home-showcase-card group text-left"
-              variants={fadeUp}
-              transition={{ duration: 0.54, ease: [0.22, 1, 0.36, 1] }}
-              whileHover={reduceMotion ? undefined : { y: -7 }}
-            >
-              <div className="home-showcase-cover home-showcase-cover-photos">
-                <span className="home-showcase-icon"><Image size={28} /></span>
-                <span className="home-showcase-chip">商品视觉生产</span>
-                <ProductPreview type="photos" />
-              </div>
-              <div className="home-showcase-body">
-                <div className="home-showcase-meta"><span>01</span><span /> <span>Commerce Image Studio</span></div>
-                <div className="flex items-center justify-between gap-4">
-                  <h2>电商图文工作台</h2>
-                  <ArrowRight size={24} className="transition group-hover:translate-x-1" />
-                </div>
-                <p>从商品主图、详情页到营销海报，集中完成批量生成、视觉优化与多规格交付。</p>
-              </div>
-            </motion.button>
-
-            <motion.button
-              type="button"
-              onClick={() => void beginVideo()}
-              className="home-showcase-card group text-left"
-              variants={fadeUp}
-              transition={{ duration: 0.54, ease: [0.22, 1, 0.36, 1] }}
-              whileHover={reduceMotion ? undefined : { y: -7 }}
-            >
-              <div className="home-showcase-cover home-showcase-cover-video">
-                <span className="home-showcase-icon"><Video size={28} /></span>
-                <span className="home-showcase-chip">无限画布视频</span>
-                <ProductPreview type="video" />
-              </div>
-              <div className="home-showcase-body">
-                <div className="home-showcase-meta"><span>02</span><span /> <span>Video Workflow</span></div>
-                <div className="flex items-center justify-between gap-4">
-                  <h2>AI 视频工作流</h2>
-                  <ArrowRight size={24} className="transition group-hover:translate-x-1" />
-                </div>
-                <p>串联脚本、素材、镜头与模型生成，让团队用可复用流程稳定产出商业短视频。</p>
-              </div>
-            </motion.button>
-          </motion.div>
-        </section>
-
-        <section className="mx-auto max-w-[960px] px-5 py-24 text-center md:px-10">
+        <section ref={promptSectionRef} className="mx-auto grid min-h-[calc(100vh-72px)] max-w-[980px] place-items-center px-5 pb-24 pt-32 text-center md:px-10">
           <motion.div variants={fadeUp} initial="hidden" whileInView="show" viewport={{ once: true, amount: 0.35 }} transition={{ duration: 0.54 }}>
             <h2 className="text-[36px] font-black tracking-[-0.035em] text-white md:text-[56px]">描述你的创意</h2>
             <p className="mt-4 text-[16px] text-white/38">输入一句话，自动生成可继续编辑的图文或视频画布</p>
             <div className="home-prompt-terminal mt-12">
               <div className="home-prompt-input">
                 <input
+                  ref={promptInputRef}
                   value={prompt}
                   onChange={(event) => setPrompt(event.target.value)}
                   onKeyDown={(event) => {
