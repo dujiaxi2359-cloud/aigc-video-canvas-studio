@@ -67,15 +67,19 @@ export function configuredMailProfiles() {
   ].filter(Boolean) as MailProfile[];
 }
 
-function profileForRecipient(email: string) {
+function profilesForRecipient(email: string) {
   const profiles = configuredMailProfiles();
   const domain = email.split("@")[1] || "";
-  const requiredProfile = domain === "gmail.com" || domain === "googlemail.com"
+  const preferredProfile = domain === "gmail.com" || domain === "googlemail.com"
     ? "gmail"
     : domain === "qq.com"
       ? "qq"
       : "primary";
-  return profiles.find((profile) => profile.id === requiredProfile);
+  const preferred = profiles.find((profile) => profile.id === preferredProfile);
+  return [
+    ...(preferred ? [preferred] : []),
+    ...profiles.filter((profile) => profile.id !== preferredProfile)
+  ];
 }
 
 async function addressesForProfile(profile: MailProfile) {
@@ -111,24 +115,36 @@ function transportFor(profile: MailProfile, address: string) {
 }
 
 async function sendLoginCode(email: string, code: string) {
-  const profile = profileForRecipient(email);
-  if (profile) {
-    const addresses = await addressesForProfile(profile);
-    for (const address of addresses) {
+  const profiles = profilesForRecipient(email);
+  if (profiles.length) {
+    let failed = false;
+    for (const profile of profiles) {
+      let addresses: string[] = [];
       try {
-        await transportFor(profile, address).sendMail({
-          from: profile.from,
-          to: email,
-          subject: "AIGCNONG 登录验证码",
-          text: `你的登录验证码是 ${code}，10 分钟内有效。请勿将验证码转发给他人。`,
-          html: `<div style="font-family:Arial,sans-serif;color:#161616;line-height:1.6"><h2>AIGCNONG 登录验证</h2><p>你的登录验证码是：</p><p style="font-size:30px;font-weight:700;letter-spacing:8px">${code}</p><p>验证码 10 分钟内有效，请勿转发给他人。</p></div>`
-        });
-        return { delivery: `smtp:${profile.id}` as const };
+        addresses = await addressesForProfile(profile);
       } catch (error) {
-        console.error(`[auth:email-send-failed:${profile.id}:${address}]`, error instanceof Error ? error.message : error);
+        failed = true;
+        console.error(`[auth:email-resolve-failed:${profile.id}]`, error instanceof Error ? error.message : error);
+        continue;
+      }
+
+      for (const address of addresses) {
+        try {
+          await transportFor(profile, address).sendMail({
+            from: profile.from,
+            to: email,
+            subject: "AIGCNONG 登录验证码",
+            text: `你的登录验证码是 ${code}，10 分钟内有效。请勿将验证码转发给他人。`,
+            html: `<div style="font-family:Arial,sans-serif;color:#161616;line-height:1.6"><h2>AIGCNONG 登录验证</h2><p>你的登录验证码是：</p><p style="font-size:30px;font-weight:700;letter-spacing:8px">${code}</p><p>验证码 10 分钟内有效，请勿转发给他人。</p></div>`
+          });
+          return { delivery: `smtp:${profile.id}` as const };
+        } catch (error) {
+          failed = true;
+          console.error(`[auth:email-send-failed:${profile.id}:${address}]`, error instanceof Error ? error.message : error);
+        }
       }
     }
-    throw new Error("EMAIL_SEND_FAILED");
+    if (failed) throw new Error("EMAIL_SEND_FAILED");
   }
   if (process.env.AUTH_ALLOW_MOCK_EMAIL === "true" && process.env.NODE_ENV !== "production") {
     console.log(`[auth:mock-email] ${email} login code: ${code}`);
