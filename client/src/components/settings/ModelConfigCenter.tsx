@@ -9,6 +9,7 @@ import type { ModelCapabilities, ModelCatalogItem, ModelConfig, ModelType } from
 
 type ApiMode = "platform" | "custom";
 type ModelCategory = "image" | "video" | "text";
+const lastApiRouteStorageKey = "aigcnong-last-custom-api-route";
 
 const categoryMeta: Record<ModelCategory, { label: string; icon: typeof Image; activeClass: string }> = {
   image: { label: "图文模型", icon: Image, activeClass: "border-cyan-200/30 bg-cyan-300/[0.10] text-cyan-100" },
@@ -462,6 +463,24 @@ function groupEnabledModels(models: ModelConfig[]): EnabledModelGroup[] {
   return Array.from(groups.values());
 }
 
+function savedApiRoutes(models: ModelConfig[]) {
+  const routes = new Map<string, { baseUrl: string; host: string; count: number; updatedAt: number }>();
+  for (const model of models) {
+    const baseUrl = normalizeBaseUrl(model.apiBaseUrl);
+    if (!baseUrl) continue;
+    const key = baseUrl.toLowerCase();
+    const existing = routes.get(key);
+    const updatedAt = model.updatedAt ?? model.createdAt ?? 0;
+    if (existing) {
+      existing.count += 1;
+      existing.updatedAt = Math.max(existing.updatedAt, updatedAt);
+      continue;
+    }
+    routes.set(key, { baseUrl, host: apiHost(baseUrl) || baseUrl, count: 1, updatedAt });
+  }
+  return Array.from(routes.values()).sort((a, b) => b.updatedAt - a.updatedAt);
+}
+
 export function ModelConfigCenter() {
   const { modelConfigs, fetchModelConfigs, saveModelConfigsBulk, deleteModelConfigs } = useModelConfigStore();
   const [mode, setMode] = useState<ApiMode>("custom");
@@ -482,9 +501,15 @@ export function ModelConfigCenter() {
     });
   }, [fetchModelConfigs]);
 
+  useEffect(() => {
+    const saved = typeof window !== "undefined" ? window.localStorage.getItem(lastApiRouteStorageKey) : "";
+    if (saved) setApiBaseUrl(saved);
+  }, []);
+
   const videoConfigs = useMemo(() => modelConfigs.filter((model) => model.category === "video" || ["text-to-video", "image-to-video", "video-to-video"].includes(model.modelType)), [modelConfigs]);
   const imageConfigs = useMemo(() => modelConfigs.filter((model) => model.category === "image" || ["text-to-image", "image-to-image", "image-edit", "image"].includes(model.modelType)), [modelConfigs]);
   const textConfigs = useMemo(() => modelConfigs.filter((model) => model.category === "text" || model.modelType === "text"), [modelConfigs]);
+  const apiRoutes = useMemo(() => savedApiRoutes(modelConfigs), [modelConfigs]);
   const categorizedFetchedModels = useMemo(() => ({
     image: fetchedModels.filter((model) => classifyModel(model) === "image"),
     video: fetchedModels.filter((model) => classifyModel(model) === "video"),
@@ -540,7 +565,10 @@ export function ModelConfigCenter() {
     setBusy("pull");
     setMessage("");
     try {
-      const result = await modelConfigApi.probe({ apiBaseUrl, apiKey, validationPath: "/models", pullModels: true });
+      const normalizedBaseUrl = normalizeBaseUrl(apiBaseUrl);
+      const result = await modelConfigApi.probe({ apiBaseUrl: normalizedBaseUrl, apiKey, validationPath: "/models", pullModels: true });
+      if (typeof window !== "undefined") window.localStorage.setItem(lastApiRouteStorageKey, normalizedBaseUrl);
+      setApiBaseUrl(normalizedBaseUrl);
       setMessage(result.message);
       setMessageTone(result.success ? "success" : "danger");
       if (result.models.length) {
@@ -591,6 +619,9 @@ export function ModelConfigCenter() {
         } satisfies Partial<ModelConfig> & { apiKey?: string };
       });
       const result = await saveModelConfigsBulk(payloads, false);
+      const savedRoute = normalizeBaseUrl(apiBaseUrl);
+      if (typeof window !== "undefined") window.localStorage.setItem(lastApiRouteStorageKey, savedRoute);
+      setApiBaseUrl(savedRoute);
       setManualModel("");
       const counts = models.reduce((result, model) => {
         result[classifyModel(model)] += 1;
@@ -687,6 +718,31 @@ export function ModelConfigCenter() {
                       </Button>
                     </div>
                   </div>
+                  {apiRoutes.length > 0 && (
+                    <div className="rounded-[14px] border border-white/[0.06] bg-black/20 p-3">
+                      <div className="mb-2 text-[11px] font-medium text-white/42">已保存 API 线路，点击可回填当前输入框</div>
+                      <div className="flex flex-wrap gap-2">
+                        {apiRoutes.map((route) => {
+                          const active = normalizeBaseUrl(apiBaseUrl).toLowerCase() === route.baseUrl.toLowerCase();
+                          return (
+                            <button
+                              key={route.baseUrl}
+                              type="button"
+                              title={route.baseUrl}
+                              onClick={() => {
+                                setApiBaseUrl(route.baseUrl);
+                                if (typeof window !== "undefined") window.localStorage.setItem(lastApiRouteStorageKey, route.baseUrl);
+                              }}
+                              className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[12px] transition ${active ? "border-violet-200/35 bg-violet-300/[0.14] text-violet-50" : "border-white/[0.08] bg-white/[0.035] text-white/50 hover:bg-white/[0.07] hover:text-white/75"}`}
+                            >
+                              <span>{route.host}</span>
+                              <span className="rounded-full bg-black/25 px-1.5 py-0.5 text-[10px] text-white/45">{route.count}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
 
                   <StatusMessage message={message} tone={messageTone} />
 

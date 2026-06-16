@@ -447,7 +447,7 @@ const runApiBody = buildProxyBody({
   seconds: "8"
 }) as Record<string, any>;
 assert(runApiBody.images[0] === "https://assets.example/frame.png", "RunAPI video create should send images as string[]");
-assert(runApiBody.duration === "8", "RunAPI video create should send duration");
+assert(runApiBody.duration === 8, "RunAPI video create should send numeric duration");
 assert(runApiBody.size === "720P", "RunAPI video create should send size");
 assert(
   veoProxyCreateEndpoint("POST https://relay.example/v1/video/create") === "https://relay.example/v1/video/create",

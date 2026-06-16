@@ -637,7 +637,7 @@ export function buildProxyBody(params: SeedanceProviderParams, refs: {
         video: refs.videos[0],
         audio: refs.audios[0],
         aspect_ratio: refs.aspectRatio,
-        duration: refs.seconds === "auto" ? undefined : refs.seconds,
+        duration: refs.seconds === "auto" ? undefined : Number(refs.seconds),
         size: refs.resolution.toUpperCase(),
         resolution: refs.resolution
       });
