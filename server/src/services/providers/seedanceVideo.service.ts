@@ -574,6 +574,76 @@ function isRunApiVideoCreate(params: SeedanceProviderParams) {
   return /runapi\.co/.test(value);
 }
 
+type PollResult = {
+  endpoint: string;
+  response: Response;
+  task: Record<string, unknown>;
+};
+
+function pollHeaders(params: SeedanceProviderParams, json = false) {
+  return compactObject({
+    Authorization: `Bearer ${params.apiKey}`,
+    Accept: "application/json",
+    "Content-Type": json ? "application/json" : undefined
+  }) as Record<string, string>;
+}
+
+function runApiQueryEndpoint(params: SeedanceProviderParams) {
+  const baseUrl = params.videoRequestConfig?.baseUrl ?? params.apiBaseUrl;
+  return joinUrl(baseUrl, "/v1/video/query");
+}
+
+function runApiPollAttempts(params: SeedanceProviderParams, taskIdValue: string): Array<{ endpoint: string; init: RequestInit }> {
+  const queryEndpoint = runApiQueryEndpoint(params);
+  const encoded = encodeURIComponent(taskIdValue);
+  return [
+    {
+      endpoint: `${queryEndpoint}?id=${encoded}`,
+      init: { method: "GET", headers: pollHeaders(params) }
+    },
+    {
+      endpoint: `${queryEndpoint}?task_id=${encoded}`,
+      init: { method: "GET", headers: pollHeaders(params) }
+    },
+    {
+      endpoint: queryEndpoint,
+      init: { method: "POST", headers: pollHeaders(params, true), body: JSON.stringify({ id: taskIdValue }) }
+    },
+    {
+      endpoint: queryEndpoint,
+      init: { method: "POST", headers: pollHeaders(params, true), body: JSON.stringify({ task_id: taskIdValue }) }
+    },
+    {
+      endpoint: joinUrl(queryEndpoint, encoded),
+      init: { method: "GET", headers: pollHeaders(params) }
+    }
+  ];
+}
+
+function shouldTryNextPollAttempt(response: Response, payload: Record<string, unknown>) {
+  if (response.ok) return false;
+  const message = `${response.status} ${JSON.stringify(payload)}`;
+  return /invalid url|not found|cannot\s+(?:get|post)|method not allowed|route|endpoint/i.test(message);
+}
+
+async function fetchPollTask(params: SeedanceProviderParams, pollEndpoint: string, taskIdValue: string): Promise<PollResult> {
+  if (!isRunApiVideoCreate(params)) {
+    const response = await fetch(pollEndpoint, {
+      headers: pollHeaders(params)
+    });
+    return { endpoint: pollEndpoint, response, task: await responsePayload(response) };
+  }
+
+  let last: PollResult | undefined;
+  for (const attempt of runApiPollAttempts(params, taskIdValue)) {
+    const response = await fetch(attempt.endpoint, attempt.init);
+    const task = await responsePayload(response);
+    last = { endpoint: attempt.endpoint, response, task };
+    if (!shouldTryNextPollAttempt(response, task)) return last;
+  }
+  return last!;
+}
+
 export function buildProxyBody(params: SeedanceProviderParams, refs: {
   apiFamily: VideoApiFamily;
   mode: string;
@@ -910,11 +980,17 @@ export async function generateVideoWithSeedance(params: SeedanceProviderParams):
           throw new ProviderError("VEO_OPERATION_TIMEOUT", `${label} 中转任务超过 20 分钟仍未完成。`);
         }
         await sleep(5000);
-        const pollResponse = await fetch(pollEndpoint, {
-          headers: { Authorization: `Bearer ${params.apiKey}`, Accept: "application/json" }
+        const pollResult = await fetchPollTask(params, pollEndpoint, id);
+        task = pollResult.task;
+        await saveGenerationTask({
+          id,
+          status: configuredStatus(task, params.videoRequestConfig) || "processing",
+          result: {
+            ...task,
+            pollEndpoint: pollResult.endpoint
+          }
         });
-        task = await responsePayload(pollResponse);
-        await saveGenerationTask({ id, status: configuredStatus(task, params.videoRequestConfig) || "processing", result: task });
+        const pollResponse = pollResult.response;
         if (!pollResponse.ok) throw new ProviderError("PROVIDER_ERROR", `${label} 中转任务查询失败：${errorMessage(task)}`, preview(task));
         remoteUrl = videoUrl(configuredResult(task, params.videoRequestConfig));
       }
