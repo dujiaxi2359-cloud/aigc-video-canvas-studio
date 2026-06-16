@@ -57,6 +57,14 @@ export function SettingsPage({ onNavigate }: { onNavigate: (page: Page) => void 
       </div>
 
       {isAdmin && <CommercialAdminPanel />}
+      {!isAdmin && (
+        <section className="mx-auto mb-6 max-w-[1180px] rounded-[22px] border border-amber-200/15 bg-amber-300/[0.055] px-5 py-4 text-[13px] text-amber-50/80">
+          <div className="font-semibold text-amber-50">客户后台需要管理员权限</div>
+          <p className="mt-1 text-amber-50/55">
+            当前账号角色是 {user?.role || "guest"}，所以邀请码、客户列表和额度管理会被隐藏。管理员刷新登录状态后会在这里看到完整管理者后台。
+          </p>
+        </section>
+      )}
 
       <div className="mx-auto max-w-[1180px]">
         <AgentSettingsPanel />
