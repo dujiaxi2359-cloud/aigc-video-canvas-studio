@@ -1,6 +1,6 @@
 import { ModelConfigCenter } from "../components/settings/ModelConfigCenter";
 import { AgentSettingsPanel } from "../components/settings/AgentSettingsPanel";
-import { ArrowLeft, KeyRound, ShieldCheck, SlidersHorizontal, Sparkles, UsersRound } from "lucide-react";
+import { ArrowLeft, KeyRound, ShieldCheck, SlidersHorizontal, Sparkles } from "lucide-react";
 import type { Page } from "../App";
 import { CommercialAdminPanel } from "../components/settings/CommercialAdminPanel";
 import { useAuthStore } from "../store/authStore";
@@ -28,13 +28,13 @@ export function SettingsPage({ onNavigate }: { onNavigate: (page: Page) => void 
               </div>
               <h1 className="mt-3 text-[28px] font-semibold tracking-[-0.03em] text-white">设置中心</h1>
               <p className="mt-2 max-w-[760px] text-[13px] leading-6 text-white/42">
-                邀请码、客户额度、Agent 自动化和模型 API 接入都在这里统一管理。视频节点只读取这里保存的官方模型能力与当前通道配置。
+                管理 Agent 自动化与模型 API 接入。视频节点会读取这里启用的模型和当前通道设置。
               </p>
             </div>
           </div>
           <div className="grid gap-2 sm:grid-cols-3 lg:w-[430px]">
             {[
-              { icon: UsersRound, label: "客户后台", active: isAdmin },
+              { icon: ShieldCheck, label: "管理后台", active: isAdmin },
               { icon: Sparkles, label: "Agent 配置", active: true },
               { icon: KeyRound, label: "API 接入", active: true }
             ].map((item) => {
@@ -59,9 +59,9 @@ export function SettingsPage({ onNavigate }: { onNavigate: (page: Page) => void 
       {isAdmin && <CommercialAdminPanel />}
       {!isAdmin && (
         <section className="mx-auto mb-6 max-w-[1180px] rounded-[22px] border border-amber-200/15 bg-amber-300/[0.055] px-5 py-4 text-[13px] text-amber-50/80">
-          <div className="font-semibold text-amber-50">客户后台需要管理员权限</div>
+          <div className="font-semibold text-amber-50">管理后台仅管理员可见</div>
           <p className="mt-1 text-amber-50/55">
-            当前账号角色是 {user?.role || "guest"}，所以邀请码、客户列表和额度管理会被隐藏。管理员刷新登录状态后会在这里看到完整管理者后台。
+            当前账号角色是 {user?.role || "guest"}，管理员登录后会显示邀请码、客户和额度管理。
           </p>
         </section>
       )}

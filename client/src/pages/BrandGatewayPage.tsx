@@ -11,6 +11,7 @@ import {
   type LucideIcon
 } from "lucide-react";
 import type { Page } from "../App";
+import { HomeLaunchIntro } from "../components/home/HomeLaunchIntro";
 import { HomeTopNav } from "../components/home/HomeTopNav";
 import { useCanvasStore } from "../store/canvasStore";
 import { useProjectStore } from "../store/projectStore";
@@ -159,11 +160,12 @@ export function BrandGatewayPage({ onNavigate }: { onNavigate: (page: Page, proj
       transition={{ duration: 0.28 }}
       onMouseMove={updateSpotlight}
     >
+      <HomeLaunchIntro />
       <HomeTopNav page="home" onNavigate={onNavigate} />
 
       <main className="home-flagship-content">
-        <section ref={promptSectionRef} className="mx-auto grid min-h-[calc(100vh-72px)] max-w-[980px] place-items-center px-5 pb-24 pt-32 text-center md:px-10">
-          <motion.div variants={fadeUp} initial="hidden" whileInView="show" viewport={{ once: true, amount: 0.35 }} transition={{ duration: 0.54 }}>
+        <section ref={promptSectionRef} className="mx-auto grid min-h-[calc(100vh-72px)] max-w-[1240px] place-items-center px-5 pb-24 pt-32 text-center md:px-10">
+          <motion.div className="w-full" variants={fadeUp} initial="hidden" whileInView="show" viewport={{ once: true, amount: 0.35 }} transition={{ duration: 0.54 }}>
             <h2 className="text-[36px] font-black tracking-[-0.035em] text-white md:text-[56px]">描述你的创意</h2>
             <p className="mt-4 text-[16px] text-white/38">输入一句话，自动生成可继续编辑的图文或视频画布</p>
             <div className="home-prompt-terminal mt-12">

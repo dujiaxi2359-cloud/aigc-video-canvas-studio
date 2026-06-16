@@ -71,7 +71,7 @@ export function HomeTopNav({ page, onNavigate }: { page: Page; onNavigate: (page
             <strong>{auth.user?.email}</strong>
           </div>
           <div className="studio-account-divider" />
-          <button type="button" onClick={() => { setAccountOpen(false); onNavigate("settings"); }}><Zap size={14}/> Spark 充值</button>
+          <button type="button" onClick={() => { setAccountOpen(false); onNavigate("settings"); }}><Zap size={14}/> 充值</button>
           <button type="button" onClick={() => { setAccountOpen(false); onNavigate("settings"); }}><Settings size={14}/> 用户设置</button>
           <div className="studio-account-divider" />
           {auth.workspaces.map((workspace)=><button key={workspace.id} type="button" className={workspace.id===auth.activeWorkspaceId?"is-active":""} onClick={()=>{auth.selectWorkspace(workspace.id);setAccountOpen(false);window.location.reload();}}><WalletCards size={14}/><span className="min-w-0 flex-1 truncate text-left">{workspace.name}</span><small>{workspace.type === "team" ? "团队" : "个人"}</small></button>)}

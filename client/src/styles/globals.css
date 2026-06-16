@@ -3060,25 +3060,31 @@ select {
 }
 
 .home-prompt-terminal {
+  width: min(100%, 920px);
+  margin-inline: auto;
   border: 1px solid rgba(255, 255, 255, 0.105);
-  border-radius: 28px;
+  border-radius: 30px;
   background:
-    linear-gradient(145deg, rgba(255, 255, 255, 0.036), rgba(255, 255, 255, 0.01)),
+    radial-gradient(circle at 50% 0%, rgba(255, 255, 255, 0.08), transparent 34%),
+    linear-gradient(145deg, rgba(255, 255, 255, 0.042), rgba(255, 255, 255, 0.012)),
     rgba(6, 7, 8, 0.86);
-  padding: 18px;
+  padding: 20px;
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.045),
-    0 34px 100px rgba(0, 0, 0, 0.36);
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 34px 110px rgba(0, 0, 0, 0.42);
+  backdrop-filter: blur(18px);
 }
 
 .home-prompt-input {
   display: flex;
   align-items: center;
-  gap: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 18px;
+  min-height: 86px;
+  gap: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.115);
+  border-radius: 24px;
   background: rgba(0, 0, 0, 0.42);
-  padding: 10px;
+  padding: 12px;
+  box-shadow: inset 0 1px 18px rgba(255, 255, 255, 0.026);
 }
 
 .home-prompt-input input {
@@ -3086,9 +3092,9 @@ select {
   flex: 1;
   border: 0;
   background: transparent;
-  padding: 16px 18px;
+  padding: 20px 22px;
   color: #fff;
-  font-size: 17px;
+  font-size: 18px;
   font-weight: 500;
   outline: none;
 }
@@ -3099,18 +3105,20 @@ select {
 
 .home-prompt-input button {
   display: grid;
-  width: 54px;
-  height: 54px;
+  width: 66px;
+  height: 66px;
   place-items: center;
   border: 0;
-  border-radius: 16px;
+  border-radius: 20px;
   background: #f4f3ff;
   color: #0b0b0e;
-  transition: transform 160ms ease, background 160ms ease;
+  box-shadow: 0 18px 38px rgba(244, 243, 255, 0.16);
+  transition: transform 160ms ease, background 160ms ease, box-shadow 160ms ease;
 }
 
 .home-prompt-input button:hover {
   background: #fff;
+  box-shadow: 0 22px 46px rgba(244, 243, 255, 0.22);
   transform: scale(0.98);
 }
 
@@ -3118,8 +3126,8 @@ select {
   border: 1px solid rgba(255, 255, 255, 0.09);
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.026);
-  padding: 10px 18px;
-  color: rgba(255, 255, 255, 0.43);
+  padding: 10px 20px;
+  color: rgba(255, 255, 255, 0.5);
   font-size: 13px;
   font-weight: 700;
   transition: border-color 180ms ease, color 180ms ease, background 180ms ease;
