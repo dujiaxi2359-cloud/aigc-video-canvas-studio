@@ -2443,7 +2443,8 @@ select {
   display: none;
 }
 
-.creation-reference-strip > span {
+.creation-reference-strip > span,
+.creation-reference-strip > button {
   display: inline-flex;
   height: 38px;
   flex: 0 0 auto;
@@ -2454,6 +2455,18 @@ select {
   border-radius: 9px;
   background: rgba(255, 255, 255, 0.04);
   color: rgba(255, 255, 255, 0.6);
+}
+
+.creation-reference-strip > button {
+  cursor: pointer;
+  transition: border-color 160ms ease, background 160ms ease, color 160ms ease, transform 160ms ease;
+}
+
+.creation-reference-strip > button:hover {
+  border-color: rgba(154, 143, 255, 0.42);
+  background: rgba(132, 111, 255, 0.16);
+  color: rgba(255, 255, 255, 0.9);
+  transform: translateY(-1px);
 }
 
 .creation-reference-strip img {
@@ -2690,7 +2703,8 @@ select {
   padding-top: 1px;
 }
 
-.creation-reference-strip > span {
+.creation-reference-strip > span,
+.creation-reference-strip > button {
   height: 38px;
   border-color: rgba(255, 255, 255, 0.1);
   border-radius: 8px;

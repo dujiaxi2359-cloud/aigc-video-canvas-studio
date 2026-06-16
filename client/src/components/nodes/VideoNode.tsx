@@ -576,6 +576,15 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
     update(props.id, { prompt: next });
   }
 
+  function insertReferenceToken(token: string) {
+    const trimmedRight = localPrompt.replace(/\s+$/g, "");
+    const next = /@+$/.test(trimmedRight)
+      ? trimmedRight.replace(/@+$/, token)
+      : `${trimmedRight}${trimmedRight ? " " : ""}${token}`;
+    setLocalPrompt(next);
+    update(props.id, { prompt: next, errorCode: undefined, errorMessage: undefined, debugMessage: undefined });
+  }
+
   const preview = models.length === 0 ? (
     <div className="creation-preview-empty"><Film size={29} /><span>请先配置视频模型</span></div>
   ) : (
@@ -585,9 +594,9 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
   );
 
   const referencedInputs = [
-    ...resolvedInputs.imageInputs.map((input, index) => ({ input, kind: "图像", kindIndex: index + 1 })),
-    ...resolvedInputs.videoInputs.map((input, index) => ({ input, kind: "视频", kindIndex: index + 1 })),
-    ...resolvedInputs.audioInputs.map((input, index) => ({ input, kind: "音频", kindIndex: index + 1 }))
+    ...resolvedInputs.imageInputs.map((input, index) => ({ input, kind: "图像", kindIndex: index + 1, genericToken: `@素材${index + 1}`, typedToken: `@图像${index + 1}` })),
+    ...resolvedInputs.videoInputs.map((input, index) => ({ input, kind: "视频", kindIndex: index + 1, genericToken: `@素材${resolvedInputs.imageInputs.length + index + 1}`, typedToken: `@视频${index + 1}` })),
+    ...resolvedInputs.audioInputs.map((input, index) => ({ input, kind: "音频", kindIndex: index + 1, genericToken: `@素材${resolvedInputs.imageInputs.length + resolvedInputs.videoInputs.length + index + 1}`, typedToken: `@音频${index + 1}` }))
   ];
   const referencedImageNodeIds = new Set(resolvedInputs.imageInputs.map((input) => input.sourceNodeId));
   const dock = (
@@ -602,7 +611,7 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
         <button type="button" title={expanded ? "收起详情" : "展开详情"} className="creation-detail-toggle" onClick={() => setExpanded((value) => !value)}><Maximize2 size={14} /></button>
       </div>
       <div className="creation-dock-composer">
-        {referencedInputs.length > 0 && <div className="creation-reference-strip">{referencedInputs.map((item, index) => <span key={`${item.input.sourceNodeId}-${index}`} title={`可在提示词中输入 @素材${index + 1} 或 @${item.kind}${item.kindIndex}`}>{item.input.url && referencedImageNodeIds.has(item.input.sourceNodeId) ? <img src={absoluteUploadUrl(item.input.url)} alt="" /> : <Library size={13} />}<small>素材{index + 1} · {item.kind}{item.kindIndex}</small></span>)}</div>}
+        {referencedInputs.length > 0 && <div className="creation-reference-strip">{referencedInputs.map((item, index) => <button type="button" key={`${item.input.sourceNodeId}-${index}`} title={`点击插入 ${item.genericToken}，也可手动输入 ${item.typedToken}`} onClick={() => insertReferenceToken(item.genericToken)}>{item.input.url && referencedImageNodeIds.has(item.input.sourceNodeId) ? <img src={absoluteUploadUrl(item.input.url)} alt="" /> : <Library size={13} />}<small>{item.genericToken.replace("@", "")} · {item.kind}{item.kindIndex}</small></button>)}</div>}
         <Textarea className="creation-prompt-input nodrag nopan nowheel" placeholder="描述你想生成的画面，或输入 @ 引用素材" value={localPrompt} onChange={handlePromptChange} onCompositionStart={handleCompositionStart} onCompositionEnd={handleCompositionEnd} />
       </div>
       {(props.data.errorMessage || localError) && <button type="button" className="creation-error-line" onClick={() => setExpanded(true)}><AlertCircle size={12} /><span>{props.data.errorMessage || localError}</span><strong>诊断</strong></button>}
