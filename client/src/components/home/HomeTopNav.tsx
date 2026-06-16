@@ -22,8 +22,7 @@ export function HomeTopNav({ page, onNavigate }: { page: Page; onNavigate: (page
 
   function handleNav(target: Page) {
     if (target === "photos") {
-      onNavigate("home");
-      window.setTimeout(() => window.dispatchEvent(new CustomEvent("home:focusPrompt")), 80);
+      window.location.assign("/photos");
       return;
     }
     onNavigate(target);
