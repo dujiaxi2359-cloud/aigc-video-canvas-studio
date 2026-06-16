@@ -417,6 +417,29 @@ function configuredStatus(payload: Record<string, unknown>, config?: VideoReques
   return value ? value.toLowerCase() : "";
 }
 
+const completedStatuses = new Set(["completed", "succeeded", "success", "done", "finished"]);
+const failedStatuses = new Set(["failed", "error", "cancelled", "canceled"]);
+
+function isCompletedStatus(status: string) {
+  return completedStatuses.has(status.toLowerCase());
+}
+
+function isFailedStatus(status: string) {
+  return failedStatuses.has(status.toLowerCase());
+}
+
+function progressValue(payload: Record<string, unknown>) {
+  const direct = payload.progress ?? payload.percent ?? payload.percentage;
+  if (typeof direct === "number" && Number.isFinite(direct)) return Math.max(0, Math.min(100, Math.round(direct)));
+  if (typeof direct === "string") {
+    const match = direct.match(/(\d+(?:\.\d+)?)/);
+    if (match?.[1]) return Math.max(0, Math.min(100, Math.round(Number(match[1]))));
+  }
+  const nested = record(payload.data ?? payload.result ?? payload.output);
+  if (nested !== payload && Object.keys(nested).length) return progressValue(nested);
+  return undefined;
+}
+
 function configuredResult(payload: Record<string, unknown>, config?: VideoRequestConfig) {
   if (!config?.resultField) return payload;
   const result = payload[config.resultField];
@@ -626,6 +649,12 @@ function shouldTryNextPollAttempt(response: Response, payload: Record<string, un
   if (response.ok) return false;
   const message = `${response.status} ${JSON.stringify(payload)}`;
   return /invalid url|not found|cannot\s+(?:get|post)|method not allowed|route|endpoint/i.test(message);
+}
+
+function isRetryablePollFailure(response: Response, payload: Record<string, unknown>) {
+  if (response.ok) return false;
+  if (![408, 409, 425, 429, 500, 502, 503, 504].includes(response.status)) return false;
+  return /capacity|fully loaded|try again later|rate limit|too many|busy|queue|queued|pending|processing|timeout|temporar|upstream/i.test(JSON.stringify(payload));
 }
 
 async function fetchPollTask(params: SeedanceProviderParams, pollEndpoint: string, taskIdValue: string): Promise<PollResult> {
@@ -972,27 +1001,49 @@ export async function generateVideoWithSeedance(params: SeedanceProviderParams):
         }
       });
       const startedAt = Date.now();
-      while (!remoteUrl && !["completed", "succeeded", "success", "done", "finished"].includes(configuredStatus(task, params.videoRequestConfig))) {
-        if (["failed", "error", "cancelled", "canceled"].includes(configuredStatus(task, params.videoRequestConfig))) {
+      const timeoutMs = isRunApiVideoCreate(params) ? 30 * 60 * 1000 : 20 * 60 * 1000;
+      const completedWithoutUrlGraceMs = 2 * 60 * 1000;
+      let completedSeenAt: number | undefined;
+      while (!remoteUrl) {
+        const status = configuredStatus(task, params.videoRequestConfig);
+        if (isFailedStatus(status)) {
           await saveGenerationTask({ id, status: "failed", result: task, errorMessage: errorMessage(task) });
           throw new ProviderError("VEO_OPERATION_FAILED", `${label} 中转任务失败：${errorMessage(task)}`, preview(task));
         }
-        if (Date.now() - startedAt > 20 * 60 * 1000) {
-          await saveGenerationTask({ id, status: "timeout", result: task, errorMessage: `${label} 中转任务超过 20 分钟仍未完成。` });
-          throw new ProviderError("VEO_OPERATION_TIMEOUT", `${label} 中转任务超过 20 分钟仍未完成。`);
+        if (isCompletedStatus(status)) completedSeenAt ??= Date.now();
+        if (completedSeenAt && Date.now() - completedSeenAt > completedWithoutUrlGraceMs) break;
+        if (Date.now() - startedAt > timeoutMs) {
+          const minutes = Math.round(timeoutMs / 60_000);
+          await saveGenerationTask({ id, status: "timeout", result: task, errorMessage: `${label} 中转任务超过 ${minutes} 分钟仍未完成。` });
+          throw new ProviderError("VEO_OPERATION_TIMEOUT", `${label} 中转任务超过 ${minutes} 分钟仍未完成。`);
         }
         await sleep(5000);
         const pollResult = await fetchPollTask(params, pollEndpoint, id);
         task = pollResult.task;
+        const pollResponse = pollResult.response;
+        if (!pollResponse.ok && isRetryablePollFailure(pollResponse, task)) {
+          await saveGenerationTask({
+            id,
+            status: "processing",
+            progress: progressValue(task),
+            result: {
+              ...task,
+              pollEndpoint: pollResult.endpoint,
+              retryablePollError: true,
+              upstreamStatus: pollResponse.status
+            }
+          });
+          continue;
+        }
         await saveGenerationTask({
           id,
           status: configuredStatus(task, params.videoRequestConfig) || "processing",
+          progress: progressValue(task),
           result: {
             ...task,
             pollEndpoint: pollResult.endpoint
           }
         });
-        const pollResponse = pollResult.response;
         if (!pollResponse.ok) throw new ProviderError("PROVIDER_ERROR", `${label} 中转任务查询失败：${errorMessage(task)}`, preview(task));
         remoteUrl = videoUrl(configuredResult(task, params.videoRequestConfig));
       }
