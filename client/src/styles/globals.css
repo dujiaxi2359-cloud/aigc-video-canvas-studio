@@ -1260,6 +1260,16 @@ select {
 .creation-preview-status.is-generating { color: #bae6fd; }
 .creation-media-preview { width: 100%; height: 100%; border: 0; border-radius: inherit; background: transparent; }
 .creation-media-preview .media-preview-frame { width: 100%; height: 100%; max-width: 100%; border: 0; border-radius: inherit; background: transparent; box-shadow: none; }
+.creation-node[data-node-type="image"] .creation-preview-card,
+.creation-node[data-node-type="imageAsset"] .creation-preview-card {
+  max-height: none !important;
+}
+.creation-node[data-node-type="image"] .creation-media-preview,
+.creation-node[data-node-type="imageAsset"] .creation-media-preview,
+.creation-node[data-node-type="image"] .creation-media-preview .media-preview-frame,
+.creation-node[data-node-type="imageAsset"] .creation-media-preview .media-preview-frame {
+  overflow: hidden !important;
+}
 .creation-preview-empty,
 .creation-upload-preview { display: grid; width: 100%; height: 100%; place-items: center; align-content: center; gap: 8px; color: rgba(255,255,255,.36); text-align: center; }
 .creation-upload-preview { cursor: pointer; }
@@ -3490,11 +3500,28 @@ select {
 }
 
 .node-reference-list button span {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
   flex: 1;
   text-align: left;
 }
 
+.node-reference-list button b {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: rgba(255, 255, 255, 0.88);
+  font-size: 12px;
+  font-weight: 700;
+}
+
 .node-reference-list button small {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: rgba(255, 255, 255, 0.38);
   font-size: 10px;
 }
@@ -4104,8 +4131,9 @@ select {
   object-fit: cover !important;
 }
 
-.creation-node[data-node-type="image"] .creation-media-preview .media-preview-frame img {
-  object-fit: contain !important;
+.creation-node[data-node-type="image"] .creation-media-preview .media-preview-frame img,
+.creation-node[data-node-type="imageAsset"] .creation-media-preview .media-preview-frame img {
+  object-fit: cover !important;
 }
 
 .studio-handle {
@@ -4151,14 +4179,41 @@ select {
   top: 32% !important;
 }
 
-.studio-edge-add {
-  opacity: 0.92;
+.studio-handle-in-top {
+  top: -20px !important;
 }
 
-.studio-edge:hover .studio-edge-add,
-.studio-edge.is-selected .studio-edge-add,
-.studio-edge.is-hovered .studio-edge-add {
-  opacity: 1;
+.studio-handle-in-bottom {
+  bottom: -20px !important;
+}
+
+.studio-handle-out-top,
+.studio-handle-out-bottom {
+  opacity: 0 !important;
+  transform: scale(0.86) !important;
+}
+
+.studio-handle-out-top {
+  top: -14px !important;
+  left: 58% !important;
+}
+
+.studio-handle-out-bottom {
+  bottom: -14px !important;
+  left: 42% !important;
+}
+
+.creation-preview-card:hover .studio-handle-out-top,
+.creation-preview-card:hover .studio-handle-out-bottom,
+.creation-node.is-selected .studio-handle-out-top,
+.creation-node.is-selected .studio-handle-out-bottom {
+  opacity: 0.86 !important;
+}
+
+.studio-handle-out-top:hover,
+.studio-handle-out-bottom:hover {
+  opacity: 1 !important;
+  transform: scale(1.06) !important;
 }
 
 .studio-edge-base {

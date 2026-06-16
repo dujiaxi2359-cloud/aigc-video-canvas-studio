@@ -1,6 +1,6 @@
 import { memo, useState } from "react";
 import { BaseEdge, EdgeLabelRenderer, type EdgeProps } from "reactflow";
-import { Plus, X } from "lucide-react";
+import { X } from "lucide-react";
 import { useCanvasStore } from "../../store/canvasStore";
 import { getStudioBezierPath } from "./useBezierPath";
 
@@ -22,21 +22,6 @@ function StudioEdgeComponent(props: EdgeProps) {
       <path className="studio-edge-base" d={edgePath} fill="none" />
       <path className="studio-edge-flow" d={edgePath} fill="none" />
       <EdgeLabelRenderer>
-        <button
-          type="button"
-          className="studio-edge-add nodrag nopan absolute grid h-7 w-7 place-items-center rounded-full border border-white/[0.22] bg-[#07080a]/82 text-white/78 shadow-[0_12px_30px_rgba(0,0,0,0.42),0_0_0_6px_rgba(255,255,255,0.035)] backdrop-blur-2xl transition duration-200 hover:border-white/70 hover:bg-[#1c1d20] hover:text-white"
-          style={{ transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`, pointerEvents: "all" }}
-          onMouseEnter={() => setHovered(true)}
-          onMouseLeave={() => setHovered(false)}
-          onClick={(event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            window.dispatchEvent(new CustomEvent("studio:open-connection-menu", { detail: { sourceId: props.source, clientX: event.clientX, clientY: event.clientY } }));
-          }}
-          title="在这条线上继续添加节点"
-        >
-          <Plus size={16} />
-        </button>
         {(hovered || props.selected) && (
           <button
             type="button"

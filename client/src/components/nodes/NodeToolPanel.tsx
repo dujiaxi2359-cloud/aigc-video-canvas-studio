@@ -42,10 +42,12 @@ export function NodeToolPanel({ tool, onClose, onInsert, referenceItems = [] }: 
           <div className="node-tool-section-label">当前连接素材</div>
           <div className="node-reference-list">
             {referenceItems.map((item) => (
-              <button key={`${item.token}-${item.typedToken}`} type="button" title={`插入 ${item.token}，也可输入 ${item.typedToken}`} onClick={() => { onInsert(item.token); onClose(); }}>
+              <button key={`${item.token}-${item.typedToken}`} type="button" title={`插入 ${item.token}，也可输入 ${item.typedToken}`} onClick={() => onInsert(item.token)}>
                 {item.previewUrl ? <img src={item.previewUrl} alt="" /> : <Library size={16} />}
-                <span>{item.label}</span>
-                <small>{item.name ? `${item.typedToken} · ${item.name}` : item.typedToken}</small>
+                <span>
+                  <b>{item.label}</b>
+                  <small>{item.name ? `${item.typedToken} · ${item.name}` : item.typedToken}</small>
+                </span>
               </button>
             ))}
             {!referenceItems.length && <div className="node-reference-empty">先把图片、视频或音频素材连接到视频节点，再用 @ 精确引用。</div>}

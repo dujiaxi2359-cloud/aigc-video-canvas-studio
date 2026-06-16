@@ -27,7 +27,7 @@ export function ImageNode(props: NodeProps<ImageNodeData>) {
   const update = useCanvasStore((state) => state.updateNodeData);
   const upload = useAssetStore((state) => state.uploadAsset);
   const previewUrl = props.data.url || props.data.thumbnailUrl;
-  const ratio = useMemo(() => props.data.aspectRatio || ratioFromDimensions(props.data.width, props.data.height) || "9:16", [props.data.aspectRatio, props.data.height, props.data.width]);
+  const ratio = useMemo(() => ratioFromDimensions(props.data.width, props.data.height) || props.data.aspectRatio || "9:16", [props.data.aspectRatio, props.data.height, props.data.width]);
 
   useEffect(() => {
     if (!previewUrl) return;
@@ -46,7 +46,7 @@ export function ImageNode(props: NodeProps<ImageNodeData>) {
   async function onFile(file?: File) {
     if (!file) return;
     const asset = await upload(file);
-    update(props.id, { assetId: asset.id, url: asset.url, localPath: asset.localPath });
+    update(props.id, { assetId: asset.id, url: asset.url, localPath: asset.localPath, width: undefined, height: undefined, aspectRatio: undefined });
   }
 
   return (

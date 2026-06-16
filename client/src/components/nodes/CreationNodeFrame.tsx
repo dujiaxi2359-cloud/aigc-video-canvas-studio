@@ -47,6 +47,10 @@ function CreationNodeFrameComponent({ id, type, selected, title, ratio, status, 
           <Handle id="in-right" type="target" position={Position.Right} className="studio-handle studio-handle-in-right studio-handle-catch" />
           <Handle id="out" type="source" position={Position.Right} className="studio-handle studio-handle-out" onClick={(event) => openCreateMenu(event, id, type)} />
           <Handle id="out-left" type="source" position={Position.Left} className="studio-handle studio-handle-out-left studio-handle-catch" onClick={(event) => openCreateMenu(event, id, type)} />
+          <Handle id="out-top" type="source" position={Position.Top} className="studio-handle studio-handle-branch studio-handle-out-top" onClick={(event) => openCreateMenu(event, id, type)} />
+          <Handle id="out-bottom" type="source" position={Position.Bottom} className="studio-handle studio-handle-branch studio-handle-out-bottom" onClick={(event) => openCreateMenu(event, id, type)} />
+          <Handle id="in-top" type="target" position={Position.Top} className="studio-handle studio-handle-catch studio-handle-in-top" />
+          <Handle id="in-bottom" type="target" position={Position.Bottom} className="studio-handle studio-handle-catch studio-handle-in-bottom" />
           <button type="button" title="删除节点" className="creation-node-delete nodrag nopan" onClick={() => deleteNode(id)}><Trash2 size={13} /></button>
           {preview}
           {status && <span className={`creation-preview-status is-${status}`}>{status === "generating" ? "生成中" : status === "success" ? "已完成" : status === "error" ? "失败" : "未生成"}</span>}

@@ -417,7 +417,7 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
     const value = event.target.value;
     setLocalPrompt(value);
     if (!isComposingRef.current) update(props.id, { prompt: value });
-    if (!isComposingRef.current && /(^|\s)@{1,2}$/.test(value) && (resolvedInputs.imageInputs.length || resolvedInputs.videoInputs.length || resolvedInputs.audioInputs.length)) {
+    if (!isComposingRef.current && /@{1,2}$/.test(value) && (resolvedInputs.imageInputs.length || resolvedInputs.videoInputs.length || resolvedInputs.audioInputs.length)) {
       setParametersOpen(false);
       setActiveTool("assets");
     }
@@ -432,6 +432,10 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
     const value = event.currentTarget.value;
     setLocalPrompt(value);
     update(props.id, { prompt: value });
+    if (/@{1,2}$/.test(value) && (resolvedInputs.imageInputs.length || resolvedInputs.videoInputs.length || resolvedInputs.audioInputs.length)) {
+      setParametersOpen(false);
+      setActiveTool("assets");
+    }
   }
 
   const inputContext = useMemo(
@@ -632,9 +636,11 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
 
   function insertReferenceToken(token: string) {
     const trimmedRight = localPrompt.replace(/\s+$/g, "");
-    const next = /@+$/.test(trimmedRight)
-      ? trimmedRight.replace(/@+$/, token)
+    const trailingAt = trimmedRight.match(/@+$/)?.[0] ?? "";
+    const inserted = trailingAt
+      ? `${trimmedRight.slice(0, -trailingAt.length)}${trimmedRight.length > trailingAt.length ? " " : ""}${token}`
       : `${trimmedRight}${trimmedRight ? " " : ""}${token}`;
+    const next = `${inserted} `;
     setLocalPrompt(next);
     update(props.id, { prompt: next, errorCode: undefined, errorMessage: undefined, debugMessage: undefined });
   }
@@ -694,7 +700,6 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
         <button type="button" title={expanded ? "收起详情" : "展开详情"} className="creation-detail-toggle" onClick={() => setExpanded((value) => !value)}><Maximize2 size={14} /></button>
       </div>
       <div className="creation-dock-composer">
-        {referenceVisualItems.length > 0 && <div className="creation-reference-strip">{referenceVisualItems.map((item, index) => <button type="button" key={`${item.input.sourceNodeId}-${index}`} title={`点击插入 ${item.genericToken} · ${item.name}，也可手动输入 ${item.typedToken}`} onClick={() => insertReferenceToken(item.genericToken)}>{item.previewUrl ? <img src={item.previewUrl} alt="" /> : <Library size={13} />}<small><b>{item.genericToken.replace("@", "")}</b><span>{item.name}</span></small></button>)}</div>}
         <div className="creation-prompt-stack">
           {mentionedReferences.length > 0 && (
             <div className="creation-mentioned-references">
