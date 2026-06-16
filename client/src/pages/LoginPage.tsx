@@ -56,7 +56,7 @@ export function LoginPage() {
       <div className="login-brand-mark mb-6">
         <MoonLogo className="login-brand-logo" />
       </div>
-      <h1 className="text-[28px] font-semibold tracking-[-0.02em]">登录 AIGCNONG</h1>
+      <h1 className="text-[28px] font-semibold tracking-[-0.02em]">登录 Moon｜Tv</h1>
       <div className="mt-6 grid grid-cols-2 gap-3">
         {emailOptions.map((option) => (
           <button

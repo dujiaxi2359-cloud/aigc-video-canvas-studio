@@ -69,7 +69,7 @@ export const useProjectStore = create<State>((set, get) => ({
   },
   saveProject: async (nodes, edges) => {
     let project = get().currentProject;
-    if (!project) project = await get().createProject("AIGC 视频工作流");
+    if (!project) project = await get().createProject("Moon｜Tv 视频工作流");
     const saved = await projectApi.save({ ...project, nodes, edges });
     set((state) => ({
       currentProject: saved,

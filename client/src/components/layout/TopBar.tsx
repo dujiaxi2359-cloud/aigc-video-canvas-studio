@@ -42,11 +42,11 @@ export function TopBar() {
       <div className="flex items-center gap-4 pl-[74px]">
         <div className="flex h-9 items-center gap-2 rounded-full border border-white/[0.08] bg-white/[0.035] px-3">
           <span className="grid h-5 w-5 place-items-center rounded-full bg-cyan-300 text-[10px] font-black text-black">N</span>
-          <span className="text-[13px] font-extrabold tracking-[0.08em] text-white">AIGCNONG</span>
+          <span className="text-[13px] font-extrabold tracking-[0.08em] text-white">Moon｜Tv</span>
         </div>
         <div className="hidden h-8 items-center gap-2 rounded-full bg-white/[0.035] px-3 text-[13px] text-white/72 md:flex">
           <span className="text-white/34">工作空间</span>
-          <span className="max-w-[280px] truncate font-semibold text-white/86">{currentProject?.name ?? "AIGC 视频工作流"}</span>
+          <span className="max-w-[280px] truncate font-semibold text-white/86">{currentProject?.name ?? "Moon｜Tv 视频工作流"}</span>
         </div>
       </div>
       <div className="flex items-center gap-2">

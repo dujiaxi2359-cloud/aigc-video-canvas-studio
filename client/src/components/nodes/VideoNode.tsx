@@ -60,6 +60,34 @@ function modelOptionLabel(model: ModelConfig, models: ModelConfig[]) {
   return `${model.displayName} · ${host}`;
 }
 
+function modelIdentity(model?: ModelConfig) {
+  if (!model) return "";
+  return `${model.providerId} ${model.provider} ${model.modelName} ${model.displayName}`.toLowerCase();
+}
+
+function isSeedanceModel(model?: ModelConfig) {
+  return /seedance|doubao/.test(modelIdentity(model));
+}
+
+function isKlingOmniModel(model?: ModelConfig) {
+  const identity = modelIdentity(model);
+  return /kling|可灵/.test(identity) && /(3[._ -]?0|v3|omni)/.test(identity);
+}
+
+function supportsUniversalReference(model?: ModelConfig) {
+  return isSeedanceModel(model) || isKlingOmniModel(model);
+}
+
+function videoModeLabelForModel(model: ModelConfig | undefined, mode: OfficialVideoMode, fallback?: string) {
+  if (mode === "reference_images_to_video" && supportsUniversalReference(model)) return "全能参考";
+  return fallback ?? officialVideoModeLabels[mode];
+}
+
+function videoCategoryLabelForModel(model: ModelConfig | undefined, category: OfficialVideoCategory) {
+  if (category === "reference_to_video" && supportsUniversalReference(model)) return "全能参考";
+  return officialVideoCategoryLabels[category];
+}
+
 function isRuntimeUsableVideoModel(model: ModelConfig) {
   return model.enabled && model.category === "video" && modelInputModes(model).some((mode) =>
     ["text-to-video", "image-to-video", "first-last-frame", "reference-to-video", "video-to-video"].includes(mode)
@@ -111,7 +139,7 @@ function maxImagesForMode(model: ModelConfig | undefined, mode: OfficialVideoMod
     if (model.modelName === "omni_flash-10s") return 7;
     if (model.providerId === "grok") return 7;
     if (model.providerId === "kling") return 4;
-    if (model.providerId === "seedance") return model.capabilities.maxReferenceImages ?? 9;
+    if (isSeedanceModel(model)) return model.capabilities.maxReferenceImages ?? 9;
     if (model.providerId === "google") return 3;
     if (model.modelName === "happyhorse-1.0-r2v" || model.modelName === "wan2.7-r2v") return 5;
   }
@@ -384,6 +412,10 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
     const value = event.target.value;
     setLocalPrompt(value);
     if (!isComposingRef.current) update(props.id, { prompt: value });
+    if (!isComposingRef.current && /(^|\s)@{1,2}$/.test(value) && (resolvedInputs.imageInputs.length || resolvedInputs.videoInputs.length || resolvedInputs.audioInputs.length)) {
+      setParametersOpen(false);
+      setActiveTool("assets");
+    }
   }
 
   function handleCompositionStart() {
@@ -479,8 +511,8 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
   const inputStatusItems = useMemo(() => {
     const mode = props.data.videoMode ?? legacyInputModeToOfficialMode(props.data.inputMode);
     if (mode === "reference_images_to_video") {
-      const label = selectedModel?.providerId === "seedance" || selectedModel?.modelName === "kling-v3-omni" ? "全能参考素材" : "参考图片";
-      const connected = selectedModel?.providerId === "seedance"
+      const label = supportsUniversalReference(selectedModel) ? "全能参考素材" : "参考图片";
+      const connected = supportsUniversalReference(selectedModel)
         ? resolvedInputs.hasReferenceImage || resolvedInputs.hasVideoInput || resolvedInputs.audioInputs.length > 0
         : resolvedInputs.hasReferenceImage;
       return [{ icon: ImageIcon, label, connected }];
@@ -502,7 +534,7 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
       { icon: ImageIcon, label: "图片输入", connected: resolvedInputs.hasImageInput },
       { icon: BoxSelect, label: "视频输入", connected: resolvedInputs.hasVideoInput }
     ];
-  }, [props.data.inputMode, props.data.videoMode, resolvedInputs.audioInputs.length, resolvedInputs.hasFirstFrame, resolvedInputs.hasImageInput, resolvedInputs.hasLastFrame, resolvedInputs.hasReferenceImage, resolvedInputs.hasVideoInput]);
+  }, [props.data.inputMode, props.data.videoMode, resolvedInputs.audioInputs.length, resolvedInputs.hasFirstFrame, resolvedInputs.hasImageInput, resolvedInputs.hasLastFrame, resolvedInputs.hasReferenceImage, resolvedInputs.hasVideoInput, selectedModel]);
 
   async function generate(promptOverride?: string) {
     if (!props.data.modelConfigId || !selectedModel) {
@@ -519,7 +551,7 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
         throw new Error("当前模型暂无图生视频能力。");
       }
       const videoMode = props.data.videoMode ?? legacyInputModeToOfficialMode(props.data.inputMode);
-      const promptReferencedInputs = selectedModel.providerId === "seedance" && videoMode === "reference_images_to_video"
+      const promptReferencedInputs = supportsUniversalReference(selectedModel) && videoMode === "reference_images_to_video"
         ? resolvePromptReferencedVideoInputs(promptForRequest, resolvedInputs)
         : { ...resolvedInputs, hasPromptReferences: false, missingPromptReferences: [] as string[] };
       const requestInputs = promptReferencedInputs.hasPromptReferences ? promptReferencedInputs : resolvedInputs;
@@ -535,11 +567,11 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
       if (maxAudios && requestInputs.audioInputs.length > maxAudios) throw new Error(`当前模型最多支持 ${maxAudios} 段参考音频。`);
       if (maxReferenceFiles && requestInputs.imageInputs.length + requestInputs.videoInputs.length + requestInputs.audioInputs.length > maxReferenceFiles) throw new Error(`当前模型最多支持 ${maxReferenceFiles} 个混合参考素材。`);
       if (videoMode === "image_to_video_first_frame" && !requestInputs.hasImageInput) throw new Error("首帧图生视频需要连接一张首帧图片。");
-      if (videoMode === "reference_images_to_video" && selectedModel.providerId === "seedance" && !requestInputs.hasReferenceImage && !requestInputs.hasVideoInput && !requestInputs.audioInputs.length) {
+      if (videoMode === "reference_images_to_video" && supportsUniversalReference(selectedModel) && !requestInputs.hasReferenceImage && !requestInputs.hasVideoInput && !requestInputs.audioInputs.length) {
         throw new Error("全能参考至少需要连接或 @ 引用一张图片、一个视频或一段音频。");
       }
-      if (videoMode === "reference_images_to_video" && selectedModel.providerId !== "seedance" && !requestInputs.hasReferenceImage) {
-        const isOmniReference = selectedModel.providerId === "seedance" || selectedModel.modelName === "kling-v3-omni";
+      if (videoMode === "reference_images_to_video" && !supportsUniversalReference(selectedModel) && !requestInputs.hasReferenceImage) {
+        const isOmniReference = supportsUniversalReference(selectedModel);
         throw new Error(isOmniReference ? "全能参考需要至少连接一张参考图片。" : "参考图生视频需要至少一张参考图片。");
       }
       if (videoMode === "image_to_video_first_last_frame" && !requestInputs.hasFirstFrame) throw new Error("首尾帧模式需要连接首帧图片。");
@@ -645,7 +677,7 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
           <div ref={parameterAnchorRef} className={`creation-parameter-wrap nodrag nopan ${parametersOpen ? "is-open" : ""}`}>
           <button type="button" className="creation-parameter-pill" onClick={() => { setActiveTool(null); setParametersOpen((value) => !value); }}>{parameterSummary({ aspectRatio: selectedAspectRatio, resolution: selectedResolution, duration: selectedDuration, ratios: availableRatios, resolutions: availableResolutions, durations: availableDurations })}</button>
           <NodeParameterPopover open={parametersOpen} anchorRef={parameterAnchorRef} onClose={() => setParametersOpen(false)} sections={[
-            { label: "生成方式", value: props.data.videoMode ?? legacyInputModeToOfficialMode(props.data.inputMode), options: availableVideoModes, format: (value) => dynamicOptions?.videoModeLabels?.[value as OfficialVideoMode] ?? officialVideoModeLabels[value as OfficialVideoMode], onChange: (value) => update(props.id, { videoMode: value, inputMode: officialModeToLegacyInputMode(value as OfficialVideoMode) }) },
+            { label: "生成方式", value: props.data.videoMode ?? legacyInputModeToOfficialMode(props.data.inputMode), options: availableVideoModes, format: (value) => videoModeLabelForModel(selectedModel, value as OfficialVideoMode, dynamicOptions?.videoModeLabels?.[value as OfficialVideoMode]), onChange: (value) => update(props.id, { videoMode: value, inputMode: officialModeToLegacyInputMode(value as OfficialVideoMode) }) },
             { label: "比例", value: selectedAspectRatio, options: availableRatios, onChange: (value) => update(props.id, { aspectRatio: value }) },
             { label: "清晰度", value: selectedResolution, options: availableResolutions, onChange: (value) => update(props.id, { resolution: value }) },
             { label: "生成时长", value: selectedDuration, options: availableDurations, format: durationLabel, onChange: (value) => update(props.id, { duration: Number(value) }) },
@@ -661,7 +693,7 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
       </div>
       <NodeToolPanel tool={activeTool} onClose={() => setActiveTool(null)} onInsert={activeTool === "assets" ? insertReferenceToken : insertPromptContext} referenceItems={referenceMenuItems} />
       {expanded && <div className="creation-detail-panel nodrag nopan">
-        <div className="creation-detail-section"><strong>生成方式</strong><div className="flex flex-wrap gap-1.5">{videoCategories.map((category) => { const disabledReason = disabledCategoryReason(selectedModel, category); return <button key={category} disabled={Boolean(disabledReason)} title={disabledReason} className={videoCategory === category ? "is-active" : ""} onClick={() => changeVideoCategory(category)}>{officialVideoCategoryLabels[category]}</button>; })}</div></div>
+        <div className="creation-detail-section"><strong>生成方式</strong><div className="flex flex-wrap gap-1.5">{videoCategories.map((category) => { const disabledReason = disabledCategoryReason(selectedModel, category); return <button key={category} disabled={Boolean(disabledReason)} title={disabledReason} className={videoCategory === category ? "is-active" : ""} onClick={() => changeVideoCategory(category)}>{videoCategoryLabelForModel(selectedModel, category)}</button>; })}</div></div>
         {actualOutputInfo && props.data.status === "success" && <div className="creation-detail-copy">实际输出：{actualOutputInfo.width && actualOutputInfo.height ? `${actualOutputInfo.width}×${actualOutputInfo.height}` : "未知尺寸"}{actualOutputInfo.ratio ? ` · ${actualOutputInfo.ratio}` : ""}{actualOutputInfo.duration ? ` · ${actualOutputInfo.duration.toFixed(1)}s` : ""}</div>}
         {dynamicOptions?.warningMessage && <div className="creation-detail-copy">{dynamicOptions.warningMessage}</div>}
         {channelDiagnostic.whyBlocked && <div className="creation-detail-copy is-error">{channelDiagnostic.sameModelImageCapableChannels[0]

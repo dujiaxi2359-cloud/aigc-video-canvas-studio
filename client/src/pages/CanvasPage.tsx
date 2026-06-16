@@ -144,7 +144,7 @@ export function CanvasPage({ onNavigate }: { onNavigate: (page: Page, projectId?
       <AddNodeMenu open={addOpen} nodePosition={addPosition} onClose={() => setAddOpen(false)} />
       <CanvasDrawer drawer={drawer} onClose={() => setDrawer(null)} onNavigate={onNavigate} />
       {nodes.length === 0 && <CanvasEmptyGuide onAdd={addNode} onTemplates={() => toggleDrawer("templates")} />}
-      <button type="button" title="AIGCNONG 创作助手" onClick={() => openAgent()} className="canvas-brand-orb">N</button>
+      <button type="button" title="Moon｜Tv 创作助手" onClick={() => openAgent()} className="canvas-brand-orb">M</button>
       <AgentPanel />
       <ShareProjectModal open={shareOpen} onClose={() => setShareOpen(false)} />
     </div>

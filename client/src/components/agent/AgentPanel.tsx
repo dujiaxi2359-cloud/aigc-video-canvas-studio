@@ -65,7 +65,7 @@ export function AgentPanel() {
               <Bot size={18} />
             </span>
             <div>
-              <h2 className="text-[15px] font-semibold">AIGC Agent</h2>
+              <h2 className="text-[15px] font-semibold">Moon｜Tv Agent</h2>
               <p className="text-[12px] text-white/40">你的工作流副驾驶</p>
             </div>
           </div>
@@ -200,4 +200,3 @@ export function AgentPanel() {
     </motion.aside>
   );
 }
-

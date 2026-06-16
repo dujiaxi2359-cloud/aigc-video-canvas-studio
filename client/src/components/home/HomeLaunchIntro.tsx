@@ -40,7 +40,7 @@ export function HomeLaunchIntro() {
             animate={{ opacity: 1, x: 0, filter: "blur(0px)" }}
             transition={{ delay: 1.28, duration: 0.95, ease: [0.22, 1, 0.36, 1] }}
           >
-            AIGC | 创作平台
+            Moon｜Tv
           </motion.span>
         </div>
         <motion.div

@@ -1,5 +1,5 @@
 const ICP_RECORD = "粤ICP备2026074382号";
-const STUDIO_NAME = "AIGCNONG个人工作室";
+const STUDIO_NAME = "Moon｜Tv";
 const LEGAL_LINKS = [
   { href: "/privacy", label: "隐私政策" },
   { href: "/terms", label: "服务条款" }

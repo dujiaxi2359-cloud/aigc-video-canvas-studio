@@ -65,7 +65,7 @@ export function CanvasTopBar({ onNavigate, onShare }: { onNavigate: (page: Page,
           <MoonLogo className="canvas-project-logo" />
         </span>
         <span className="min-w-0">
-          <span className="canvas-project-brand block">AIGC | 创作平台</span>
+          <span className="canvas-project-brand block">Moon｜Tv</span>
           <span className="canvas-project-title block max-w-[260px] truncate">{currentProject?.name || "未命名项目"}</span>
           <span className="canvas-project-status mt-0.5 block">刚刚保存</span>
         </span>
@@ -275,7 +275,7 @@ function HistoryDrawer({ onClose }: { onClose: () => void }) {
   }, [fetchHistories]);
 
   const visible = histories.filter((item) => tab === "image" ? historyKind(item) === "image" : tab === "video" ? historyKind(item) === "video" : false);
-  const samples = visible.length ? visible : Array.from({ length: 6 }, (_, index) => ({ id: `mock-${index}`, outputUrl: "", modelDisplayName: "AIGCNONG" } as GenerationHistory));
+  const samples = visible.length ? visible : Array.from({ length: 6 }, (_, index) => ({ id: `mock-${index}`, outputUrl: "", modelDisplayName: "Moon｜Tv" } as GenerationHistory));
 
   function download(item: GenerationHistory) {
     if (!item.outputUrl) return;

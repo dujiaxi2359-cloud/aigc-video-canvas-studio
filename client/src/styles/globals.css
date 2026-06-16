@@ -4012,3 +4012,136 @@ select {
     font-size: 30px;
   }
 }
+
+/* Moon｜Tv premium interaction pass */
+.brand-wordmark,
+.home-launch-wordmark,
+.canvas-project-brand {
+  letter-spacing: -0.035em;
+}
+
+.home-launch-wordmark {
+  background: linear-gradient(90deg, #ffffff 0%, #e8eef6 48%, #b7c8d8 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  text-shadow: 0 20px 80px rgba(185, 213, 235, 0.1);
+}
+
+.studio-spark-pill {
+  border-color: rgba(186, 204, 218, 0.32) !important;
+  background:
+    radial-gradient(circle at 88% 50%, rgba(125, 211, 252, 0.22), transparent 19px),
+    linear-gradient(135deg, rgba(31, 41, 55, 0.74), rgba(8, 11, 16, 0.88)) !important;
+  color: rgba(244, 248, 252, 0.92) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.11),
+    0 18px 46px rgba(0, 0, 0, 0.28) !important;
+}
+
+.studio-spark-pill:hover {
+  border-color: rgba(226, 232, 240, 0.55) !important;
+  background:
+    radial-gradient(circle at 88% 50%, rgba(125, 211, 252, 0.34), transparent 20px),
+    linear-gradient(135deg, rgba(51, 65, 85, 0.82), rgba(10, 14, 20, 0.92)) !important;
+}
+
+.studio-spark-pill span {
+  background: #dbeafe !important;
+  box-shadow: 0 0 16px rgba(125, 211, 252, 0.85) !important;
+}
+
+.studio-avatar-trigger {
+  border-color: rgba(226, 232, 240, 0.34) !important;
+  background:
+    linear-gradient(145deg, rgba(226, 232, 240, 0.18), rgba(15, 23, 42, 0.86)),
+    rgba(255, 255, 255, 0.035) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.11),
+    0 16px 42px rgba(8, 47, 73, 0.18) !important;
+}
+
+.studio-avatar-mark,
+.studio-account-avatar {
+  background:
+    radial-gradient(circle at 44% 26%, rgba(255, 255, 255, 0.96), transparent 12px),
+    linear-gradient(145deg, #eff6ff 0%, #93c5fd 48%, #22d3ee 100%) !important;
+  color: #020617 !important;
+}
+
+.canvas-space {
+  background:
+    radial-gradient(circle at 18% 24%, rgba(186, 230, 253, 0.035), transparent 25%),
+    radial-gradient(circle at 82% 72%, rgba(148, 163, 184, 0.05), transparent 30%),
+    #020304 !important;
+}
+
+.canvas-space::before {
+  background-image: radial-gradient(circle, rgba(226, 232, 240, 0.2) 0 1px, transparent 1.15px) !important;
+  background-size: 24px 24px !important;
+  opacity: 0.38 !important;
+}
+
+.creation-preview-card {
+  border-color: rgba(226, 232, 240, 0.18) !important;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.012)),
+    #202020 !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.055),
+    0 26px 78px rgba(0, 0, 0, 0.38) !important;
+}
+
+.creation-media-preview .media-preview-frame,
+.creation-media-preview .media-preview-frame img,
+.creation-media-preview .media-preview-frame video {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.creation-media-preview .media-preview-frame img,
+.creation-media-preview .media-preview-frame video {
+  object-fit: cover !important;
+}
+
+.studio-handle {
+  width: 28px !important;
+  height: 28px !important;
+  border-color: rgba(226, 232, 240, 0.52) !important;
+  background: rgba(7, 8, 10, 0.84) !important;
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.85),
+    0 0 0 7px rgba(255, 255, 255, 0.03),
+    0 14px 34px rgba(0, 0, 0, 0.42) !important;
+}
+
+.studio-handle-in {
+  left: -14px !important;
+}
+
+.studio-handle-out {
+  right: -14px !important;
+}
+
+.studio-edge-base {
+  stroke: rgba(226, 232, 240, 0.62) !important;
+  stroke-width: 2.15 !important;
+}
+
+.studio-edge-glow {
+  stroke: rgba(226, 232, 240, 0.18) !important;
+  stroke-width: 10 !important;
+}
+
+.node-tool-panel {
+  border-color: rgba(226, 232, 240, 0.13) !important;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.052), rgba(255, 255, 255, 0.026)),
+    rgba(32, 34, 36, 0.96) !important;
+}
+
+.node-reference-list button:hover,
+.node-command-list button:hover,
+.node-open-library:hover {
+  background: rgba(226, 232, 240, 0.09) !important;
+}

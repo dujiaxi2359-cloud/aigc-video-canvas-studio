@@ -18,7 +18,7 @@ export function BrandIdentity({ className = "", logoClassName = "", textClassNam
   return (
     <span className={`brand-identity ${className}`}>
       <MoonLogo className={`brand-moon-logo ${logoClassName}`} />
-      {showText && <span className={`brand-wordmark ${textClassName}`}>AIGC | 创作平台</span>}
+      {showText && <span className={`brand-wordmark ${textClassName}`}>Moon｜Tv</span>}
     </span>
   );
 }

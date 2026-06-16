@@ -12,10 +12,10 @@ function openCreateMenu(event: React.MouseEvent | React.PointerEvent, id: string
 function previewWidth(ratio?: string) {
   const [width, height] = (ratio || "16:9").split(":").map(Number);
   const value = (width || 16) / (height || 9);
-  if (value < 0.7) return 250;
-  if (value < 1) return 300;
-  if (value > 1.45) return 430;
-  return 360;
+  if (value < 0.7) return 320;
+  if (value < 1) return 340;
+  if (value > 1.45) return 520;
+  return 390;
 }
 
 function CreationNodeFrameComponent({ id, type, selected, title, ratio, status, preview, toolbar, dock }: {

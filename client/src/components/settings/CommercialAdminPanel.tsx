@@ -159,7 +159,7 @@ export function CommercialAdminPanel() {
   async function createBatchInvites() {
     try {
       setBusy("batch");
-      const result = await api.post<{ invites: AdminInvite[] }>("/api/admin/invite-codes/batch", { count: 30, type: "customer", maxUses: 1, prefix: "AIGCNONG" });
+      const result = await api.post<{ invites: AdminInvite[] }>("/api/admin/invite-codes/batch", { count: 30, type: "customer", maxUses: 1, prefix: "MOONTV" });
       await navigator.clipboard.writeText(result.invites.map((invite) => invite.code).join("\n"));
       await load();
     } catch (err) {

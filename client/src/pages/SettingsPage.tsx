@@ -27,8 +27,8 @@ export function SettingsPage({ onNavigate }: { onNavigate: (page: Page) => void 
                 <ShieldCheck size={14} /> {isAdmin ? "管理员后台已启用" : "API 配置仅当前账号空间使用"}
               </div>
               <h1 className="mt-3 text-[28px] font-semibold tracking-[-0.03em] text-white">设置中心</h1>
-              <p className="mt-2 max-w-[760px] text-[13px] leading-6 text-white/42">
-                管理 Agent 自动化与模型 API 接入。视频节点会读取这里启用的模型和当前通道设置。
+              <p className="mt-2 max-w-[560px] text-[13px] leading-6 text-white/46">
+                管理模型 API、充值与 Agent 配置。
               </p>
             </div>
           </div>
@@ -40,7 +40,7 @@ export function SettingsPage({ onNavigate }: { onNavigate: (page: Page) => void 
             ].map((item) => {
               const Icon = item.icon;
               return (
-                <div key={item.label} className={`rounded-[16px] border px-3 py-3 ${item.active ? "border-violet-200/20 bg-violet-300/[0.08] text-white" : "border-white/[0.06] bg-black/20 text-white/32"}`}>
+                <div key={item.label} className={`rounded-[16px] border px-3 py-3 ${item.active ? "border-sky-100/20 bg-sky-200/[0.07] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]" : "border-white/[0.06] bg-black/20 text-white/32"}`}>
                   <Icon size={16} />
                   <div className="mt-2 text-[12px] font-medium">{item.label}</div>
                 </div>

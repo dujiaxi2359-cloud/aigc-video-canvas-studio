@@ -484,7 +484,7 @@ function savedApiRoutes(models: ModelConfig[]) {
 export function ModelConfigCenter() {
   const { modelConfigs, fetchModelConfigs, saveModelConfigsBulk, deleteModelConfigs } = useModelConfigStore();
   const [mode, setMode] = useState<ApiMode>("custom");
-  const [apiBaseUrl, setApiBaseUrl] = useState("https://ai.cy88.ai/v1");
+  const [apiBaseUrl, setApiBaseUrl] = useState("");
   const [apiKey, setApiKey] = useState("");
   const [manualModel, setManualModel] = useState("");
   const [fetchedModels, setFetchedModels] = useState<string[]>([]);
@@ -500,11 +500,6 @@ export function ModelConfigCenter() {
       setMessageTone("danger");
     });
   }, [fetchModelConfigs]);
-
-  useEffect(() => {
-    const saved = typeof window !== "undefined" ? window.localStorage.getItem(lastApiRouteStorageKey) : "";
-    if (saved) setApiBaseUrl(saved);
-  }, []);
 
   const videoConfigs = useMemo(() => modelConfigs.filter((model) => model.category === "video" || ["text-to-video", "image-to-video", "video-to-video"].includes(model.modelType)), [modelConfigs]);
   const imageConfigs = useMemo(() => modelConfigs.filter((model) => model.category === "image" || ["text-to-image", "image-to-image", "image-edit", "image"].includes(model.modelType)), [modelConfigs]);
@@ -642,12 +637,12 @@ export function ModelConfigCenter() {
       <section className="overflow-hidden rounded-[24px] border border-white/[0.08] bg-[#101114]/95 shadow-[0_24px_80px_rgba(0,0,0,0.35)]">
         <div className="grid min-h-[620px] grid-cols-[240px_1fr]">
           <aside className="border-r border-white/[0.08] bg-black/25 p-5">
-            <div className="text-[14px] font-semibold tracking-[0.04em] text-white">AIGC｜创作平台</div>
+            <div className="text-[14px] font-semibold tracking-[0.04em] text-white">Moon｜Tv</div>
             <div className="mt-8 space-y-2">
               <button type="button" className="flex h-11 w-full items-center gap-3 rounded-[12px] px-3 text-left text-[13px] text-white/45">
                 <WalletCards size={16} /> 充值中心
               </button>
-              <button type="button" className="flex h-11 w-full items-center gap-3 rounded-[12px] bg-[#6d34d8]/25 px-3 text-left text-[13px] text-white">
+              <button type="button" className="flex h-11 w-full items-center gap-3 rounded-[12px] border border-sky-200/15 bg-sky-300/[0.10] px-3 text-left text-[13px] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
                 <KeyRound size={16} /> API 接入
               </button>
             </div>
@@ -670,7 +665,7 @@ export function ModelConfigCenter() {
 
             <div className="mt-6 rounded-[18px] border border-white/[0.08] bg-white/[0.025] p-3">
               <div className="grid grid-cols-2 rounded-[14px] border border-white/[0.08] bg-black/20 p-1">
-                <button type="button" onClick={() => setMode("custom")} className={`flex h-12 items-center justify-center gap-2 rounded-[12px] text-[13px] font-semibold transition ${mode === "custom" ? "bg-[#8b3ff5] text-white shadow-[0_10px_30px_rgba(139,63,245,0.25)]" : "text-white/45"}`}>
+                <button type="button" onClick={() => setMode("custom")} className={`flex h-12 items-center justify-center gap-2 rounded-[12px] text-[13px] font-semibold transition ${mode === "custom" ? "bg-gradient-to-r from-slate-100 via-sky-100 to-cyan-100 text-slate-950 shadow-[0_14px_42px_rgba(125,211,252,0.16)]" : "text-white/45"}`}>
                   <KeyRound size={16} /> 使用 API 接口
                 </button>
                 <button type="button" onClick={() => setMode("platform")} className={`flex h-12 items-center justify-center gap-2 rounded-[12px] text-[13px] font-semibold transition ${mode === "platform" ? "bg-white text-black" : "text-white/45"}`}>
@@ -695,7 +690,7 @@ export function ModelConfigCenter() {
                 <div className="flex items-center justify-between border-b border-white/[0.08] px-5 py-4">
                   <div>
                     <div className="text-[15px] font-semibold text-white">自定义 API 线路</div>
-                    <p className="mt-1 text-[12px] text-white/38">/models 只用于发现上游模型 ID；功能参数来自官方模型模板，通道协议来自当前上游配置。</p>
+                    <p className="mt-1 text-[12px] text-white/38">填写上游地址或官方兼容接口；已保存线路只作为快捷回填，不会自动覆盖当前输入。</p>
                   </div>
                   <Button className="h-9 rounded-full bg-white text-black hover:bg-white/90" onClick={() => void saveModels()} disabled={busy === "save"}>
                     {busy === "save" ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />} 保存并启用
@@ -706,7 +701,7 @@ export function ModelConfigCenter() {
                   <div className="grid gap-3 lg:grid-cols-[1.25fr_1fr_auto]">
                     <label className="space-y-2">
                       <span className="text-[12px] font-medium text-white/50">上游请求地址</span>
-                      <Input className="h-11 rounded-[11px] bg-black/35" value={apiBaseUrl} onChange={(event) => setApiBaseUrl(event.target.value)} placeholder="https://example.com/v1" />
+                      <Input className="h-11 rounded-[11px] bg-black/35" value={apiBaseUrl} onChange={(event) => setApiBaseUrl(event.target.value)} placeholder="填写上游地址或官方接口，例如 https://runapi.co" />
                     </label>
                     <label className="space-y-2">
                       <span className="text-[12px] font-medium text-white/50">API Key</span>
@@ -733,7 +728,7 @@ export function ModelConfigCenter() {
                                 setApiBaseUrl(route.baseUrl);
                                 if (typeof window !== "undefined") window.localStorage.setItem(lastApiRouteStorageKey, route.baseUrl);
                               }}
-                              className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[12px] transition ${active ? "border-violet-200/35 bg-violet-300/[0.14] text-violet-50" : "border-white/[0.08] bg-white/[0.035] text-white/50 hover:bg-white/[0.07] hover:text-white/75"}`}
+                              className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[12px] transition ${active ? "border-sky-100/40 bg-sky-200/[0.12] text-sky-50 shadow-[0_0_30px_rgba(125,211,252,0.08)]" : "border-white/[0.08] bg-white/[0.035] text-white/50 hover:bg-white/[0.07] hover:text-white/75"}`}
                             >
                               <span>{route.host}</span>
                               <span className="rounded-full bg-black/25 px-1.5 py-0.5 text-[10px] text-white/45">{route.count}</span>

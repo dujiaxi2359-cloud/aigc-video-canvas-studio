@@ -51,7 +51,7 @@ function collectAssets(nodes: Node[], onlySelected = false): ExportAsset[] {
 function buildProject(currentProject: Project | undefined, nodes: Node[], edges: Edge[]): ExportProject {
   const now = new Date().toISOString();
   return {
-    projectName: currentProject?.name || "AIGC 视频工作流",
+    projectName: currentProject?.name || "Moon｜Tv 视频工作流",
     version: "0.1.0",
     createdAt: currentProject?.createdAt ? new Date(currentProject.createdAt).toISOString() : now,
     updatedAt: now,

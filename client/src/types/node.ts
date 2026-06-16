@@ -19,7 +19,16 @@ export type TextGenerateNodeData = {
   payloadSummary?: GenerationPayloadSummary;
   referencedInputs?: Array<{ sourceNodeId: string; sourceNodeType: string }>;
 };
-export type ImageNodeData = { title: string; assetId?: string; url?: string; localPath?: string; thumbnailUrl?: string };
+export type ImageNodeData = {
+  title: string;
+  assetId?: string;
+  url?: string;
+  localPath?: string;
+  thumbnailUrl?: string;
+  width?: number;
+  height?: number;
+  aspectRatio?: string;
+};
 export type ImageGenerateNodeData = {
   title: string;
   prompt: string;

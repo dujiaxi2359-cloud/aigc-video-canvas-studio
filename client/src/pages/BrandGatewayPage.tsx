@@ -17,7 +17,7 @@ import { useCanvasStore } from "../store/canvasStore";
 import { useProjectStore } from "../store/projectStore";
 
 const ICP_RECORD = "粤ICP备2026074382号";
-const STUDIO_NAME = "AIGCNONG个人工作室";
+const STUDIO_NAME = "Moon｜Tv";
 
 const quickPrompts = [
   { label: "电商主图", prompt: "为新品生成一组高级电商主图，突出材质、卖点和使用场景。", mode: "photos" as const },
@@ -245,7 +245,7 @@ export function BrandGatewayPage({ onNavigate }: { onNavigate: (page: Page, proj
         <div className="mx-auto max-w-[1380px] px-5 py-16 md:px-10">
           <div className="grid gap-10 border-y border-white/[0.07] py-14 md:grid-cols-[1.4fr_1fr_1fr]">
             <div>
-              <div className="text-[24px] font-black text-white">AIGC | 创作平台</div>
+              <div className="text-[24px] font-black text-white">Moon｜Tv</div>
               <p className="mt-5 max-w-[380px] text-[14px] leading-7 text-white/34">
                 AI 驱动的商业内容生产平台。编辑文本、图像、视频与素材流程，让团队把创意稳定变成可交付资产。
               </p>
@@ -286,7 +286,7 @@ export function BrandGatewayPage({ onNavigate }: { onNavigate: (page: Page, proj
           </div>
 
           <div className="flex flex-col gap-3 border-t border-white/[0.07] pt-8 text-[12px] font-semibold uppercase tracking-[0.18em] text-white/24 md:flex-row md:items-center md:justify-between">
-            <span>© 2026 AIGCNONG</span>
+            <span>© 2026 Moon｜Tv</span>
             <span>imagephotos.asia</span>
           </div>
         </div>
