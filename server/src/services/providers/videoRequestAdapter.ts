@@ -120,7 +120,7 @@ function isOfficialEndpoint(providerId: string, baseUrl: string) {
 function isOpenAiCompatibleVideoEndpoint(baseUrl: string) {
   if (!baseUrl) return false;
   const value = baseUrl.toLowerCase().replace(/\/+$/g, "");
-  if (/ai666\.net|cy88\.ai/.test(value)) return true;
+  if (/ai666\.net|cy88\.ai|runapi\.co/.test(value)) return true;
   try {
     const url = new URL(value);
     return /\/(?:v1|v1\/videos|v1\/video\/create|videos|video\/create)$/.test(url.pathname.replace(/\/+$/g, ""));
@@ -133,6 +133,7 @@ function inferApiFamily(channel: VideoChannel, baseUrl: string, modelName: strin
   if (capabilities.apiFamily) return capabilities.apiFamily;
   if (channel === "official") return "official_provider";
   const value = `${baseUrl} ${modelName}`.toLowerCase();
+  if (/runapi\.co/.test(value)) return "unified_video_create";
   if (/doubao[-_]?seedance[-_]?1[-_]?5/.test(value)) return "doubao_seedance15";
   if (/kling|可灵/.test(value)) return "aigc_video_json";
   if (/\/v1\/video\/create(?:\/|$)/.test(value)) return "unified_video_create";
@@ -148,6 +149,7 @@ function defaultCreateEndpoint(channel: VideoChannel, baseUrl: string, capabilit
   if (capabilities.endpoint) return capabilities.endpoint;
   if (channel === "official") return "";
   const value = baseUrl.toLowerCase();
+  if (/runapi\.co/.test(value)) return "/v1/video/create";
   if (/\/v1\/video\/generations\/?$/.test(value)) return "/v1/video/generations";
   if (/\/v1\/video\/create\/?$/.test(value)) return "/v1/video/create";
   if (/\/v1\/videos\/?$/.test(value)) return "/v1/videos";

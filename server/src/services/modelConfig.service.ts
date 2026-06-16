@@ -180,12 +180,14 @@ export async function saveModelConfigsBulk(
   let updatedCount = 0;
   let deletedCount = 0;
   const keptIds: string[] = [];
+  const touchedBaseUrls = new Set<string>();
 
   await db.transaction(async () => {
     for (const input of inputs) {
       const modelName = input.modelName?.trim();
       const apiBaseUrl = input.apiBaseUrl?.trim().replace(/\/+$/, "");
       if (!modelName || !apiBaseUrl) throw new Error("模型名称和上游请求地址不能为空。");
+      touchedBaseUrls.add(apiBaseUrl);
 
       const existing = await db.get<ModelConfigRow>(
         "SELECT * FROM model_configs WHERE workspace_id = ? AND model_name = ? AND RTRIM(api_base_url, '/') = ? ORDER BY updated_at DESC LIMIT 1",
@@ -208,16 +210,21 @@ export async function saveModelConfigsBulk(
       }
     }
 
-    if (options.replaceExisting) {
+    if (options.replaceExisting && keptIds.length && touchedBaseUrls.size) {
       const placeholders = keptIds.map(() => "?").join(", ");
+      const basePlaceholders = Array.from(touchedBaseUrls).map(() => "?").join(", ");
       const obsolete = await db.get<{ count: number }>(
-        `SELECT COUNT(*) AS count FROM model_configs WHERE workspace_id = ? AND id NOT IN (${placeholders})`,
+        `SELECT COUNT(*) AS count FROM model_configs
+         WHERE workspace_id = ? AND RTRIM(api_base_url, '/') IN (${basePlaceholders}) AND id NOT IN (${placeholders})`,
         workspace.id,
+        ...Array.from(touchedBaseUrls),
         ...keptIds
       );
       await db.run(
-        `DELETE FROM model_configs WHERE workspace_id = ? AND id NOT IN (${placeholders})`,
+        `DELETE FROM model_configs
+         WHERE workspace_id = ? AND RTRIM(api_base_url, '/') IN (${basePlaceholders}) AND id NOT IN (${placeholders})`,
         workspace.id,
+        ...Array.from(touchedBaseUrls),
         ...keptIds
       );
       deletedCount = Number(obsolete?.count ?? 0);

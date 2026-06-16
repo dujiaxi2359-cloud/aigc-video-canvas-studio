@@ -1,15 +1,13 @@
 import { memo } from "react";
-import { getBezierPath, Position, type ConnectionLineComponentProps } from "reactflow";
+import type { ConnectionLineComponentProps } from "reactflow";
+import { getStudioBezierPath } from "./useBezierPath";
 
 function StudioConnectionLineComponent({ fromX, fromY, toX, toY }: ConnectionLineComponentProps) {
-  const [path] = getBezierPath({
+  const [path] = getStudioBezierPath({
     sourceX: fromX,
     sourceY: fromY,
-    sourcePosition: Position.Right,
     targetX: toX,
-    targetY: toY,
-    targetPosition: Position.Left,
-    curvature: 0.36
+    targetY: toY
   });
 
   return (

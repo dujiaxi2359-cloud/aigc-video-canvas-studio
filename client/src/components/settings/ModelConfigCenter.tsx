@@ -196,8 +196,22 @@ function videoCapabilitiesFor(modelName: string): ModelCapabilities {
   return defaultVideoCapabilities;
 }
 
-function videoCapabilitiesForChannel(modelName: string, _baseUrl: string): ModelCapabilities {
-  return videoCapabilitiesFor(modelName);
+function videoCapabilitiesForChannel(modelName: string, baseUrl: string): ModelCapabilities {
+  const capabilities = videoCapabilitiesFor(modelName);
+  if (/runapi\.co/i.test(baseUrl)) {
+    return {
+      ...capabilities,
+      channel: "proxy",
+      apiFamily: "unified_video_create",
+      createEndpoint: "/v1/video/create",
+      endpoint: "/v1/video/create",
+      pollEndpoint: "/v1/video/query?id={taskId}",
+      requestFormat: "json",
+      imageTransport: capabilities.supportedInputs?.some((input) => ["image", "first_frame", "reference_image", "first_last_frame"].includes(input)) ? "url" : "unsupported",
+      videoTransport: capabilities.supportedInputs?.includes("video") ? "url_or_base64_json" : capabilities.videoTransport
+    };
+  }
+  return capabilities;
 }
 
 function pickChannelCapability(capabilities: ModelCapabilities): NonNullable<ModelCapabilities["channelCapability"]> {
@@ -302,6 +316,15 @@ function normalizeBaseUrl(value: string) {
     return normalized;
   }
   return normalized;
+}
+
+function apiHost(value?: string) {
+  if (!value) return "";
+  try {
+    return new URL(value).host.replace(/^www\./, "");
+  } catch {
+    return value.replace(/^https?:\/\//i, "").replace(/\/.*$/, "");
+  }
 }
 
 function classifyModel(modelName: string): ModelCategory {
@@ -424,8 +447,11 @@ function groupEnabledModels(models: ModelConfig[]): EnabledModelGroup[] {
     const modelName = model.modelName || model.displayName || model.id;
     const official = officialTemplateFor(modelName);
     const modelCapability = model.capabilities?.modelCapability?.model;
-    const label = official?.displayName || model.displayName || model.modelName;
-    const key = official ? `official:${official.id}` : modelCapability ? `capability:${modelCapability}` : `raw:${label}`;
+    const baseLabel = official?.displayName || model.displayName || model.modelName;
+    const host = apiHost(model.apiBaseUrl);
+    const label = host ? `${baseLabel} · ${host}` : baseLabel;
+    const channelKey = model.apiBaseUrl?.trim().replace(/\/+$/, "").toLowerCase() || model.providerId || model.provider || "default";
+    const key = official ? `official:${official.id}:${channelKey}` : modelCapability ? `capability:${modelCapability}:${channelKey}` : `raw:${baseLabel}:${channelKey}`;
     const existing = groups.get(key);
     if (existing) {
       existing.models.push(model);
@@ -564,13 +590,13 @@ export function ModelConfigCenter() {
           capabilities: inferred.category === "video" ? mergeOfficialAndChannelCapabilities(official, modelName, normalizedBaseUrl) : inferred.capabilities
         } satisfies Partial<ModelConfig> & { apiKey?: string };
       });
-      const result = await saveModelConfigsBulk(payloads, true);
+      const result = await saveModelConfigsBulk(payloads, false);
       setManualModel("");
       const counts = models.reduce((result, model) => {
         result[classifyModel(model)] += 1;
         return result;
       }, { image: 0, video: 0, text: 0 });
-      setMessage(`同步成功：新增 ${result.createdCount} 个、更新 ${result.updatedCount} 个、移除旧模型 ${result.deletedCount} 个。视频模型已按官方名称/能力归一，实际请求仍使用上游模型 ID。当前启用：图文 ${counts.image}、视频 ${counts.video}、文本 ${counts.text}。`);
+      setMessage(`同步成功：新增 ${result.createdCount} 个、更新 ${result.updatedCount} 个。其它中转线路已保留，可在节点模型下拉里按线路切换。视频模型按官方名称/能力归一，实际请求仍使用上游模型 ID。当前保存：图文 ${counts.image}、视频 ${counts.video}、文本 ${counts.text}。`);
       setMessageTone("success");
     } catch (error) {
       setMessage(errorText(error));
@@ -668,7 +694,7 @@ export function ModelConfigCenter() {
                     <div className="mb-3 flex items-center justify-between">
                       <div>
                         <div className="text-[13px] font-semibold text-white">模型列表</div>
-                        <div className="mt-1 text-[11px] text-white/35">同名官方模型已合并；点击一次会选择或取消该官方模型下的所有上游 ID。</div>
+                        <div className="mt-1 text-[11px] text-white/35">同名官方模型会按当前上游线路保存；其它已保存中转不会被覆盖或删除。</div>
                       </div>
                       <div className="rounded-full bg-white/[0.06] px-2 py-1 text-[11px] text-white/45">已选 {selectedGroupCount} 组 · {selectedModels.size} / {fetchedModels.length} 上游</div>
                     </div>

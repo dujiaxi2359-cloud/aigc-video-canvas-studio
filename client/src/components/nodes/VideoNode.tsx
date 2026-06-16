@@ -20,7 +20,7 @@ import { categoryForOfficialVideoMode, legacyInputModeToOfficialMode, officialMo
 import { NodeParameterPopover } from "./NodeParameterPopover";
 import { CreationNodeFrame } from "./CreationNodeFrame";
 import { MediaPreviewActions } from "./MediaPreviewActions";
-import { NodeToolPanel, type NodeTool } from "./NodeToolPanel";
+import { NodeToolPanel, type NodeTool, type ReferenceMenuItem } from "./NodeToolPanel";
 
 const modeLabels: Record<VideoInputMode, string> = {
   "text-to-video": "文生视频",
@@ -43,6 +43,22 @@ const genericCategoryInputModes: Record<OfficialVideoCategory, VideoInputMode[]>
   video_edit: ["video-to-video"],
   video_extension: []
 };
+
+function channelHost(apiBaseUrl?: string) {
+  if (!apiBaseUrl) return "";
+  try {
+    return new URL(apiBaseUrl).host.replace(/^www\./, "");
+  } catch {
+    return apiBaseUrl.replace(/^https?:\/\//i, "").replace(/\/.*$/, "");
+  }
+}
+
+function modelOptionLabel(model: ModelConfig, models: ModelConfig[]) {
+  const host = channelHost(model.apiBaseUrl);
+  const duplicateName = models.some((item) => item.id !== model.id && item.displayName === model.displayName);
+  if (!host || !duplicateName) return model.displayName;
+  return `${model.displayName} · ${host}`;
+}
 
 function isRuntimeUsableVideoModel(model: ModelConfig) {
   return model.enabled && model.category === "video" && modelInputModes(model).some((mode) =>
@@ -437,6 +453,7 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
   const selectedDuration = parameterValue(props.data.duration, availableDurations);
   const outputUrl = absoluteUploadUrl(props.data.outputUrl);
   const outputIsVideo = isVideoOutput(props.data.outputUrl);
+  const selectedChannelHost = channelHost(selectedModel?.apiBaseUrl);
   const actualOutputInfo = outputInfo(props.data.payloadSummary, props.data.resolution);
   const veoSafetyDetails = (props.data.payloadSummary ?? {}) as Record<string, unknown>;
   const isVeoRaiFiltered = props.data.errorCode === "VEO_RAI_FILTERED_NO_VIDEO" || veoSafetyDetails.type === "RAI_FILTERED";
@@ -599,6 +616,13 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
     ...resolvedInputs.audioInputs.map((input, index) => ({ input, kind: "音频", kindIndex: index + 1, genericToken: `@素材${resolvedInputs.imageInputs.length + resolvedInputs.videoInputs.length + index + 1}`, typedToken: `@音频${index + 1}` }))
   ];
   const referencedImageNodeIds = new Set(resolvedInputs.imageInputs.map((input) => input.sourceNodeId));
+  const referenceMenuItems: ReferenceMenuItem[] = referencedInputs.map((item) => ({
+    token: item.genericToken,
+    typedToken: item.typedToken,
+    label: `${item.kind} ${item.kindIndex}`,
+    kind: item.kind,
+    previewUrl: item.input.url && referencedImageNodeIds.has(item.input.sourceNodeId) ? absoluteUploadUrl(item.input.url) : undefined
+  }));
   const dock = (
     <div className="creation-dock-content relative">
       <div className="creation-dock-header">
@@ -617,7 +641,7 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
       {(props.data.errorMessage || localError) && <button type="button" className="creation-error-line" onClick={() => setExpanded(true)}><AlertCircle size={12} /><span>{props.data.errorMessage || localError}</span><strong>诊断</strong></button>}
       <div className="creation-dock-footer">
         <div className="creation-dock-identity">
-          <div className="creation-model-field"><Activity size={14} /><Select className="creation-model-select" value={props.data.modelConfigId ?? ""} onChange={(event) => update(props.id, { modelConfigId: event.target.value })}><option value="">选择模型</option>{models.map((model) => <option key={model.id} value={model.id}>{model.displayName}</option>)}</Select></div>
+          <div className="creation-model-field" title={selectedChannelHost ? `当前线路：${selectedChannelHost}` : undefined}><Activity size={14} /><Select className="creation-model-select" value={props.data.modelConfigId ?? ""} onChange={(event) => update(props.id, { modelConfigId: event.target.value, errorCode: undefined, errorMessage: undefined, debugMessage: undefined })}><option value="">选择模型</option>{models.map((model) => <option key={model.id} value={model.id}>{modelOptionLabel(model, models)}</option>)}</Select>{selectedChannelHost && <span className="creation-model-channel">{selectedChannelHost}</span>}</div>
           <div ref={parameterAnchorRef} className={`creation-parameter-wrap nodrag nopan ${parametersOpen ? "is-open" : ""}`}>
           <button type="button" className="creation-parameter-pill" onClick={() => { setActiveTool(null); setParametersOpen((value) => !value); }}>{parameterSummary({ aspectRatio: selectedAspectRatio, resolution: selectedResolution, duration: selectedDuration, ratios: availableRatios, resolutions: availableResolutions, durations: availableDurations })}</button>
           <NodeParameterPopover open={parametersOpen} anchorRef={parameterAnchorRef} onClose={() => setParametersOpen(false)} sections={[
@@ -635,7 +659,7 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
           <button type="button" title={props.data.status === "idle" ? "生成" : generateButtonLabel(props.data.status)} aria-label={props.data.status === "idle" ? "生成" : generateButtonLabel(props.data.status)} className="creation-generate-button" disabled={!selectedModel || availableVideoModes.length === 0 || props.data.status === "generating"} onClick={() => void generate()}><ArrowUp size={16} /></button>
         </div>
       </div>
-      <NodeToolPanel tool={activeTool} onClose={() => setActiveTool(null)} onInsert={insertPromptContext} />
+      <NodeToolPanel tool={activeTool} onClose={() => setActiveTool(null)} onInsert={activeTool === "assets" ? insertReferenceToken : insertPromptContext} referenceItems={referenceMenuItems} />
       {expanded && <div className="creation-detail-panel nodrag nopan">
         <div className="creation-detail-section"><strong>生成方式</strong><div className="flex flex-wrap gap-1.5">{videoCategories.map((category) => { const disabledReason = disabledCategoryReason(selectedModel, category); return <button key={category} disabled={Boolean(disabledReason)} title={disabledReason} className={videoCategory === category ? "is-active" : ""} onClick={() => changeVideoCategory(category)}>{officialVideoCategoryLabels[category]}</button>; })}</div></div>
         {actualOutputInfo && props.data.status === "success" && <div className="creation-detail-copy">实际输出：{actualOutputInfo.width && actualOutputInfo.height ? `${actualOutputInfo.width}×${actualOutputInfo.height}` : "未知尺寸"}{actualOutputInfo.ratio ? ` · ${actualOutputInfo.ratio}` : ""}{actualOutputInfo.duration ? ` · ${actualOutputInfo.duration.toFixed(1)}s` : ""}</div>}

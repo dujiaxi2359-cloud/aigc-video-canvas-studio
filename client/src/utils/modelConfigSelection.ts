@@ -4,11 +4,21 @@ function normalizeKey(value: string) {
   return value.trim().toLowerCase().replace(/\s+/g, " ");
 }
 
+function normalizeBaseUrl(value?: string) {
+  return (value ?? "").trim().toLowerCase().replace(/\/+$/g, "");
+}
+
+function channelKey(model: ModelConfig) {
+  const baseUrl = normalizeBaseUrl(model.apiBaseUrl);
+  if (baseUrl) return `base:${baseUrl}`;
+  return `provider:${normalizeKey(model.providerId || model.provider || "unknown")}`;
+}
+
 export function modelConfigSelectionKey(model: ModelConfig) {
   const officialModel = model.capabilities?.modelCapability?.model;
-  if (officialModel) return `official:${normalizeKey(officialModel)}`;
-  if (model.displayName) return `display:${normalizeKey(model.displayName)}`;
-  return `raw:${normalizeKey(model.modelName || model.id)}`;
+  if (officialModel) return `official:${normalizeKey(officialModel)}:${channelKey(model)}`;
+  if (model.displayName) return `display:${normalizeKey(model.displayName)}:${channelKey(model)}`;
+  return `raw:${normalizeKey(model.modelName || model.id)}:${channelKey(model)}`;
 }
 
 export function dedupeModelConfigsForSelect(models: ModelConfig[]) {

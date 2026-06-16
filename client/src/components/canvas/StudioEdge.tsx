@@ -1,19 +1,17 @@
 import { memo, useState } from "react";
-import { BaseEdge, EdgeLabelRenderer, getBezierPath, type EdgeProps } from "reactflow";
+import { BaseEdge, EdgeLabelRenderer, type EdgeProps } from "reactflow";
 import { X } from "lucide-react";
 import { useCanvasStore } from "../../store/canvasStore";
+import { getStudioBezierPath } from "./useBezierPath";
 
 function StudioEdgeComponent(props: EdgeProps) {
   const [hovered, setHovered] = useState(false);
   const deleteEdge = useCanvasStore((state) => state.deleteEdge);
-  const [edgePath, labelX, labelY] = getBezierPath({
+  const [edgePath, labelX, labelY] = getStudioBezierPath({
     sourceX: props.sourceX,
     sourceY: props.sourceY,
-    sourcePosition: props.sourcePosition,
     targetX: props.targetX,
-    targetY: props.targetY,
-    targetPosition: props.targetPosition,
-    curvature: 0.36
+    targetY: props.targetY
   });
   const stateClass = props.selected ? "is-selected" : hovered ? "is-hovered" : "";
 
