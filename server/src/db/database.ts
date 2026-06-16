@@ -69,6 +69,153 @@ function customerInviteCode() {
   return `AIGCNONG-${Math.random().toString(36).slice(2, 6).toUpperCase()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
 }
 
+async function migrateAi666VideoProtocols(database: AppDatabase) {
+  const rows = await database.all<Array<{ id: string; api_base_url: string; display_name: string; model_name: string; capabilities_json: string }>>(
+    "SELECT id, api_base_url, display_name, model_name, capabilities_json FROM model_configs WHERE lower(api_base_url) LIKE '%ai666.net%' OR lower(api_base_url) LIKE '%cy88.ai%' OR lower(model_name) LIKE '%seedance%' OR lower(model_name) LIKE '%kling%' OR lower(model_name) LIKE '%grok%'"
+  );
+  for (const row of rows) {
+    const name = row.model_name.toLowerCase();
+    const capabilities = JSON.parse(row.capabilities_json) as Record<string, unknown>;
+    const channelCapability = capabilities.channelCapability && typeof capabilities.channelCapability === "object" ? capabilities.channelCapability as Record<string, unknown> : {};
+    const oldFamily = String(channelCapability.apiFamily ?? capabilities.apiFamily ?? "");
+    const modelCapability = capabilities.modelCapability as Record<string, unknown> | undefined;
+    const officialModel = String(modelCapability?.model ?? "");
+    const hasOfficialModel = Boolean(officialModel);
+    let changed = false;
+    let displayName = row.display_name;
+    const assign = (values: Record<string, unknown>) => {
+      Object.assign(capabilities, values);
+      changed = true;
+    };
+    const assignDisplayName = (value: string) => {
+      if (displayName !== value) {
+        displayName = value;
+        changed = true;
+      }
+    };
+
+    const isSeedance20 = /doubao[-_]?seedance[-_]?2[-_]?0/.test(name);
+    const isSeedance20Fast = /doubao[-_]?seedance[-_]?2[-_]?0[-_]?fast/.test(name);
+    const seedance20DisplayName = isSeedance20Fast ? "Seedance 2.0 Fast" : "Seedance 2.0";
+    const seedance20ModelKey = isSeedance20Fast ? "seedance-2-0-fast" : "seedance-2-0";
+    const seedance20ImageTransport = String(channelCapability.imageTransport ?? capabilities.imageTransport ?? "");
+
+    if (isSeedance20 && (!oldFamily || oldFamily === "openai_chat_video" || oldFamily === "openai_videos" || !hasOfficialModel || displayName !== seedance20DisplayName || officialModel !== seedance20ModelKey || seedance20ImageTransport !== "url_or_asset")) {
+      assignDisplayName(seedance20DisplayName);
+      assign({
+        inputModes: ["text-to-video", "image-to-video", "first-last-frame", "reference-to-video", "video-to-video"],
+        duration: { type: "enum", values: [0, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15] },
+        aspectRatios: ["9:16", "16:9", "1:1", "3:4", "4:3", "21:9"],
+        resolutions: ["480P", "720P", "1080P"],
+        supportsImageInput: true, supportsReferenceImage: true, supportsMultiImageInput: true,
+        supportsFirstLastFrame: true, supportsVideoInput: true, supportsAudio: true,
+        maxReferenceImages: 9, maxReferenceVideos: 3, maxReferenceAudios: 3, maxReferenceFiles: 12,
+        modelCapability: { model: seedance20ModelKey, supportsTextToVideo: true, supportsImageToVideo: true, supportsFirstLastFrame: true, supportsVideoToVideo: true },
+        channelCapability: {
+          provider: "doubao", channel: "proxy", apiFamily: "seedance2_native",
+          createEndpoint: "/v1/video/generations", endpoint: "/v1/video/generations",
+          pollEndpoint: "/v1/video/generations/{taskId}", requestFormat: "json",
+          imageTransport: "url_or_asset", idField: "task_id", taskIdField: "task_id",
+          supportedInputs: ["text", "image", "first_frame", "reference_image", "first_last_frame"]
+        }
+      });
+    } else if (/doubao[-_]?seedance[-_]?1[-_]?5/.test(name) && (!oldFamily || oldFamily === "openai_videos" || oldFamily === "seedance2_native" || !hasOfficialModel)) {
+      assignDisplayName("Seedance 1.5 Pro");
+      assign({
+        inputModes: ["text-to-video", "image-to-video", "first-last-frame"],
+        duration: { type: "range", min: 4, max: 11, step: 1 },
+        aspectRatios: ["16:9", "9:16", "1:1"],
+        resolutions: ["480P", "720P", "1080P"],
+        supportsImageInput: true, supportsFirstLastFrame: true, maxReferenceImages: 2,
+        modelCapability: { model: "seedance-1-5-pro", supportsTextToVideo: true, supportsImageToVideo: true, supportsFirstLastFrame: true, supportsVideoToVideo: false },
+        channelCapability: {
+          provider: "doubao", channel: "proxy", apiFamily: "doubao_seedance15",
+          createEndpoint: "/v1/videos", endpoint: "/v1/videos", pollEndpoint: "/v1/videos/{taskId}",
+          requestFormat: "multipart", imageTransport: "multipart_file", imageField: "first_frame_image",
+          supportedInputs: ["text", "image", "first_frame", "first_last_frame"]
+        },
+        supportedInputs: ["text", "image", "first_frame", "first_last_frame"],
+        supportedDurations: [4, 5, 6, 7, 8, 9, 10, 11], supportsVideoInput: false
+      });
+    } else if (/kling|可灵/.test(name) && (!oldFamily || oldFamily === "openai_videos" || !hasOfficialModel)) {
+      const noReference = /(?:^|[-_])noref(?:$|[-_])/.test(name);
+      assignDisplayName("Kling 3.0 Omni");
+      assign({
+        inputModes: ["text-to-video", "image-to-video", "first-last-frame", "reference-to-video"],
+        duration: { type: "enum", values: [5, 10, 15] },
+        aspectRatios: ["16:9", "9:16", "1:1"],
+        resolutions: ["720P", "1080P"],
+        supportsImageInput: true, supportsReferenceImage: true, supportsMultiImageInput: true,
+        supportsFirstLastFrame: true, supportsMotionControl: true, supportsCameraControl: true,
+        modelCapability: { model: "kling-3-0", supportsTextToVideo: true, supportsImageToVideo: true, supportsFirstLastFrame: true, supportsVideoToVideo: false },
+        channelCapability: {
+          provider: "kling", channel: "proxy", apiFamily: "aigc_video_json",
+          createEndpoint: "/v1/videos", endpoint: "/v1/videos", pollEndpoint: "/v1/videos/{taskId}",
+          requestFormat: "json", imageTransport: noReference ? "unsupported" : "url_or_asset", imageField: "image",
+          supportedInputs: noReference ? ["text"] : ["text", "image", "first_frame", "first_last_frame"]
+        },
+        supportedInputs: noReference ? ["text"] : ["text", "image", "first_frame", "first_last_frame"],
+        maxReferenceImages: 4
+      });
+    }
+
+    const grokKnownModel = /grok[-_ .]?video[-_ .]?3[-_ .]?max/.test(name) ? { displayName: "Grok Video 3 Max", model: "grok-video-3-max", duration: { type: "enum", values: [15] }, supportedDurations: [15] }
+      : /grok[-_ .]?video[-_ .]?3[-_ .]?pro/.test(name) ? { displayName: "Grok Video 3 Pro", model: "grok-video-3-pro", duration: { type: "enum", values: [10] }, supportedDurations: [10] }
+        : /grok[-_ .]?video[-_ .]?3/.test(name) ? { displayName: "Grok Video 3", model: "grok-video-3", duration: { type: "range", min: 1, max: 15, step: 1 }, supportedDurations: Array.from({ length: 15 }, (_, index) => index + 1) }
+          : undefined;
+    const grokNeedsCapabilityUpgrade = grokKnownModel && (
+      !Array.isArray(capabilities.aspectRatios) || capabilities.aspectRatios.length === 0 ||
+      !Array.isArray(capabilities.resolutions) || capabilities.resolutions.length === 0 ||
+      !capabilities.duration
+    );
+    if (grokKnownModel && grokNeedsCapabilityUpgrade) {
+      assignDisplayName(grokKnownModel.displayName);
+      const existingChannel = capabilities.channelCapability && typeof capabilities.channelCapability === "object" ? capabilities.channelCapability as Record<string, unknown> : {};
+      assign({
+        inputModes: ["text-to-video", "image-to-video", "reference-to-video", "video-to-video"],
+        duration: grokKnownModel.duration,
+        aspectRatios: ["16:9", "9:16", "2:3", "3:2", "1:1"],
+        resolutions: ["720P", "1080P"],
+        supportsImageInput: true, supportsReferenceImage: true, supportsMultiImageInput: true,
+        supportsVideoInput: true, supportsAudio: true,
+        maxReferenceImages: 7,
+        supportedDurations: grokKnownModel.supportedDurations,
+        modelCapability: { model: grokKnownModel.model, supportsTextToVideo: true, supportsImageToVideo: true, supportsReferenceToVideo: true, supportsVideoToVideo: true },
+        channelCapability: {
+          ...existingChannel,
+          provider: existingChannel.provider ?? "grok",
+          channel: existingChannel.channel ?? "proxy",
+          apiFamily: existingChannel.apiFamily ?? "grok_video",
+          createEndpoint: existingChannel.createEndpoint ?? "/v1/videos",
+          endpoint: existingChannel.endpoint ?? "/v1/videos",
+          pollEndpoint: existingChannel.pollEndpoint ?? "/v1/videos/{taskId}",
+          requestFormat: existingChannel.requestFormat ?? "multipart",
+          imageTransport: existingChannel.imageTransport ?? "multipart_file",
+          supportedInputs: Array.isArray(existingChannel.supportedInputs) && existingChannel.supportedInputs.length
+            ? existingChannel.supportedInputs
+            : ["text", "image", "first_frame", "reference_image", "video"]
+        },
+        supportedInputs: ["text", "image", "first_frame", "reference_image", "video"]
+      });
+    }
+
+    const grokDisplayName = /grok[-_ .]?imagine[-_ .]?video[-_ .]?1[-_ .]?5/.test(name) ? "Grok Imagine Video 1.5 Preview"
+      : /grok[-_ .]?imagine[-_ .]?video/.test(name) ? "Grok Imagine Video"
+        : /grok[-_ .]?video[-_ .]?3[-_ .]?max/.test(name) ? "Grok Video 3 Max"
+          : /grok[-_ .]?video[-_ .]?3[-_ .]?pro/.test(name) ? "Grok Video 3 Pro"
+            : /grok[-_ .]?video[-_ .]?3/.test(name) ? "Grok Video 3"
+              : /grok[-_ .]?1[-_ .]?5[-_ .]?video[-_ .]?15s/.test(name) ? "Grok 1.5 Video 15s"
+                : /grok[-_ .]?1[-_ .]?5[-_ .]?video[-_ .]?10s/.test(name) ? "Grok 1.5 Video 10s"
+                  : /grok[-_ .]?1[-_ .]?5[-_ .]?video[-_ .]?6s/.test(name) ? "Grok 1.5 Video 6s"
+                    : "";
+    if (grokDisplayName) assignDisplayName(grokDisplayName);
+
+    if (changed) {
+      await database.run("UPDATE model_configs SET display_name = ?, capabilities_json = ?, updated_at = ? WHERE id = ?", displayName, JSON.stringify(capabilities), Date.now(), row.id);
+    }
+  }
+}
+
 export async function getDb() {
   if (db) return db;
 
@@ -100,6 +247,7 @@ export async function getDb() {
   if (!modelColumns.some((column) => column.name === "created_by_user_id")) {
     await db.exec("ALTER TABLE model_configs ADD COLUMN created_by_user_id TEXT");
   }
+  await migrateAi666VideoProtocols(db);
   const database = db;
   const ensureColumn = async (table: string, name: string, sql: string) => {
     const columns = await database.all<Array<{ name: string }>>(`PRAGMA table_info(${table})`);

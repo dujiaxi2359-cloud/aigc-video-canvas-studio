@@ -1,6 +1,5 @@
 import { getDb } from "../db/database.js";
 import { requireRequestContext } from "./requestContext.js";
-import { modelCatalog } from "./modelCatalog.js";
 import { getVideoModelCapabilityOrLegacy } from "../config/videoModelCapabilities.js";
 import { officialModeToLegacyInputMode, officialVideoModeLabels } from "../types/videoModes.js";
 import type {
@@ -34,10 +33,24 @@ function constraintMatches(constraint: ModelConstraint, context: VideoNodeContex
 }
 
 export function calculateAvailableVideoOptions(capabilities: ModelCapabilities, nodeContext: VideoNodeContext): AvailableVideoOptions {
-  let availableDurations = durationsFromCapability(capabilities.duration);
-  let availableResolutions = [...(capabilities.resolutions ?? [])];
-  let availableAspectRatios = [...(capabilities.aspectRatios ?? [])];
-  const availableInputModes = capabilities.inputModes.filter((mode) =>
+  const channel = { ...capabilities, ...capabilities.channelCapability };
+  const inputModes = new Set(channel.inputModes);
+  const theoretical = capabilities.modelCapability;
+  if (theoretical?.supportsTextToVideo) inputModes.add("text-to-video");
+  if (theoretical?.supportsImageToVideo) inputModes.add("image-to-video");
+  if (theoretical?.supportsFirstLastFrame) inputModes.add("first-last-frame");
+  if (theoretical?.supportsVideoToVideo) inputModes.add("video-to-video");
+  for (const input of channel.supportedInputs ?? []) {
+    if (input === "text") inputModes.add("text-to-video");
+    if (["image", "first_frame"].includes(input)) inputModes.add("image-to-video");
+    if (input === "reference_image") inputModes.add("reference-to-video");
+    if (input === "first_last_frame") inputModes.add("first-last-frame");
+    if (input === "video") inputModes.add("video-to-video");
+  }
+  let availableDurations = capabilities.supportedDurations?.length ? [...capabilities.supportedDurations] : durationsFromCapability(capabilities.duration);
+  let availableResolutions = [...(capabilities.supportedResolutions ?? capabilities.resolutions ?? [])];
+  let availableAspectRatios = [...(capabilities.supportedAspectRatios ?? capabilities.aspectRatios ?? [])];
+  const availableInputModes = Array.from(inputModes).filter((mode) =>
     ["text-to-video", "image-to-video", "first-last-frame", "reference-to-video", "video-to-video"].includes(mode)
   );
   const lockedFields: AvailableVideoOptions["lockedFields"] = {};
@@ -168,8 +181,7 @@ async function getCapabilities(modelConfigId: string) {
     requireRequestContext().workspace.id
   );
   if (!row) throw new Error("Model config not found or disabled");
-  const catalogItem = modelCatalog.find((item) => item.providerId === row.provider_id && item.name === row.model_name);
-  return catalogItem?.capabilities ?? JSON.parse(row.capabilities_json) as ModelCapabilities;
+  return JSON.parse(row.capabilities_json) as ModelCapabilities;
 }
 
 async function getCapabilityContext(modelConfigId: string) {
@@ -180,19 +192,16 @@ async function getCapabilityContext(modelConfigId: string) {
     requireRequestContext().workspace.id
   );
   if (!row) throw new Error("Model config not found or disabled");
-  const catalogItem = modelCatalog.find((item) => item.providerId === row.provider_id && item.name === row.model_name);
   return {
-    capabilities: catalogItem?.capabilities ?? JSON.parse(row.capabilities_json) as ModelCapabilities,
+    capabilities: JSON.parse(row.capabilities_json) as ModelCapabilities,
     providerId: row.provider_id,
     modelName: row.model_name,
-    catalogModelId: catalogItem?.id
+    catalogModelId: undefined
   };
 }
 
 export async function getAvailableVideoOptions(modelConfigId: string, nodeContext: VideoNodeContext) {
   const context = await getCapabilityContext(modelConfigId);
-  const official = getVideoModelCapabilityOrLegacy(context.providerId, context.catalogModelId, context.modelName, nodeContext.videoMode);
-  if (official) return calculateOfficialVideoOptions(official, nodeContext);
   return calculateAvailableVideoOptions(context.capabilities, nodeContext);
 }
 

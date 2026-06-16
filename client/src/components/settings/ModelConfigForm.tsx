@@ -1,23 +1,9 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Button } from "../common/Button";
 import { Input } from "../common/Input";
-import { Select } from "../common/Select";
 import { ApiKeyInput } from "./ApiKeyInput";
-import { modelConfigApi } from "../../services/modelConfigApi";
-import { fallbackModelCatalog } from "../../data/modelCatalog";
-import { providerCatalog } from "../../data/providerCatalog";
 import { defaultCapabilities } from "./defaults";
-import type { ModelCatalogItem, ModelConfig } from "../../types/model";
-
-type CategoryFilter = "all" | "text" | "image" | "video";
-type ProviderFilter = "all" | "deepseek" | "openai" | "azure-openai" | "alibaba" | "google" | "kling" | "grok" | "seedance";
-
-const categoryTabs: Array<[CategoryFilter, string]> = [
-  ["all", "全部"],
-  ["text", "文字模型"],
-  ["image", "图片模型"],
-  ["video", "视频模型"]
-];
+import type { ModelConfig } from "../../types/model";
 
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
@@ -37,24 +23,6 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
   );
 }
 
-function describeModel(model: ModelCatalogItem) {
-  if (model.category === "image") return "图片生成 / 图片编辑";
-  if (model.category === "video") return "视频生成";
-  if (model.category === "text") return "文本生成";
-  return model.modelType;
-}
-
-function categoryOf(model?: ModelCatalogItem | ModelConfig): CategoryFilter {
-  if (model?.category === "text" || model?.category === "image" || model?.category === "video") return model.category;
-  return "video";
-}
-
-function defaultApiBaseUrlFor(model: ModelConfig | undefined, catalog: ModelCatalogItem[]) {
-  if (!model) return "";
-  const catalogItem = catalog.find((item) => item.providerId === model.providerId && item.name === model.modelName) ?? fallbackModelCatalog.find((item) => item.providerId === model.providerId && item.name === model.modelName);
-  return catalogItem?.defaultApiBaseUrl ?? providerCatalog.find((provider) => provider.id === model.providerId)?.defaultApiBaseUrl ?? "";
-}
-
 export function ModelConfigForm({
   model,
   onSubmit,
@@ -68,17 +36,13 @@ export function ModelConfigForm({
   onTest?: (data: Partial<ModelConfig> & { apiKey?: string }) => Promise<string>;
   saving?: boolean;
 }) {
-  const [catalog, setCatalog] = useState<ModelCatalogItem[]>([]);
-  const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>(categoryOf(model));
-  const [providerFilter, setProviderFilter] = useState<ProviderFilter>((model?.providerId as ProviderFilter | undefined) ?? "all");
-  const [catalogId, setCatalogId] = useState("");
   const [message, setMessage] = useState("");
   const [form, setForm] = useState({
     providerId: model?.providerId ?? "",
     provider: model?.provider ?? "",
     category: model?.category ?? "video",
     displayName: model?.displayName ?? "",
-    apiBaseUrl: model?.apiBaseUrl || defaultApiBaseUrlFor(model, fallbackModelCatalog),
+    apiBaseUrl: model?.apiBaseUrl || "",
     requiresApiBaseUrl: model?.requiresApiBaseUrl ?? false,
     apiKey: "",
     modelName: model?.modelName ?? "",
@@ -90,14 +54,7 @@ export function ModelConfigForm({
   const isAzureOpenAI = form.providerId === "azure-openai";
 
   useEffect(() => {
-    modelConfigApi.catalog().then((items) => setCatalog(items.length ? items : fallbackModelCatalog)).catch(() => setCatalog(fallbackModelCatalog));
-  }, []);
-
-  useEffect(() => {
     if (!model) {
-      setCatalogId("");
-      setCategoryFilter("video");
-      setProviderFilter("all");
       setForm({
         providerId: "",
         provider: "",
@@ -115,17 +72,12 @@ export function ModelConfigForm({
       return;
     }
 
-    const matchedCatalogItem = catalog.find((item) => item.providerId === model.providerId && item.name === model.modelName) ?? fallbackModelCatalog.find((item) => item.providerId === model.providerId && item.name === model.modelName);
-    const fallbackApiBaseUrl = matchedCatalogItem?.defaultApiBaseUrl ?? providerCatalog.find((provider) => provider.id === model.providerId)?.defaultApiBaseUrl ?? "";
-    setCatalogId(matchedCatalogItem?.id ?? "");
-    setCategoryFilter(categoryOf(model));
-    setProviderFilter((model.providerId as ProviderFilter | undefined) ?? "all");
     setForm({
       providerId: model.providerId ?? "",
       provider: model.provider,
       category: model.category ?? "video",
       displayName: model.displayName,
-      apiBaseUrl: model.apiBaseUrl || fallbackApiBaseUrl,
+      apiBaseUrl: model.apiBaseUrl || "",
       requiresApiBaseUrl: model.requiresApiBaseUrl ?? false,
       apiKey: "",
       modelName: model.modelName,
@@ -134,49 +86,7 @@ export function ModelConfigForm({
       capabilities: model.capabilities
     });
     setMessage("");
-  }, [catalog, model, model?.id]);
-
-  const availableProviders = useMemo(() => providerCatalog.filter((provider) => categoryFilter === "all" || provider.categories.includes(categoryFilter)), [categoryFilter]);
-
-  useEffect(() => {
-    if (providerFilter !== "all" && !availableProviders.some((provider) => provider.id === providerFilter)) setProviderFilter("all");
-  }, [availableProviders, providerFilter]);
-
-  const filteredCatalog = useMemo(
-    () => catalog.filter((item) => {
-      if (categoryFilter !== "all" && item.category !== categoryFilter) return false;
-      if (providerFilter !== "all" && item.providerId !== providerFilter) return false;
-      return true;
-    }),
-    [catalog, categoryFilter, providerFilter]
-  );
-
-  const catalogGroups = useMemo(() => {
-    return filteredCatalog.reduce<Record<string, ModelCatalogItem[]>>((groups, item) => {
-      groups[item.provider] = groups[item.provider] ?? [];
-      groups[item.provider].push(item);
-      return groups;
-    }, {});
-  }, [filteredCatalog]);
-
-  function applyCatalog(item?: ModelCatalogItem) {
-    if (!item) return;
-    setCatalogId(item.id);
-    setCategoryFilter(categoryOf(item));
-    setProviderFilter((item.providerId as ProviderFilter | undefined) ?? "all");
-    setForm((current) => ({
-      ...current,
-      providerId: item.providerId ?? "",
-      provider: item.provider,
-      category: item.category,
-      displayName: item.displayName,
-      apiBaseUrl: item.defaultApiBaseUrl,
-      requiresApiBaseUrl: item.requiresApiBaseUrl,
-      modelName: item.name,
-      modelType: item.modelType,
-      capabilities: item.capabilities
-    }));
-  }
+  }, [model, model?.id]);
 
   async function submit() {
     const payload: Partial<ModelConfig> & { apiKey?: string } = {
@@ -197,38 +107,6 @@ export function ModelConfigForm({
 
   return (
     <div className="space-y-4">
-      {!model && (
-        <Section title="选择内置模型">
-          <div className="mb-3 flex flex-wrap gap-2">
-            {categoryTabs.map(([value, label]) => (
-              <button key={value} type="button" onClick={() => setCategoryFilter(value)} className={`h-8 rounded-full border px-3 text-[12px] font-medium transition ${categoryFilter === value ? "border-[#7c6cf6]/40 bg-[#7c6cf6]/15 text-white" : "border-white/[0.08] text-[#a2acba] hover:bg-white/[0.05]"}`}>
-                {label}
-              </button>
-            ))}
-          </div>
-          <div className="mb-3 flex flex-wrap gap-2">
-            <button type="button" onClick={() => setProviderFilter("all")} className={`h-8 rounded-full border px-3 text-[12px] ${providerFilter === "all" ? "border-[#7c6cf6]/40 bg-[#7c6cf6]/15 text-white" : "border-white/[0.08] text-[#a2acba]"}`}>
-              全部服务商
-            </button>
-            {availableProviders.map((provider) => (
-              <button key={provider.id} type="button" onClick={() => setProviderFilter(provider.id as ProviderFilter)} className={`h-8 rounded-full border px-3 text-[12px] ${providerFilter === provider.id ? "border-[#7c6cf6]/40 bg-[#7c6cf6]/15 text-white" : "border-white/[0.08] text-[#a2acba]"}`}>
-                {provider.displayName}
-              </button>
-            ))}
-          </div>
-          <Select value={catalogId} onChange={(event) => applyCatalog(catalog.find((item) => item.id === event.target.value))}>
-            <option value="">选择模型</option>
-            {Object.entries(catalogGroups).map(([provider, items]) => (
-              <optgroup key={provider} label={provider}>
-                {items.map((item) => (
-                  <option key={item.id} value={item.id}>{item.displayName} · {describeModel(item)}</option>
-                ))}
-              </optgroup>
-            ))}
-          </Select>
-        </Section>
-      )}
-
       <Section title="基础信息">
         <div className="grid grid-cols-2 gap-3">
           <Field label="服务商">
@@ -270,7 +148,7 @@ export function ModelConfigForm({
       </Section>
 
       <div className="rounded-2xl border border-white/[0.08] bg-[#13171f]/[0.72] p-4 text-[12px] leading-5 text-[#7d8796]">
-        模型能力由系统内置 modelCatalog 决定。API Base URL 默认使用官方地址，也可以在这里改成自己的中转地址；画布节点不会出现 API Key 或 API Base URL。
+        模型以你填写或上游拉取的模型 ID 为准。请求地址、API Key 和模型能力保存在后端，画布节点只读取已启用模型。
       </div>
 
       <div className="flex justify-end gap-2">

@@ -1,17 +1,15 @@
 import { Router } from "express";
 import { getAvailableImageOptions, getAvailableVideoOptions } from "../services/modelCapability.service.js";
-import { modelCatalog } from "../services/modelCatalog.js";
-import { modelCapabilityPresets } from "../services/modelCapabilityPresets.js";
 import { providerCatalog } from "../services/providerCatalog.js";
 
 export const capabilityRouter = Router();
 
 capabilityRouter.get("/model-capability-presets", (_req, res) => {
-  res.json(modelCapabilityPresets);
+  res.json([]);
 });
 
 capabilityRouter.get("/model-catalog", (_req, res) => {
-  res.json(modelCatalog);
+  res.json([]);
 });
 
 capabilityRouter.get("/provider-catalog", (_req, res) => {

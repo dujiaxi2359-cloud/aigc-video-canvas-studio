@@ -12,6 +12,7 @@ import { withTemporaryDirectNetwork } from "../../utils/proxy.js";
 import { mapVideoParams } from "../../utils/videoParams.js";
 import { legacyInputModeToOfficialMode } from "../../types/videoModes.js";
 import type { OfficialVideoMode } from "../../types/videoModes.js";
+import { prepareVideoFrameForAspectRatio } from "../assets/prepareVideoFrame.service.js";
 import { parseVeoOperationResult, type VeoOperationParseResult } from "./googleVeo/veoOperationParser.js";
 import { googleGenAIOptions } from "./providerBaseUrl.js";
 import type { ProviderGenerateResult, VideoProviderParams } from "./providerTypes.js";
@@ -384,27 +385,36 @@ type VeoInputImage = Image & {
   audit: Record<string, unknown>;
 };
 
-async function assetImage(assetId: string): Promise<VeoInputImage> {
+async function assetImage(assetId: string, requestedAspectRatio?: string): Promise<VeoInputImage> {
   const asset = await getAsset(assetId);
   if (!asset?.localPath || !fs.existsSync(asset.localPath)) {
     throw new ProviderError("MISSING_INPUT_ASSET", "Google Veo 引用的图片素材不存在或已被删除。");
   }
 
-  const metadata = await readGeneratedFileMetadata(asset.localPath);
+  const originalMetadata = await readGeneratedFileMetadata(asset.localPath);
+  const prepared = requestedAspectRatio
+    ? await prepareVideoFrameForAspectRatio(asset.localPath, requestedAspectRatio, "smart_crop")
+    : undefined;
+  const inputPath = prepared?.localPath ?? asset.localPath;
+  const inputMetadata = prepared?.transformed
+    ? { width: prepared.width, height: prepared.height, fileSize: fs.statSync(inputPath).size }
+    : originalMetadata;
   return {
-    imageBytes: fs.readFileSync(asset.localPath).toString("base64"),
-    mimeType: asset.mimeType || mimeTypeFromPath(asset.localPath),
+    imageBytes: fs.readFileSync(inputPath).toString("base64"),
+    mimeType: prepared?.transformed ? "image/png" : asset.mimeType || mimeTypeFromPath(inputPath),
     audit: {
       assetId,
-      inputImageSource: "localPath",
-      inputImageWidth: metadata.width,
-      inputImageHeight: metadata.height,
-      inputImageFileSize: metadata.fileSize,
-      originalAspectRatio: aspectRatioOf(metadata.width, metadata.height),
-      modelInputAspectRatio: aspectRatioOf(metadata.width, metadata.height),
-      usesOriginalFile: true,
+      inputImageSource: prepared?.transformed ? "smartCropAspectRatio" : "localPath",
+      inputImageWidth: inputMetadata.width,
+      inputImageHeight: inputMetadata.height,
+      inputImageFileSize: inputMetadata.fileSize,
+      originalAspectRatio: aspectRatioOf(originalMetadata.width, originalMetadata.height),
+      modelInputAspectRatio: aspectRatioOf(inputMetadata.width, inputMetadata.height),
+      requestedAspectRatio,
+      frameFitMode: prepared?.fitMode,
+      usesOriginalFile: !prepared?.transformed,
       usesPreviewUrl: false,
-      inputImageWasCompressed: false
+      inputImageWasCompressed: Boolean(prepared?.transformed)
     }
   };
 }
@@ -675,6 +685,7 @@ export async function generateVideoWithGoogleVeo(params: VideoProviderParams): P
     const officialMode = params.videoMode ?? legacyInputModeToOfficialMode(params.inputMode, "google");
     const veoParams = normalizeVeoParams(params, officialMode);
     const mapped = mapVideoParams("google", params.modelName, officialMode, params.aspectRatio, veoParams.resolution, veoParams.durationSeconds);
+    const isOmni = params.modelName === "omni_flash-10s";
     const inputAudits: Array<Record<string, unknown>> = [];
     const imageCount = params.imageAssetIds?.length ?? 0;
     const safetyPrompt = veoSafetyPrompt(params.prompt, officialMode, imageCount);
@@ -688,13 +699,14 @@ export async function generateVideoWithGoogleVeo(params: VideoProviderParams): P
 
     const config: Record<string, unknown> = {
       numberOfVideos: Math.max(1, params.generateCount || 1),
-      aspectRatio: mapped.aspectRatio,
-      resolution: mapped.resolution,
       personGeneration: initialPersonGeneration
     };
+    if (!isOmni || params.aspectRatio) config.aspectRatio = isOmni ? params.aspectRatio : mapped.aspectRatio;
+    if (!isOmni || params.resolution) config.resolution = isOmni ? params.resolution : mapped.resolution;
     if (requestNegativePrompt) config.negativePrompt = requestNegativePrompt;
     if (params.seed !== undefined) config.seed = params.seed;
     if (officialMode !== "video_extension") config.durationSeconds = mapped.durationSeconds;
+    const inputImageAspectRatio = typeof config.aspectRatio === "string" ? config.aspectRatio : String(mapped.aspectRatio ?? params.aspectRatio ?? "16:9");
     const request: Record<string, unknown> = {
       model: params.modelName,
       prompt: requestPrompt,
@@ -703,7 +715,7 @@ export async function generateVideoWithGoogleVeo(params: VideoProviderParams): P
 
     if (officialMode === "image_to_video_first_frame") {
       if (!params.imageAssetIds?.length) throw new ProviderError("MISSING_INPUT_ASSET", "图生视频需要连接一张首帧图片。");
-      const firstFrame = await assetImage(params.imageAssetIds[0]);
+      const firstFrame = await assetImage(params.imageAssetIds[0], inputImageAspectRatio);
       inputAudits.push(firstFrame.audit);
       request.image = stripAudit(firstFrame);
     }
@@ -711,8 +723,8 @@ export async function generateVideoWithGoogleVeo(params: VideoProviderParams): P
     if (officialMode === "image_to_video_first_last_frame") {
       if (!params.imageAssetIds?.length) throw new ProviderError("MISSING_INPUT_ASSET", "首尾帧模式需要连接首帧图片。");
       if (params.imageAssetIds.length < 2) throw new ProviderError("MISSING_INPUT_ASSET", "首尾帧视频需要连接首帧图和尾帧图。");
-      const firstFrame = await assetImage(params.imageAssetIds[0]);
-      const lastFrame = await assetImage(params.imageAssetIds[1]);
+      const firstFrame = await assetImage(params.imageAssetIds[0], inputImageAspectRatio);
+      const lastFrame = await assetImage(params.imageAssetIds[1], inputImageAspectRatio);
       inputAudits.push(firstFrame.audit, lastFrame.audit);
       request.image = stripAudit(firstFrame);
       config.lastFrame = stripAudit(lastFrame);
@@ -721,7 +733,7 @@ export async function generateVideoWithGoogleVeo(params: VideoProviderParams): P
     if (officialMode === "reference_images_to_video") {
       if (!params.imageAssetIds?.length) throw new ProviderError("MISSING_INPUT_ASSET", "参考图生视频需要至少一张参考图片。");
       if (params.imageAssetIds.length > 3) throw new ProviderError("MODEL_PARAM_UNSUPPORTED", "Veo 参考图生视频最多支持 3 张参考图，请减少参考图数量。");
-      const images = await Promise.all(params.imageAssetIds.map((assetId) => assetImage(assetId)));
+      const images = await Promise.all(params.imageAssetIds.map((assetId) => assetImage(assetId, inputImageAspectRatio)));
       inputAudits.push(...images.map((image) => image.audit));
       config.referenceImages = images.map((image) => ({
         image: stripAudit(image),
@@ -763,7 +775,7 @@ export async function generateVideoWithGoogleVeo(params: VideoProviderParams): P
         inputImageFileSize: inputAudits[0]?.inputImageFileSize,
         modelInputAspectRatio: inputAudits[0]?.modelInputAspectRatio,
         usesPreviewUrl: false,
-        usesOriginalFile: true
+        usesOriginalFile: inputAudits[0]?.usesOriginalFile
       },
       payloadSummary: {
         endpointType: "gemini.generateVideos",

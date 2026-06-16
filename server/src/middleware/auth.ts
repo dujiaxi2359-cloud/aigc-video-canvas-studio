@@ -2,6 +2,7 @@ import type { NextFunction, Request, Response } from "express";
 import { authCookie, getWorkspaceForUser, sessionFromToken } from "../services/auth.service.js";
 import { runWithRequestContext } from "../services/requestContext.js";
 import { getDb } from "../db/database.js";
+import { verifyAssetUrlSignature } from "../utils/assetAccessToken.js";
 
 function cookieValue(req: Request, name: string) {
   const cookies = String(req.headers.cookie || "").split(";");
@@ -47,6 +48,7 @@ export function requireWorkspaceManager(req: Request, res: Response, next: NextF
 }
 
 export async function requireAssetFileAccess(req: Request, res: Response, next: NextFunction) {
+  if (verifyAssetUrlSignature(`${req.baseUrl}${req.path}`, req.query.asset_expires, req.query.asset_signature)) return next();
   await requireLogin(req, res, () => undefined);
   if (!req.auth) return;
   const assetUrl = `${req.baseUrl}${req.path}`;

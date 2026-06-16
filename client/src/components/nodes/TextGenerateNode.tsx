@@ -9,6 +9,7 @@ import { generationApi } from "../../services/generationApi";
 import { useCanvasStore } from "../../store/canvasStore";
 import { useModelConfigStore } from "../../store/modelConfigStore";
 import { compactAssetIds, resolveImageNodeInputs } from "../../utils/workflowInputs";
+import { dedupeModelConfigsForSelect, findCanonicalModelConfig } from "../../utils/modelConfigSelection";
 import { AgentAnalyzeErrorButton } from "../agent/AgentAnalyzeErrorButton";
 import type { ScriptNodeData, TextAgentTask, TextGenerateNodeData, TextNodeData } from "../../types/node";
 
@@ -85,10 +86,11 @@ export function TextGenerateNode(props: NodeProps<TextGenerateNodeData>) {
   const edges = useCanvasStore((state) => state.edges);
   const nodes = useCanvasStore((state) => state.nodes);
   const allModels = useModelConfigStore((state) => state.modelConfigs);
-  const textModels = useMemo(
+  const rawTextModels = useMemo(
     () => allModels.filter((model) => model.enabled && (model.category === "text" || (!model.category && model.modelType === "text"))),
     [allModels]
   );
+  const textModels = useMemo(() => dedupeModelConfigsForSelect(rawTextModels), [rawTextModels]);
   const selectedModel = textModels.find((model) => model.id === props.data.modelConfigId);
   const resolvedImageInputs = useMemo(() => resolveImageNodeInputs(props.id, nodes, edges), [edges, nodes, props.id]);
   const upstreamText = useMemo(() => incomingTextForNode(props.id, nodes, edges), [edges, nodes, props.id]);
@@ -96,6 +98,16 @@ export function TextGenerateNode(props: NodeProps<TextGenerateNodeData>) {
   const [localError, setLocalError] = useState("");
   const [copyStatus, setCopyStatus] = useState("");
   const isComposingRef = useRef(false);
+
+  useEffect(() => {
+    if (selectedModel || !textModels.length) return;
+    const canonical = findCanonicalModelConfig(rawTextModels, props.data.modelConfigId);
+    if (canonical) {
+      update(props.id, { modelConfigId: canonical.id, errorMessage: undefined });
+      return;
+    }
+    update(props.id, { modelConfigId: textModels[0].id, errorMessage: undefined });
+  }, [props.data.modelConfigId, props.id, rawTextModels, selectedModel, textModels, update]);
 
   useEffect(() => {
     if (isComposingRef.current) return;

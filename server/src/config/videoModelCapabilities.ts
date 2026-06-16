@@ -59,6 +59,9 @@ export type VideoModelCapability = {
   supportsSeed: boolean;
   supportsReferenceImages: boolean;
   maxReferenceImages?: number;
+  maxReferenceVideos?: number;
+  maxReferenceAudios?: number;
+  maxReferenceFiles?: number;
   resultType: "async_task" | "sync_result";
 };
 
@@ -163,7 +166,8 @@ const grokModes = [
 ];
 
 function grokCapability(input: { modelId: string; modelName: string; displayName: string; supportedDurations?: number[]; defaultDuration?: number; qualityTier?: "standard" | "full" | "fast" | "lite" | "turbo" }) {
-  const supportedDurations = input.supportedDurations ?? range(3, 15);
+  const supportedDurations = input.supportedDurations ?? range(1, 15);
+  const ai666RelayModel = /^grok-video-3(?:-|$)/.test(input.modelName);
   return capability({
     providerId: "grok",
     family: "grok",
@@ -176,9 +180,9 @@ function grokCapability(input: { modelId: string; modelName: string; displayName
     runtimeStatus: "verified",
     qualityTier: input.qualityTier ?? "standard",
     supportedModes: grokModes.map((item) => ({ ...item, supportedDurations })),
-    supportedAspectRatios: ["16:9", "9:16", "1:1", "2:3", "3:2", "3:4", "4:3"],
+    supportedAspectRatios: ai666RelayModel ? ["16:9", "9:16", "2:3", "3:2", "1:1"] : ["16:9", "9:16", "1:1", "2:3", "3:2", "3:4", "4:3"],
     supportedDurations,
-    supportedResolutions: ["480p", "720p"],
+    supportedResolutions: ai666RelayModel ? ["720P", "1080P"] : ["480p", "720p"],
     defaultAspectRatio: "16:9",
     defaultDuration: input.defaultDuration ?? supportedDurations[Math.min(9, supportedDurations.length - 1)] ?? 10,
     defaultResolution: "720p",
@@ -387,36 +391,37 @@ export const videoModelCapabilities: VideoModelCapability[] = [
     displayName: "Google Omni Flash 10s",
     officialMode: "text_to_video",
     adapterName: "googleRelayVideo",
-    runtimeStatus: "verified",
+    runtimeStatus: "experimental",
     qualityTier: "fast",
     supportedModes: [
       mode({ mode: "text_to_video", label: "文生视频", requiredInputs: ["prompt"] }),
       mode({ mode: "image_to_video_first_frame", label: "图生视频", requiredInputs: ["prompt", "first_frame"], minImages: 1, maxImages: 1 }),
       mode({ mode: "reference_images_to_video", label: "参考图生视频", requiredInputs: ["prompt", "reference_images"], minImages: 1, maxImages: 7 })
     ],
-    supportedAspectRatios: ["16:9", "9:16"],
+    supportedAspectRatios: [],
     supportedDurations: [10],
-    supportedResolutions: ["720p"],
-    defaultAspectRatio: "16:9",
+    supportedResolutions: [],
+    defaultAspectRatio: "",
     defaultDuration: 10,
-    defaultResolution: "720p",
-    supportsAudio: false,
+    defaultResolution: "",
+    supportsAudio: true,
     supportsNegativePrompt: false,
     supportsPromptExtend: false,
     supportsSeed: false,
     supportsReferenceImages: true,
     maxReferenceImages: 7,
     maxImages: 7,
+    maxVideos: 1,
     resultType: "async_task"
   }),
-  grokCapability({ modelId: "grok-imagine-video-1-5-preview", modelName: "grok-imagine-video-1.5-preview", displayName: "Grok Imagine Video 1.5 Preview（官方）", defaultDuration: 10 }),
-  grokCapability({ modelId: "grok-imagine-video", modelName: "grok-imagine-video", displayName: "Grok Imagine Video（官方）", defaultDuration: 10 }),
-  grokCapability({ modelId: "grok-video-3", modelName: "grok-video-3", displayName: "Grok Video 3（中转通用）", defaultDuration: 10 }),
-  grokCapability({ modelId: "grok-video-3-pro", modelName: "grok-video-3-pro", displayName: "Grok Video 3 Pro（中转 10s）", supportedDurations: [10], defaultDuration: 10 }),
-  grokCapability({ modelId: "grok-video-3-max", modelName: "grok-video-3-max", displayName: "Grok Video 3 Max（中转 15s）", supportedDurations: [15], defaultDuration: 15 }),
-  grokCapability({ modelId: "grok-1-5-video-6s", modelName: "grok-1.5-video-6s", displayName: "Grok 1.5 Video 6s（中转）", supportedDurations: [6], defaultDuration: 6 }),
-  grokCapability({ modelId: "grok-1-5-video-10s", modelName: "grok-1.5-video-10s", displayName: "Grok 1.5 Video 10s（中转）", supportedDurations: [10], defaultDuration: 10 }),
-  grokCapability({ modelId: "grok-1-5-video-15s", modelName: "grok-1.5-video-15s", displayName: "Grok 1.5 Video 15s（中转）", supportedDurations: [15], defaultDuration: 15 }),
+  grokCapability({ modelId: "grok-imagine-video-1-5-preview", modelName: "grok-imagine-video-1.5-preview", displayName: "Grok Imagine Video 1.5 Preview", defaultDuration: 10 }),
+  grokCapability({ modelId: "grok-imagine-video", modelName: "grok-imagine-video", displayName: "Grok Imagine Video", defaultDuration: 10 }),
+  grokCapability({ modelId: "grok-video-3", modelName: "grok-video-3", displayName: "Grok Video 3", defaultDuration: 10 }),
+  grokCapability({ modelId: "grok-video-3-pro", modelName: "grok-video-3-pro", displayName: "Grok Video 3 Pro", supportedDurations: [10], defaultDuration: 10 }),
+  grokCapability({ modelId: "grok-video-3-max", modelName: "grok-video-3-max", displayName: "Grok Video 3 Max", supportedDurations: [15], defaultDuration: 15 }),
+  grokCapability({ modelId: "grok-1-5-video-6s", modelName: "grok-1.5-video-6s", displayName: "Grok 1.5 Video 6s", supportedDurations: [6], defaultDuration: 6 }),
+  grokCapability({ modelId: "grok-1-5-video-10s", modelName: "grok-1.5-video-10s", displayName: "Grok 1.5 Video 10s", supportedDurations: [10], defaultDuration: 10 }),
+  grokCapability({ modelId: "grok-1-5-video-15s", modelName: "grok-1.5-video-15s", displayName: "Grok 1.5 Video 15s", supportedDurations: [15], defaultDuration: 15 }),
   klingCapability({ modelId: "kling-3-0", modelName: "kling-v3-omni", displayName: "可灵 Kling 3.0 Omni", supportedDurations: klingLongDurations, supportedModes: klingOmniModes(klingLongDurations) }),
   klingCapability({ modelId: "kling-2-6", modelName: "kling-v2-6", displayName: "可灵 Kling 2.6", supportedDurations: klingLongDurations }),
   klingCapability({ modelId: "kling-2-5", modelName: "kling-v2-5-turbo", displayName: "可灵 Kling 2.5 Turbo", qualityTier: "turbo", supportedModes: klingModesForDurations(klingStandardDurations).filter((item) => item.mode !== "reference_images_to_video"), supportsReferenceImages: false, maxImages: 2 }),
@@ -437,14 +442,16 @@ export const videoModelCapabilities: VideoModelCapability[] = [
     runtimeStatus: "experimental",
     qualityTier: "full",
     supportedModes: [
-      mode({ mode: "text_to_video", label: "文生视频", requiredInputs: ["prompt"] }),
-      mode({ mode: "image_to_video_first_frame", label: "图生视频", requiredInputs: ["prompt", "first_frame"], minImages: 1, maxImages: 1 }),
-      mode({ mode: "reference_images_to_video", label: "全能参考", requiredInputs: ["prompt", "reference_images"], minImages: 1, maxImages: 3 }),
-      mode({ mode: "video_edit", label: "视频参考", requiredInputs: ["prompt", "video"], minVideos: 1, maxVideos: 1 })
+      mode({ mode: "text_to_video", label: "文生视频", requiredInputs: ["prompt"], supportedDurations: [0, ...range(4, 15)], optionalInputs: ["audio", "camera_motion"] }),
+      mode({ mode: "image_to_video_first_frame", label: "图生视频", requiredInputs: ["prompt", "first_frame"], supportedDurations: [0, ...range(4, 15)], minImages: 1, maxImages: 1, optionalInputs: ["audio", "camera_motion"] }),
+      mode({ mode: "image_to_video_first_last_frame", label: "首尾帧", requiredInputs: ["prompt", "first_frame", "last_frame"], supportedDurations: [0, ...range(4, 15)], minImages: 2, maxImages: 2, optionalInputs: ["audio"] }),
+      mode({ mode: "reference_images_to_video", label: "全能参考", requiredInputs: ["prompt"], supportedDurations: [0, ...range(4, 15)], maxImages: 9, maxVideos: 3, optionalInputs: ["audio", "camera_motion"] }),
+      mode({ mode: "video_edit", label: "视频编辑", requiredInputs: ["prompt", "video"], supportedDurations: [0, ...range(4, 15)], minVideos: 1, maxVideos: 3, optionalInputs: ["audio"] }),
+      mode({ mode: "video_extension", label: "视频延展", requiredInputs: ["prompt", "video"], supportedDurations: [0, ...range(4, 15)], minVideos: 1, maxVideos: 1, optionalInputs: ["audio"] })
     ],
-    supportedAspectRatios: ["21:9", "16:9", "4:3", "1:1", "3:4", "9:16"],
-    supportedDurations: range(4, 15),
-    supportedResolutions: ["720P", "1080P"],
+    supportedAspectRatios: ["9:16", "16:9", "1:1", "3:4", "4:3", "21:9"],
+    supportedDurations: [0, ...range(4, 15)],
+    supportedResolutions: ["480P", "720P", "1080P"],
     defaultAspectRatio: "16:9",
     defaultDuration: 8,
     defaultResolution: "1080P",
@@ -453,9 +460,49 @@ export const videoModelCapabilities: VideoModelCapability[] = [
     supportsPromptExtend: false,
     supportsSeed: true,
     supportsReferenceImages: true,
-    maxReferenceImages: 3,
-    maxImages: 3,
-    maxVideos: 1,
+    maxReferenceImages: 9,
+    maxReferenceVideos: 3,
+    maxReferenceAudios: 3,
+    maxReferenceFiles: 12,
+    maxImages: 9,
+    maxVideos: 3,
+    resultType: "async_task"
+  }),
+  capability({
+    providerId: "seedance",
+    family: "seedance",
+    modelId: "seedance-2-0-fast",
+    modelName: "seedance-2.0-fast",
+    displayName: "Seedance 2.0 Fast",
+    officialMode: "text_to_video",
+    adapterName: "seedanceVideo",
+    runtimeStatus: "experimental",
+    qualityTier: "fast",
+    supportedModes: [
+      mode({ mode: "text_to_video", label: "文生视频", requiredInputs: ["prompt"], supportedDurations: [0, ...range(4, 15)], optionalInputs: ["audio", "camera_motion"] }),
+      mode({ mode: "image_to_video_first_frame", label: "图生视频", requiredInputs: ["prompt", "first_frame"], supportedDurations: [0, ...range(4, 15)], minImages: 1, maxImages: 1, optionalInputs: ["audio", "camera_motion"] }),
+      mode({ mode: "image_to_video_first_last_frame", label: "首尾帧", requiredInputs: ["prompt", "first_frame", "last_frame"], supportedDurations: [0, ...range(4, 15)], minImages: 2, maxImages: 2, optionalInputs: ["audio"] }),
+      mode({ mode: "reference_images_to_video", label: "全能参考", requiredInputs: ["prompt"], supportedDurations: [0, ...range(4, 15)], maxImages: 9, maxVideos: 3, optionalInputs: ["audio", "camera_motion"] }),
+      mode({ mode: "video_edit", label: "视频编辑", requiredInputs: ["prompt", "video"], supportedDurations: [0, ...range(4, 15)], minVideos: 1, maxVideos: 3, optionalInputs: ["audio"] }),
+      mode({ mode: "video_extension", label: "视频延展", requiredInputs: ["prompt", "video"], supportedDurations: [0, ...range(4, 15)], minVideos: 1, maxVideos: 1, optionalInputs: ["audio"] })
+    ],
+    supportedAspectRatios: ["9:16", "16:9", "1:1", "3:4", "4:3", "21:9"],
+    supportedDurations: [0, ...range(4, 15)],
+    supportedResolutions: ["480P", "720P", "1080P"],
+    defaultAspectRatio: "16:9",
+    defaultDuration: 5,
+    defaultResolution: "720P",
+    supportsAudio: true,
+    supportsNegativePrompt: true,
+    supportsPromptExtend: false,
+    supportsSeed: true,
+    supportsReferenceImages: true,
+    maxReferenceImages: 9,
+    maxReferenceVideos: 3,
+    maxReferenceAudios: 3,
+    maxReferenceFiles: 12,
+    maxImages: 9,
+    maxVideos: 3,
     resultType: "async_task"
   })
 ];

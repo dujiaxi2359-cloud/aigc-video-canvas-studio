@@ -16,7 +16,7 @@ export function isGoogleRelayEndpoint(apiBaseUrl?: string) {
 
 function relayRoot(apiBaseUrl: string) {
   const parsed = new URL(apiBaseUrl);
-  return `${parsed.origin}${parsed.pathname.replace(/\/v1\/videos\/?$/i, "").replace(/\/v1beta\/?$/i, "").replace(/\/$/, "")}`;
+  return `${parsed.origin}${parsed.pathname.replace(/\/v1\/videos\/?$/i, "").replace(/\/v1beta\/?$/i, "").replace(/\/v1\/?$/i, "").replace(/\/$/, "")}`;
 }
 
 function endpoint(apiBaseUrl: string, modelName: string) {

@@ -34,7 +34,9 @@ export async function saveGeneratedBuffer(input: {
   extension?: string;
   contentType?: string | null;
 }) {
-  const extension = input.extension ?? (input.contentType ? extensionByContentType[input.contentType] : undefined) ?? ".bin";
+  const extension = input.extension
+    ?? (input.contentType ? extensionByContentType[input.contentType.split(";")[0]?.trim().toLowerCase() ?? ""] : undefined)
+    ?? (/^video[_-]/i.test(input.prefix) ? ".mp4" : ".bin");
   const safeExtension = extension.startsWith(".") ? extension : `.${extension}`;
   const fileName = `${input.prefix}_${Date.now()}${safeExtension}`;
   const localPath = path.join(generatedDir(), fileName);

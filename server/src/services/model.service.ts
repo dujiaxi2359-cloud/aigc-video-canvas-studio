@@ -4,10 +4,9 @@ import { createAsset } from "./asset.service.js";
 import { decryptApiKey } from "./encryption.service.js";
 import { addHistory } from "./history.service.js";
 import { modelCatalog } from "./modelCatalog.js";
-import { getInternalModelConfig } from "./modelConfig.service.js";
+import { getInternalModelConfig, listModelConfigs } from "./modelConfig.service.js";
 import { calculateAvailableImageOptions, calculateAvailableVideoOptions } from "./modelCapability.service.js";
 import { getOfficialModelCapability, qualityTierFor } from "../config/officialModelCapabilities.js";
-import { capabilityForMode, getVideoModelCapabilityOrLegacy } from "../config/videoModelCapabilities.js";
 import { generateImageWithAlibaba } from "./providers/alibabaImage.service.js";
 import { generateVideoWithAlibabaWan } from "./providers/alibabaWan.service.js";
 import { generateImageWithAzureOpenAI } from "./providers/azureOpenAIImage.service.js";
@@ -19,13 +18,14 @@ import { generateVideoWithGrok } from "./providers/grokVideo.service.js";
 import { generateVideoWithKling } from "./providers/klingVideo.service.js";
 import { generateImageWithOpenAI } from "./providers/openaiImage.service.js";
 import { generateVideoWithSeedance } from "./providers/seedanceVideo.service.js";
+import { channelSupportsImage, resolveVideoRequestConfig, shouldUseProxyVideoAdapter, validateVideoRequestConfig } from "./providers/videoRequestAdapter.js";
 import { resolveProviderApiBaseUrl } from "./providers/providerBaseUrl.js";
 import { ensureVideoAspectRatio } from "./assets/ensureVideoAspectRatio.service.js";
 import type { ImageInputMode, ModelCapabilities, ModelCatalogItem, VideoNodeContext } from "../types/model.js";
 import type { OfficialVideoMode } from "../types/videoModes.js";
 import { legacyInputModeToOfficialMode } from "../types/videoModes.js";
 import type { ProviderGenerateResult } from "./providers/providerTypes.js";
-import { isProviderError } from "../utils/providerErrors.js";
+import { isProviderError, ProviderError } from "../utils/providerErrors.js";
 import { buildPayloadSummary, logOfficialPayload } from "../utils/generationPayload.js";
 import { metadataToQualityAudit, readGeneratedFileMetadata } from "../utils/mediaMetadata.js";
 
@@ -96,6 +96,13 @@ function providerErrorMeta(providerId: string | undefined, error: unknown) {
     };
   }
   const message = error instanceof Error ? error.message : "生成失败";
+  if (/model not available for your tier|可用渠道不存在/i.test(message)) {
+    return {
+      errorCode: "MODEL_ACCESS_DENIED",
+      errorMessage: "当前 API Key 的套餐或分组没有该模型的调用权限，请在上游平台开通模型或更换已授权的 API Key。",
+      debugMessage: message
+    };
+  }
   if (/fetch failed/i.test(message)) {
     return {
       errorCode: "NETWORK_ERROR",
@@ -164,10 +171,62 @@ function validateVideoRequest(capabilities: ModelCapabilities, input: GenerateVi
     selectedAspectRatio: input.aspectRatio,
     selectedResolution: input.resolution
   });
-  if (!options.availableInputModes.includes(input.inputMode)) throw new Error("当前模型不支持该输入模式");
-  if (!options.availableDurations.includes(input.duration)) throw new Error("当前模型不支持该视频时长");
-  if (!options.availableAspectRatios.includes(input.aspectRatio)) throw new Error("当前模型不支持该画面比例");
-  if (!options.availableResolutions.includes(input.resolution)) throw new Error("当前模型不支持该分辨率");
+  const channel = { ...capabilities, ...capabilities.channelCapability };
+  const requiredInput = input.inputMode === "text-to-video" ? "text"
+    : input.inputMode === "first-last-frame" ? "first_last_frame"
+      : input.inputMode === "video-to-video" ? "video"
+        : "image";
+  const explicitlySupported = channel.supportedInputs?.some((value) => value === requiredInput
+    || (requiredInput === "image" && ["first_frame", "reference_image", "first_last_frame"].includes(value)));
+  if (!options.availableInputModes.includes(input.inputMode) && !explicitlySupported) throw new Error("当前模型不支持该输入模式");
+  if (input.duration !== undefined && options.availableDurations.length && !options.availableDurations.includes(input.duration)) throw new Error("当前模型不支持该视频时长");
+  if (input.aspectRatio && options.availableAspectRatios.length && !options.availableAspectRatios.includes(input.aspectRatio)) throw new Error("当前模型不支持该画面比例");
+  if (input.resolution && options.availableResolutions.length && !options.availableResolutions.includes(input.resolution)) throw new Error("当前模型不支持该分辨率");
+}
+
+async function assertSelectedVideoChannelSupportsAssets(
+  model: NonNullable<InternalModelConfig>,
+  providerParams: Parameters<typeof resolveVideoRequestConfig>[0],
+  capabilities: ModelCapabilities
+) {
+  if (!providerParams.imageAssetIds?.length) return;
+  const current = resolveVideoRequestConfig(providerParams, capabilities);
+  if (channelSupportsImage(current)) return;
+  const siblings = (await listModelConfigs()).filter((candidate) =>
+    candidate.enabled
+    && candidate.id !== model.id
+    && candidate.category === "video"
+    && candidate.providerId === model.provider_id
+    && candidate.modelName.trim().toLowerCase() === model.model_name.trim().toLowerCase()
+  );
+  const alternatives = siblings.filter((candidate) => channelSupportsImage(resolveVideoRequestConfig({
+    ...providerParams,
+    apiBaseUrl: candidate.apiBaseUrl,
+    modelName: candidate.modelName,
+    providerId: candidate.providerId
+  }, candidate.capabilities)));
+  const whyBlocked = alternatives.length ? "currentChannelTextOnly" : "noImageCapableChannel";
+  throw new ProviderError(
+    alternatives.length ? "CURRENT_CHANNEL_TEXT_ONLY" : "NO_IMAGE_CAPABLE_CHANNEL",
+    alternatives.length ? `当前通道不支持图生视频，可切换到「${alternatives[0].displayName}」继续生成。` : "当前模型暂无图生视频能力。",
+    undefined,
+    {
+      selectedModel: model.model_name,
+      selectedProvider: model.provider_id,
+      selectedChannel: current.channel,
+      apiFamily: current.apiFamily,
+      createEndpoint: current.createEndpoint,
+      supportedInputs: current.supportedInputs,
+      imageTransport: current.imageTransport,
+      videoTransport: current.videoTransport,
+      imageField: current.imageField,
+      hasImageAsset: true,
+      currentChannelSupportsImage: false,
+      sameModelImageCapableChannels: alternatives.map((candidate) => ({ id: candidate.id, label: candidate.displayName, channel: candidate.capabilities.channel ?? "legacy_custom" })),
+      whyBlocked,
+      switchChannelSuggestion: alternatives[0] ? { modelConfigId: alternatives[0].id, label: alternatives[0].displayName } : undefined
+    }
+  );
 }
 
 function assertFullQualityModel(input: { qualityMode?: string; providerId: string; catalogModelId?: string; modelName: string }) {
@@ -201,50 +260,6 @@ function validateAgainstOfficial(input: {
   if (input.resolution && official.supportedResolutions?.length && !official.supportedResolutions.includes(input.resolution)) {
     throw new Error(`当前官方模型不支持 ${input.resolution} 分辨率。`);
   }
-}
-
-function validateAgainstOfficialVideo(input: {
-  providerId: string;
-  catalogModelId?: string;
-  modelName: string;
-  inputMode: string;
-  videoMode?: OfficialVideoMode;
-  aspectRatio?: string;
-  duration?: number;
-  resolution?: string;
-  imageCount?: number;
-  videoCount?: number;
-  audioCount?: number;
-}) {
-  const mode = input.videoMode ?? legacyInputModeToOfficialMode(input.inputMode, input.providerId);
-  const capability = getVideoModelCapabilityOrLegacy(input.providerId, input.catalogModelId, input.modelName, mode);
-  if (!capability) {
-    if (input.providerId === "google" && /veo/i.test(`${input.catalogModelId ?? ""} ${input.modelName}`)) {
-      throw new Error(`当前 Veo 模型不支持 ${mode} 视频模式，请切换到该分类下支持的 Veo 模型。`);
-    }
-    return legacyInputModeToOfficialMode(input.inputMode, input.providerId);
-  }
-  if (capability.runtimeStatus === "not_implemented") {
-    throw new Error(`${capability.displayName} 的真实视频 adapter 尚未接入，不能假装生成成功。`);
-  }
-  const modeCapability = capabilityForMode(capability, mode);
-  if (!modeCapability) throw new Error(`当前官方模型不支持 ${mode} 视频模式。`);
-  if ((modeCapability.runtimeStatus ?? capability.runtimeStatus) === "not_implemented") throw new Error(`${modeCapability.label} adapter 尚未接入，不能假装生成成功。`);
-  if (input.aspectRatio && !capability.supportedAspectRatios.includes(input.aspectRatio)) throw new Error(`当前官方模型不支持 ${input.aspectRatio} 比例。`);
-  const supportedDurations = modeCapability.supportedDurations ?? capability.supportedDurations;
-  if (input.duration && !supportedDurations.includes(input.duration)) throw new Error(`当前官方模型不支持 ${input.duration}s 时长。`);
-  if (input.resolution && !capability.supportedResolutions.includes(input.resolution)) throw new Error(`当前官方模型不支持 ${input.resolution} 分辨率。`);
-  const imageCount = input.imageCount ?? 0;
-  if (modeCapability.requiredInputs.includes("first_frame") && imageCount < 1) throw new Error("当前模式需要连接首帧图片。");
-  if (modeCapability.requiredInputs.includes("last_frame") && imageCount < 2) throw new Error("当前模式需要连接尾帧图片。");
-  if (modeCapability.requiredInputs.includes("reference_images") && imageCount < (modeCapability.minImages ?? 1)) throw new Error("当前模式需要连接参考图片。");
-  if (modeCapability.maxImages && imageCount > modeCapability.maxImages) throw new Error(`当前模式最多支持 ${modeCapability.maxImages} 张参考图片。`);
-  if (modeCapability.requiredInputs.includes("video") && !(input.videoCount ?? 0)) throw new Error("当前模式需要连接视频素材。");
-  if (modeCapability.requiredInputs.includes("reference_video") && !(input.videoCount ?? 0)) throw new Error("当前模式需要连接参考视频素材。");
-  if (modeCapability.requiredInputs.includes("first_clip") && !(input.videoCount ?? 0)) throw new Error("当前模式需要连接续写视频素材。");
-  if (modeCapability.maxVideos && (input.videoCount ?? 0) > modeCapability.maxVideos) throw new Error(`当前模式最多支持 ${modeCapability.maxVideos} 个视频素材。`);
-  if (modeCapability.requiredInputs.includes("driving_audio") && !(input.audioCount ?? 0)) throw new Error("当前模式需要连接驱动音频。");
-  return mode;
 }
 
 function validateImageRequest(capabilities: ModelCapabilities, input: GenerateImageRequest) {
@@ -347,7 +362,8 @@ async function enrichPayloadSummaryWithOutput(
   };
 }
 
-async function enforceVideoAspectRatio(result: ProviderGenerateResult, aspectRatio: string, resolution: string): Promise<ProviderGenerateResult> {
+async function enforceVideoAspectRatio(result: ProviderGenerateResult, aspectRatio?: string, resolution?: string): Promise<ProviderGenerateResult> {
+  if (!aspectRatio || !resolution) return result;
   const ensured = await ensureVideoAspectRatio(result.localPath, aspectRatio, resolution);
   if (!ensured) return result;
   if (!ensured.transformed) {
@@ -356,7 +372,8 @@ async function enforceVideoAspectRatio(result: ProviderGenerateResult, aspectRat
       payloadSummary: {
         ...(result.payloadSummary && typeof result.payloadSummary === "object" ? result.payloadSummary as Record<string, unknown> : {}),
         outputAspectRatio: ensured.aspectRatio,
-        outputAspectRatioTransformed: false
+        outputAspectRatioTransformed: false,
+        outputAspectRatioFitMode: ensured.fitMode
       }
     };
   }
@@ -368,6 +385,7 @@ async function enforceVideoAspectRatio(result: ProviderGenerateResult, aspectRat
       ...(result.payloadSummary && typeof result.payloadSummary === "object" ? result.payloadSummary as Record<string, unknown> : {}),
       outputAspectRatio: ensured.aspectRatio,
       outputAspectRatioTransformed: true,
+      outputAspectRatioFitMode: ensured.fitMode,
       originalOutput: ensured.originalMetadata,
       transformedOutput: ensured.metadata
     }
@@ -403,17 +421,8 @@ export async function generateText(input: GenerateTextRequest) {
 export async function generateVideo(input: GenerateVideoRequest) {
   const { model, apiKey, catalogItem, forceMock } = await getGenerationContext(input.modelConfigId, "video");
   logGenerate({ type: "video", model, catalogItem, apiKey, inputMode: input.inputMode });
-  const capabilities = catalogItem?.capabilities ?? JSON.parse(model.capabilities_json) as ModelCapabilities;
+  const capabilities = JSON.parse(model.capabilities_json) as ModelCapabilities;
   const inputForGeneration: GenerateVideoRequest = { ...input };
-  const requestedOfficialMode = inputForGeneration.videoMode ?? legacyInputModeToOfficialMode(inputForGeneration.inputMode, model.provider_id);
-  if (model.provider_id === "google" && /^veo/i.test(model.model_name ?? "")) {
-    if (requestedOfficialMode === "video_extension") {
-      inputForGeneration.resolution = "720p";
-      inputForGeneration.duration = 8;
-    } else if (requestedOfficialMode === "reference_images_to_video" || inputForGeneration.resolution === "1080p" || inputForGeneration.resolution === "4k") {
-      inputForGeneration.duration = 8;
-    }
-  }
   try {
     validateVideoRequest(capabilities, inputForGeneration);
     if (forceMock) {
@@ -449,33 +458,20 @@ export async function generateVideo(input: GenerateVideoRequest) {
     if (!apiKey) throw new Error("请先在设置中心配置该模型 API Key");
     const providerId = model.provider_id ?? "";
     const modelName = model.model_name ?? "";
-    assertFullQualityModel({ qualityMode: inputForGeneration.qualityMode, providerId, catalogModelId: catalogItem?.id, modelName });
-    const officialVideoMode = validateAgainstOfficialVideo({
-      providerId,
-      catalogModelId: catalogItem?.id,
-      modelName,
-      inputMode: inputForGeneration.inputMode,
-      videoMode: inputForGeneration.videoMode,
-      aspectRatio: inputForGeneration.aspectRatio,
-      duration: inputForGeneration.duration,
-      resolution: inputForGeneration.resolution,
-      imageCount: inputForGeneration.imageAssetIds?.length ?? 0,
-      videoCount: inputForGeneration.videoAssetIds?.length ?? 0,
-      audioCount: inputForGeneration.audioAssetIds?.length ?? 0
-    });
+    const officialVideoMode = inputForGeneration.videoMode ?? legacyInputModeToOfficialMode(inputForGeneration.inputMode, providerId);
     const providerParams = {
       ...inputForGeneration,
+      videoMode: officialVideoMode,
       apiKey,
       apiBaseUrl: apiBaseUrlFor(model),
       modelName,
       providerId,
-      catalogModelId: catalogItem?.id,
       qualityMode: inputForGeneration.qualityMode ?? "full_quality"
     };
 
     const preflightSummary = buildPayloadSummary({
       providerId,
-      selectedModelId: catalogItem?.id,
+      selectedModelId: model.id,
       actualModelName: modelName,
       inputMode: officialVideoMode,
       aspectRatio: inputForGeneration.aspectRatio,
@@ -498,9 +494,19 @@ export async function generateVideo(input: GenerateVideoRequest) {
       payloadSummary: { stage: "preflight", legacyInputMode: inputForGeneration.inputMode, officialMode: officialVideoMode }
     });
     logOfficialPayload(preflightSummary);
+    await assertSelectedVideoChannelSupportsAssets(model, providerParams, capabilities);
+    const videoRequestConfig = validateVideoRequestConfig(providerParams, capabilities);
 
     let result: ProviderGenerateResult;
-    switch (providerId) {
+    if (shouldUseProxyVideoAdapter(providerParams, capabilities)) {
+      result = await generateVideoWithSeedance({
+        ...providerParams,
+        apiBaseUrl: videoRequestConfig.finalUrl,
+        imageTransport: videoRequestConfig.imageTransport,
+        videoTransport: videoRequestConfig.videoTransport,
+        videoRequestConfig
+      });
+    } else switch (providerId) {
       case "google":
         result = await generateVideoWithGoogleVeo(providerParams);
         break;
@@ -516,14 +522,17 @@ export async function generateVideo(input: GenerateVideoRequest) {
       case "seedance":
         result = await generateVideoWithSeedance(providerParams);
         break;
+      case "openai-video":
+        result = await generateVideoWithSeedance(providerParams);
+        break;
       default:
-        throw new Error("该视频模型暂未支持真实调用");
+        result = await generateVideoWithSeedance(providerParams);
     }
     result = await enforceVideoAspectRatio(result, inputForGeneration.aspectRatio, inputForGeneration.resolution);
 
     const asset = await createGeneratedAssetFromProvider(result, `video_${inputForGeneration.nodeId}.mp4`, {
       providerId,
-      modelId: catalogItem?.id,
+      modelId: model.id,
       nodeId: inputForGeneration.nodeId,
       projectId: inputForGeneration.projectId,
       prompt: inputForGeneration.prompt,

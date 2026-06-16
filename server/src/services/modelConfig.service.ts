@@ -2,7 +2,7 @@ import { getDb } from "../db/database.js";
 import { createId } from "../utils/id.js";
 import { now } from "../utils/time.js";
 import { decryptApiKey, encryptApiKey, maskEncryptedApiKey } from "./encryption.service.js";
-import { defaultCapabilities, modelCatalog } from "./modelCatalog.js";
+import { defaultCapabilities } from "./modelCatalog.js";
 import type { ModelCapabilities, ModelConfig } from "../types/model.js";
 import { requireRequestContext } from "./requestContext.js";
 
@@ -39,8 +39,57 @@ function submittedApiKey(apiKey?: string) {
   return trimmed.includes("*") ? undefined : trimmed;
 }
 
+function endpointFrom(baseUrl: string, path: string) {
+  const trimmedBase = baseUrl.trim().replace(/\/+$/, "");
+  const trimmedPath = path.trim();
+  if (/^https?:\/\//i.test(trimmedPath)) return trimmedPath;
+  const normalizedPath = trimmedPath ? (trimmedPath.startsWith("/") ? trimmedPath : `/${trimmedPath}`) : "/models";
+  if (normalizedPath === "/models" && !/\/v1$/i.test(trimmedBase)) return `${trimmedBase}/v1/models`;
+  return `${trimmedBase}${normalizedPath}`;
+}
+
+function placeholderApiBaseUrlMessage(apiBaseUrl: string) {
+  try {
+    const parsed = new URL(apiBaseUrl);
+    const hostname = parsed.hostname.toLowerCase();
+    if (hostname === "api.yourdomain.com" || hostname.endsWith(".yourdomain.com")) {
+      return "你填写的是文档里的占位域名 api.yourdomain.com，不是真实中转地址。请在 Run API 控制台复制实际 Base URL。";
+    }
+    if (hostname === "example.com" || hostname.endsWith(".example.com")) {
+      return "你填写的是示例域名 example.com，请替换为真实中转 Base URL。";
+    }
+  } catch {
+    return "请求地址格式不正确，请填写类似 https://真实域名/v1 的 Base URL。";
+  }
+  return "";
+}
+
+function extractModelId(item: unknown) {
+  if (typeof item === "string") return item;
+  if (!item || typeof item !== "object") return "";
+  const record = item as Record<string, unknown>;
+  return String(record.id ?? record.name ?? record.model ?? record.model_name ?? "").trim();
+}
+
+function extractModels(payload: unknown) {
+  const candidates: unknown[] = [];
+  if (Array.isArray(payload)) candidates.push(...payload);
+  if (payload && typeof payload === "object") {
+    const record = payload as Record<string, unknown>;
+    for (const key of ["data", "models", "model_list", "items", "result"]) {
+      if (Array.isArray(record[key])) candidates.push(...record[key] as unknown[]);
+    }
+    if (record.data && typeof record.data === "object" && !Array.isArray(record.data)) {
+      const data = record.data as Record<string, unknown>;
+      for (const key of ["models", "items", "list"]) {
+        if (Array.isArray(data[key])) candidates.push(...data[key] as unknown[]);
+      }
+    }
+  }
+  return Array.from(new Set(candidates.map(extractModelId).filter(Boolean)));
+}
+
 function toPublicModelConfig(row: ModelConfigRow): ModelConfig {
-  const catalogItem = modelCatalog.find((item) => item.providerId === row.provider_id && item.name === row.model_name);
   return {
     id: row.id,
     workspaceId: row.workspace_id,
@@ -54,10 +103,23 @@ function toPublicModelConfig(row: ModelConfigRow): ModelConfig {
     modelName: row.model_name,
     modelType: row.model_type,
     enabled: Boolean(row.enabled),
-    capabilities: catalogItem?.capabilities ?? JSON.parse(row.capabilities_json),
+    capabilities: JSON.parse(row.capabilities_json),
     createdAt: row.created_at,
     updatedAt: row.updated_at
   };
+}
+
+function mergeCapabilitiesWithoutOverwriting(existing: ModelCapabilities, incoming?: ModelCapabilities) {
+  if (!incoming) return existing;
+  const merged = { ...existing, ...incoming };
+  if (existing.channelCapability || incoming.channelCapability) {
+    merged.channelCapability = { ...existing.channelCapability, ...incoming.channelCapability };
+  }
+  for (const key of ["supportedInputs", "inputModes"] as const) {
+    const current = incoming[key] ?? existing[key];
+    if (current?.length) merged[key] = current as never;
+  }
+  return merged;
 }
 
 export async function listModelConfigs() {
@@ -105,6 +167,72 @@ export async function createModelConfig(input: Partial<ModelConfig> & { apiKey?:
   return toPublicModelConfig(row!);
 }
 
+export async function saveModelConfigsBulk(
+  inputs: Array<Partial<ModelConfig> & { apiKey?: string }>,
+  options: { replaceExisting?: boolean } = {}
+) {
+  if (!Array.isArray(inputs) || inputs.length === 0) throw new Error("请至少选择一个模型。");
+  if (inputs.length > 500) throw new Error("单次最多保存 500 个模型。");
+
+  const db = await getDb();
+  const { workspace } = requireRequestContext();
+  let createdCount = 0;
+  let updatedCount = 0;
+  let deletedCount = 0;
+  const keptIds: string[] = [];
+
+  await db.transaction(async () => {
+    for (const input of inputs) {
+      const modelName = input.modelName?.trim();
+      const apiBaseUrl = input.apiBaseUrl?.trim().replace(/\/+$/, "");
+      if (!modelName || !apiBaseUrl) throw new Error("模型名称和上游请求地址不能为空。");
+
+      const existing = await db.get<ModelConfigRow>(
+        "SELECT * FROM model_configs WHERE workspace_id = ? AND model_name = ? AND RTRIM(api_base_url, '/') = ? ORDER BY updated_at DESC LIMIT 1",
+        workspace.id,
+        modelName,
+        apiBaseUrl
+      );
+      const normalizedInput = { ...input, modelName, apiBaseUrl, enabled: true };
+      if (existing) {
+        await updateModelConfig(existing.id, {
+          ...normalizedInput,
+          capabilities: mergeCapabilitiesWithoutOverwriting(JSON.parse(existing.capabilities_json) as ModelCapabilities, input.capabilities)
+        });
+        keptIds.push(existing.id);
+        updatedCount += 1;
+      } else {
+        const created = await createModelConfig(normalizedInput);
+        keptIds.push(created.id);
+        createdCount += 1;
+      }
+    }
+
+    if (options.replaceExisting) {
+      const placeholders = keptIds.map(() => "?").join(", ");
+      const obsolete = await db.get<{ count: number }>(
+        `SELECT COUNT(*) AS count FROM model_configs WHERE workspace_id = ? AND id NOT IN (${placeholders})`,
+        workspace.id,
+        ...keptIds
+      );
+      await db.run(
+        `DELETE FROM model_configs WHERE workspace_id = ? AND id NOT IN (${placeholders})`,
+        workspace.id,
+        ...keptIds
+      );
+      deletedCount = Number(obsolete?.count ?? 0);
+    }
+  });
+
+  return {
+    createdCount,
+    updatedCount,
+    deletedCount,
+    savedCount: createdCount + updatedCount,
+    models: await listModelConfigs()
+  };
+}
+
 export async function updateModelConfig(id: string, input: Partial<ModelConfig> & { apiKey?: string }) {
   const db = await getDb();
   const existing = await getInternalModelConfig(id);
@@ -138,6 +266,36 @@ export async function deleteModelConfig(id: string) {
   await db.run("DELETE FROM model_configs WHERE id = ? AND workspace_id = ?", id, requireRequestContext().workspace.id);
 }
 
+export async function deleteModelConfigs(ids: string[]) {
+  const uniqueIds = Array.from(new Set((ids ?? []).map((id) => String(id).trim()).filter(Boolean)));
+  if (!uniqueIds.length) return { deletedCount: 0, ids: [] as string[] };
+  if (uniqueIds.length > 2000) throw new Error("单次最多删除 2000 个模型。");
+
+  const db = await getDb();
+  const { workspace } = requireRequestContext();
+  let deletedCount = 0;
+
+  await db.transaction(async () => {
+    for (let offset = 0; offset < uniqueIds.length; offset += 500) {
+      const chunk = uniqueIds.slice(offset, offset + 500);
+      const placeholders = chunk.map(() => "?").join(", ");
+      const existing = await db.get<{ count: number }>(
+        `SELECT COUNT(*) AS count FROM model_configs WHERE workspace_id = ? AND id IN (${placeholders})`,
+        workspace.id,
+        ...chunk
+      );
+      await db.run(
+        `DELETE FROM model_configs WHERE workspace_id = ? AND id IN (${placeholders})`,
+        workspace.id,
+        ...chunk
+      );
+      deletedCount += Number(existing?.count ?? 0);
+    }
+  });
+
+  return { deletedCount, ids: uniqueIds };
+}
+
 export async function getRuntimeModelConfig(id: string) {
   const row = await getInternalModelConfig(id);
   if (!row) throw new Error("Model config not found");
@@ -165,17 +323,10 @@ export async function testModelConfig(id: string, input: Partial<ModelConfig> & 
   if (!apiBaseUrl || !modelName || !apiKey) {
     return { success: false, message: "请填写 API Base URL、Model Name 和 API Key。" };
   }
-  const isVideoRelay = /\/v1\/videos\/?$/i.test(apiBaseUrl) || /\/v1\/video\/create\/?$/i.test(apiBaseUrl);
-  if (category === "text" && isVideoRelay) {
-    return {
-      success: false,
-      message: "当前是文字模型，但 Base URL 指向视频任务接口。Gemini 文字模型需要中转商提供 /v1beta/models/{model}:generateContent 或 /v1/chat/completions。"
-    };
-  }
   if (row.provider_id === "google" && !/generativelanguage\.googleapis\.com/i.test(apiBaseUrl)) {
     const videoProtocol = /\/v1\/video\/create\/?$/i.test(apiBaseUrl)
       ? "/v1/video/create + /v1/video/query"
-      : /\/v1\/videos\/?$/i.test(apiBaseUrl)
+      : /\/v1\/?$/i.test(apiBaseUrl) || /\/v1\/videos\/?$/i.test(apiBaseUrl)
         ? "/v1/videos"
         : "自定义视频协议";
     return {
@@ -188,5 +339,57 @@ export async function testModelConfig(id: string, input: Partial<ModelConfig> & 
   return {
     success: true,
     message: "官方 API 配置格式有效。请通过一次实际生成验证模型权限和额度。"
+  };
+}
+
+export async function probeOpenAiCompatibleModels(input: { apiBaseUrl?: string; apiKey?: string; validationPath?: string; pullModels?: boolean }) {
+  const apiBaseUrl = input.apiBaseUrl?.trim();
+  const apiKey = submittedApiKey(input.apiKey);
+  const validationPath = input.validationPath?.trim() || "/models";
+  if (!apiBaseUrl || !apiKey) {
+    return { success: false, message: "请填写请求地址和 API Key。", models: [] as string[] };
+  }
+  const placeholderMessage = placeholderApiBaseUrlMessage(apiBaseUrl);
+  if (placeholderMessage) {
+    return { success: false, message: placeholderMessage, models: [] as string[] };
+  }
+
+  const endpoint = endpointFrom(apiBaseUrl, validationPath);
+  let response: Response;
+  try {
+    response = await fetch(endpoint, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        Accept: "application/json"
+      }
+    });
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    return {
+      success: false,
+      message: `无法连接到上游接口：${endpoint}。请确认 Base URL 是真实中转地址、网络可访问，且不是文档占位符。${detail ? `(${detail})` : ""}`,
+      models: [] as string[]
+    };
+  }
+  const text = await response.text();
+  let payload: unknown = {};
+  try {
+    payload = text ? JSON.parse(text) : {};
+  } catch {
+    payload = text;
+  }
+  if (!response.ok) {
+    const message = typeof payload === "object" && payload
+      ? String((payload as Record<string, unknown>).error_message ?? (payload as Record<string, unknown>).message ?? (payload as Record<string, unknown>).error ?? text)
+      : text;
+    return { success: false, message: `验证失败：HTTP ${response.status}${message ? ` · ${message.slice(0, 160)}` : ""}`, models: [] as string[] };
+  }
+
+  const models = input.pullModels === false ? [] : extractModels(payload);
+  return {
+    success: true,
+    message: models.length ? `验证通过，已拉取 ${models.length} 个模型。` : "验证通过，但未从返回内容中识别到模型列表。",
+    models
   };
 }

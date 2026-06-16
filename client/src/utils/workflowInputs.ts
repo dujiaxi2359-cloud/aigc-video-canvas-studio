@@ -82,5 +82,69 @@ export function resolveVideoNodeInputs(nodeId: string, nodes: Node[], edges: Edg
 }
 
 export function compactAssetIds(inputs: AssetInput[]) {
-  return inputs.map((input) => input.assetId).filter(Boolean) as string[];
+  return Array.from(new Set(inputs.map((input) => input.assetId).filter(Boolean) as string[]));
+}
+
+export type ResolvedVideoInputs = ReturnType<typeof resolveVideoNodeInputs>;
+
+function appendUnique(target: AssetInput[], input: AssetInput | undefined) {
+  if (!input) return;
+  const key = input.assetId ?? input.sourceNodeId ?? input.nodeId;
+  if (target.some((item) => (item.assetId ?? item.sourceNodeId ?? item.nodeId) === key)) return;
+  target.push(input);
+}
+
+export function resolvePromptReferencedVideoInputs(prompt: string, resolved: ResolvedVideoInputs) {
+  const imageInputs: AssetInput[] = [];
+  const videoInputs: AssetInput[] = [];
+  const audioInputs: AssetInput[] = [];
+  const allInputs = [
+    ...resolved.imageInputs.map((input) => ({ type: "image" as const, input })),
+    ...resolved.videoInputs.map((input) => ({ type: "video" as const, input })),
+    ...resolved.audioInputs.map((input) => ({ type: "audio" as const, input }))
+  ];
+  const missing: string[] = [];
+
+  const addByType = (type: "image" | "video" | "audio", index: number, label: string) => {
+    const source = type === "image" ? resolved.imageInputs[index] : type === "video" ? resolved.videoInputs[index] : resolved.audioInputs[index];
+    if (!source) {
+      missing.push(label);
+      return;
+    }
+    if (type === "image") appendUnique(imageInputs, source);
+    if (type === "video") appendUnique(videoInputs, source);
+    if (type === "audio") appendUnique(audioInputs, source);
+  };
+
+  for (const match of prompt.matchAll(/@(?:素材|参考素材)\s*(\d+)/gi)) {
+    const label = match[0] ?? "";
+    const item = allInputs[Math.max(0, Number(match[1]) - 1)];
+    if (!item) {
+      missing.push(label);
+    } else {
+      if (item.type === "image") appendUnique(imageInputs, item.input);
+      if (item.type === "video") appendUnique(videoInputs, item.input);
+      if (item.type === "audio") appendUnique(audioInputs, item.input);
+    }
+  }
+  for (const match of prompt.matchAll(/@(?:图像|图片|参考图|image)\s*(\d+)/gi)) addByType("image", Math.max(0, Number(match[1]) - 1), match[0] ?? "");
+  for (const match of prompt.matchAll(/@(?:视频|video)\s*(\d+)/gi)) addByType("video", Math.max(0, Number(match[1]) - 1), match[0] ?? "");
+  for (const match of prompt.matchAll(/@(?:音频|audio)\s*(\d+)/gi)) addByType("audio", Math.max(0, Number(match[1]) - 1), match[0] ?? "");
+
+  const hasPromptReferences = imageInputs.length + videoInputs.length + audioInputs.length + missing.length > 0;
+  if (!hasPromptReferences) return { ...resolved, hasPromptReferences: false, missingPromptReferences: [] as string[] };
+
+  return {
+    imageInputs,
+    videoInputs,
+    audioInputs,
+    hasImageInput: imageInputs.length > 0,
+    hasVideoInput: videoInputs.length > 0,
+    hasReferenceImage: imageInputs.length > 0,
+    hasFirstFrame: imageInputs.length > 0,
+    hasLastFrame: imageInputs.length > 1,
+    hasFirstLastFrame: imageInputs.length > 1,
+    hasPromptReferences: true,
+    missingPromptReferences: missing
+  };
 }

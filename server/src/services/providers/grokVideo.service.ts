@@ -32,7 +32,7 @@ async function assetDataUrls(assetIds?: string[], aspectRatio?: string) {
       throw new ProviderError("MISSING_INPUT_ASSET", "Grok 引用的图片或视频素材不存在。");
     }
     const sourcePath = asset.mimeType?.startsWith("image/")
-      ? (await prepareVideoFrameForAspectRatio(asset.localPath, aspectRatio, "contain_blur")).localPath
+      ? (await prepareVideoFrameForAspectRatio(asset.localPath, aspectRatio, "smart_crop")).localPath
       : asset.localPath;
     urls.push(`data:${mimeType(sourcePath, asset.mimeType)};base64,${fs.readFileSync(sourcePath).toString("base64")}`);
   }
@@ -47,7 +47,7 @@ async function assetFiles(assetIds?: string[], aspectRatio?: string) {
       throw new ProviderError("MISSING_INPUT_ASSET", "Grok 引用的图片或视频素材不存在。");
     }
     const prepared = asset.mimeType?.startsWith("image/")
-      ? await prepareVideoFrameForAspectRatio(asset.localPath, aspectRatio, "contain_blur")
+      ? await prepareVideoFrameForAspectRatio(asset.localPath, aspectRatio, "smart_crop")
       : undefined;
     const sourcePath = prepared?.localPath ?? asset.localPath;
     files.push({
@@ -94,8 +94,7 @@ export function isOfficialGrokEndpoint(apiBaseUrl: string) {
 }
 
 export function grokRequestModelName(modelName: string, apiBaseUrl: string) {
-  if (isOfficialGrokEndpoint(apiBaseUrl)) return modelName;
-  return /^grok-imagine-video/i.test(modelName) ? "grok-video-3" : modelName;
+  return modelName;
 }
 
 function record(value: unknown) {
@@ -148,8 +147,8 @@ export async function generateVideoWithGrok(params: VideoProviderParams): Promis
   if (!["text_to_video", "image_to_video_first_frame", "reference_images_to_video", "video_edit", "video_extension"].includes(mode)) {
     throw new ProviderError("MODEL_MODE_UNSUPPORTED", "Grok 当前支持文生视频、图生视频、参考图生视频、视频编辑和视频延展。");
   }
-  if (mode === "reference_images_to_video" && params.duration > 10) {
-    throw new ProviderError("MODEL_PARAM_UNSUPPORTED", "Grok 参考图生视频最长支持 10 秒。");
+  if (mode === "reference_images_to_video" && params.duration > 15) {
+    throw new ProviderError("MODEL_PARAM_UNSUPPORTED", "Grok 参考图生视频最长支持 15 秒。");
   }
 
   try {

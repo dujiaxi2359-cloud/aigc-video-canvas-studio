@@ -4,6 +4,7 @@ import { ProviderError } from "../../utils/providerErrors.js";
 import { readGeneratedFileMetadata } from "../../utils/mediaMetadata.js";
 import { getProviderAssetStrategy, type AssetInputStrategy } from "./providerAssetStrategy.js";
 import { uploadLocalFileToOss } from "./ossUpload.service.js";
+import { signedAssetUrl } from "../../utils/assetAccessToken.js";
 
 export type AssetLike = {
   id?: string;
@@ -35,6 +36,8 @@ type ResolveRemoteAssetOptions = {
   strategy?: Partial<AssetInputStrategy>;
 };
 
+const assetUrlProbeTimeoutMs = Number(process.env.ASSET_URL_PROBE_TIMEOUT_MS || 8000);
+
 function isLocalhostUrl(url: string) {
   try {
     const parsed = new URL(url);
@@ -44,8 +47,26 @@ function isLocalhostUrl(url: string) {
   }
 }
 
+function isPrivateNetworkHost(hostname: string) {
+  return ["localhost", "127.0.0.1", "::1", "0.0.0.0"].includes(hostname)
+    || hostname.endsWith(".local")
+    || /^10\./.test(hostname)
+    || /^192\.168\./.test(hostname)
+    || /^172\.(1[6-9]|2\d|3[0-1])\./.test(hostname)
+    || /^169\.254\./.test(hostname);
+}
+
+function isPublicHttpUrl(url?: string) {
+  if (!url || !/^https?:\/\//i.test(url)) return false;
+  try {
+    return !isPrivateNetworkHost(new URL(url).hostname);
+  } catch {
+    return false;
+  }
+}
+
 function isRemoteHttpUrl(url?: string) {
-  return Boolean(url && /^https?:\/\//i.test(url) && !isLocalhostUrl(url));
+  return isPublicHttpUrl(url);
 }
 
 function mimeTypeFromFilename(filename?: string) {
@@ -65,6 +86,19 @@ function backendPublicBaseUrl() {
   return process.env.BACKEND_PUBLIC_BASE_URL?.replace(/\/$/, "");
 }
 
+function backendAssetUrl(url?: string) {
+  const publicBaseUrl = backendPublicBaseUrl();
+  if (!url || !publicBaseUrl) return undefined;
+  try {
+    const publicBase = new URL(publicBaseUrl);
+    const parsed = new URL(url, publicBase);
+    if (parsed.origin !== publicBase.origin || !parsed.pathname.startsWith("/uploads/")) return undefined;
+    return signedAssetUrl(parsed.toString());
+  } catch {
+    return undefined;
+  }
+}
+
 function publicUrlFromBackendUrl(url?: string) {
   const publicBaseUrl = backendPublicBaseUrl();
   if (!url || !publicBaseUrl) return undefined;
@@ -73,13 +107,13 @@ function publicUrlFromBackendUrl(url?: string) {
     try {
       const parsed = new URL(url);
       if (!isLocalhostUrl(url)) return undefined;
-      return `${publicBaseUrl}${parsed.pathname}${parsed.search}`;
+      return signedAssetUrl(`${publicBaseUrl}${parsed.pathname}${parsed.search}`);
     } catch {
       return undefined;
     }
   }
 
-  return `${publicBaseUrl}${url.startsWith("/") ? url : `/${url}`}`;
+  return signedAssetUrl(`${publicBaseUrl}${url.startsWith("/") ? url : `/${url}`}`);
 }
 
 function publicUrlFromLocalPath(localPath?: string) {
@@ -92,7 +126,7 @@ function publicUrlFromLocalPath(localPath?: string) {
 
   if (relativeToUpload && !relativeToUpload.startsWith("..") && !path.isAbsolute(relativeToUpload)) {
     const urlPath = `/uploads/${relativeToUpload.split(path.sep).map(encodeURIComponent).join("/")}`;
-    return `${publicBaseUrl}${urlPath}`;
+    return signedAssetUrl(`${publicBaseUrl}${urlPath}`);
   }
 
   const normalized = absolutePath.replace(/\\/g, "/");
@@ -104,7 +138,7 @@ function publicUrlFromLocalPath(localPath?: string) {
       .split("/")
       .map((part, index) => (index === 0 ? "" : encodeURIComponent(part)))
       .join("/");
-    return `${publicBaseUrl}${urlPath}`;
+    return signedAssetUrl(`${publicBaseUrl}${urlPath}`);
   }
 
   return undefined;
@@ -147,6 +181,47 @@ function assetTypeForMime(mimeType: string) {
   return "image";
 }
 
+function shouldProbePublicAssetUrl() {
+  return process.env.ASSET_URL_PROBE_DISABLED !== "true";
+}
+
+async function probePublicAssetUrl(url: string) {
+  if (!shouldProbePublicAssetUrl()) return;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), assetUrlProbeTimeoutMs);
+  try {
+    let response = await fetch(url, {
+      method: "HEAD",
+      redirect: "follow",
+      signal: controller.signal
+    });
+    if (response.status === 405 || response.status === 403) {
+      response = await fetch(url, {
+        method: "GET",
+        headers: { Range: "bytes=0-0" },
+        redirect: "follow",
+        signal: controller.signal
+      });
+    }
+    if (!response.ok) {
+      throw new ProviderError(
+        "PUBLIC_URL_REQUIRED",
+        `公网素材 URL 不可下载，状态码 ${response.status}。请更新 BACKEND_PUBLIC_BASE_URL、保持内网穿透在线，或配置 OSS 临时上传。`,
+        url
+      );
+    }
+  } catch (error) {
+    if (error instanceof ProviderError) throw error;
+    throw new ProviderError(
+      "PUBLIC_URL_REQUIRED",
+      "公网素材 URL 不可下载。请更新 BACKEND_PUBLIC_BASE_URL、保持内网穿透在线，或配置 OSS 临时上传。",
+      error instanceof Error ? `${url}\n${error.message}` : url
+    );
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export async function resolveRemoteAsset(
   asset: AssetLike,
   providerId: string,
@@ -163,7 +238,10 @@ export async function resolveRemoteAsset(
 
   let result: ResolvedRemoteAsset | undefined;
 
-  if (asset.publicUrl) {
+  const signedBackendUrl = backendAssetUrl(asset.publicUrl);
+  if (signedBackendUrl) {
+    result = { type: "url", url: signedBackendUrl, mimeType, filename, localPath: asset.localPath, source: "backendPublicUrl" };
+  } else if (isPublicHttpUrl(asset.publicUrl)) {
     result = { type: "url", url: asset.publicUrl, mimeType, filename, localPath: asset.localPath, source: "publicUrl" };
   } else if (isRemoteHttpUrl(asset.url)) {
     result = { type: "url", url: asset.url, mimeType, filename, localPath: asset.localPath, source: "remoteUrl" };
@@ -195,6 +273,7 @@ export async function resolveRemoteAsset(
     assertLocalFile(asset.localPath);
     result = { type: "multipart", mimeType, filename, localPath: asset.localPath, source: "localPath" };
   }
+  if (result?.type === "url" && result.url) await probePublicAssetUrl(result.url);
   if (result) attachLocalMetadata(result, localMetadata);
 
   console.log("[resolveRemoteAsset]", {

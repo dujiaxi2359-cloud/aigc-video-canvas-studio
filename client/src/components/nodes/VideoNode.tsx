@@ -10,7 +10,9 @@ import { modelConfigApi } from "../../services/modelConfigApi";
 import { useCanvasStore } from "../../store/canvasStore";
 import { useModelConfigStore } from "../../store/modelConfigStore";
 import { absoluteUploadUrl } from "../../utils/file";
-import { compactAssetIds, resolveVideoNodeInputs } from "../../utils/workflowInputs";
+import { compactAssetIds, resolvePromptReferencedVideoInputs, resolveVideoNodeInputs } from "../../utils/workflowInputs";
+import { diagnoseVideoChannel } from "../../utils/videoChannelCapability";
+import { dedupeModelConfigsForSelect, findCanonicalModelConfig } from "../../utils/modelConfigSelection";
 import { AgentAnalyzeErrorButton } from "../agent/AgentAnalyzeErrorButton";
 import type { AvailableVideoOptions, ModelConfig, VideoInputMode } from "../../types/model";
 import type { VideoNodeData } from "../../types/node";
@@ -43,51 +45,38 @@ const genericCategoryInputModes: Record<OfficialVideoCategory, VideoInputMode[]>
 };
 
 function isRuntimeUsableVideoModel(model: ModelConfig) {
-  if (model.providerId === "google") return /^(veo|omni)/i.test(model.modelName);
-  if (model.providerId === "alibaba") {
-    return [
-      "happyhorse-1.0-t2v",
-      "wan2.7-t2v-2026-04-25",
-      "happyhorse-1.0-i2v",
-      "wan2.7-i2v-2026-04-25",
-      "happyhorse-1.0-r2v",
-      "wan2.7-r2v",
-      "happyhorse-1.0-video-edit",
-      "wan2.7-videoedit"
-    ].includes(model.modelName);
-  }
-  return ["kling", "grok", "seedance"].includes(model.providerId ?? "");
+  return model.enabled && model.category === "video" && modelInputModes(model).some((mode) =>
+    ["text-to-video", "image-to-video", "first-last-frame", "reference-to-video", "video-to-video"].includes(mode)
+  );
 }
 
 function modelInputModes(model: ModelConfig | undefined) {
-  return model?.capabilities?.inputModes ?? emptyVideoModes;
+  if (!model) return emptyVideoModes;
+  const theoretical = model.capabilities.modelCapability;
+  const channel = { ...model.capabilities, ...model.capabilities.channelCapability };
+  const modes = new Set(channel.inputModes ?? []);
+  if (theoretical?.supportsTextToVideo) modes.add("text-to-video");
+  if (theoretical?.supportsImageToVideo) modes.add("image-to-video");
+  if (theoretical?.supportsFirstLastFrame) modes.add("first-last-frame");
+  if (theoretical?.supportsVideoToVideo) modes.add("video-to-video");
+  for (const input of channel.supportedInputs ?? []) {
+    if (input === "text") modes.add("text-to-video");
+    if (["image", "first_frame"].includes(input)) modes.add("image-to-video");
+    if (input === "reference_image") modes.add("reference-to-video");
+    if (input === "first_last_frame") modes.add("first-last-frame");
+    if (input === "video") modes.add("video-to-video");
+  }
+  return Array.from(modes) as VideoInputMode[];
 }
 
 function modelSupportsVideoCategory(model: ModelConfig, category: OfficialVideoCategory) {
-  if (model.providerId === "google" && /^veo/i.test(model.modelName)) {
-    if (category === "video_edit") return false;
-    if (model.modelName === "veo-3.1-lite-generate-preview") {
-      return category === "text_to_video" || category === "image_to_video" || category === "first_last_frame_video";
-    }
-    if (category === "video_extension") return model.modelName === "veo-3.1-generate-preview" || model.modelName === "veo-3.1-fast-generate-preview";
-    return true;
-  }
-  if (model.providerId !== "alibaba") return genericCategoryInputModes[category].some((mode) => modelInputModes(model).includes(mode));
-  if (category === "text_to_video") return ["happyhorse-1.0-t2v", "wan2.7-t2v-2026-04-25"].includes(model.modelName);
-  if (category === "image_to_video") return ["happyhorse-1.0-i2v", "wan2.7-i2v-2026-04-25"].includes(model.modelName);
-  if (category === "reference_to_video") return ["happyhorse-1.0-r2v", "wan2.7-r2v"].includes(model.modelName);
-  if (category === "first_last_frame_video") return model.modelName === "wan2.7-i2v-2026-04-25";
-  if (category === "video_edit") return ["happyhorse-1.0-video-edit", "wan2.7-videoedit"].includes(model.modelName);
-  if (category === "video_extension") return model.modelName === "wan2.7-i2v-2026-04-25";
-  return false;
+  if (category === "video_extension") return modelInputModes(model).includes("video-to-video");
+  return genericCategoryInputModes[category].some((mode) => modelInputModes(model).includes(mode));
 }
 
 function disabledCategoryReason(model: ModelConfig | undefined, category: OfficialVideoCategory) {
   if (!model) return undefined;
-  if (model.providerId === "google" && model.modelName === "veo-3.1-lite-generate-preview") {
-    if (category === "reference_to_video") return "Veo 3.1 Lite 官方不支持 referenceImages，请切换 Veo 3.1 或 Veo 3.1 Fast。";
-    if (category === "video_extension") return "Veo 3.1 Lite 官方不支持视频延展，请切换 Veo 3.1 或 Veo 3.1 Fast。";
-  }
+  if (!modelSupportsVideoCategory(model, category)) return "当前上游模型配置未启用这个生成方式。";
   return undefined;
 }
 
@@ -106,13 +95,30 @@ function maxImagesForMode(model: ModelConfig | undefined, mode: OfficialVideoMod
     if (model.modelName === "omni_flash-10s") return 7;
     if (model.providerId === "grok") return 7;
     if (model.providerId === "kling") return 4;
-    if (model.providerId === "seedance") return 3;
+    if (model.providerId === "seedance") return model.capabilities.maxReferenceImages ?? 9;
     if (model.providerId === "google") return 3;
     if (model.modelName === "happyhorse-1.0-r2v" || model.modelName === "wan2.7-r2v") return 5;
   }
   if (mode === "image_to_video_first_frame") return 1;
   if (mode === "image_to_video_first_last_frame") return 2;
   return undefined;
+}
+
+function durationLabel(value: string | number) {
+  return Number(value) === 0 ? "Auto" : `${value}s`;
+}
+
+function parameterValue<T>(selected: T | undefined, available: T[]) {
+  if (!available.length) return undefined;
+  if (selected !== undefined && available.some((value) => String(value) === String(selected))) return selected;
+  return available[0];
+}
+
+function parameterSummary(input: { aspectRatio?: string; resolution?: string; duration?: number; ratios: string[]; resolutions: string[]; durations: number[] }) {
+  const ratio = parameterValue(input.aspectRatio, input.ratios) ?? "模型默认比例";
+  const resolution = parameterValue(input.resolution, input.resolutions) ?? "模型默认清晰度";
+  const duration = parameterValue(input.duration, input.durations);
+  return `${ratio} · ${resolution} · ${duration === undefined ? "模型默认时长" : durationLabel(duration)}`;
 }
 
 function durationOptions(model?: ModelConfig) {
@@ -277,10 +283,11 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
   const nodes = useCanvasStore((state) => state.nodes);
   const allModels = useModelConfigStore((state) => state.modelConfigs);
   const [videoCategory, setVideoCategory] = useState<OfficialVideoCategory>(() => categoryForOfficialVideoMode(props.data.videoMode ?? legacyInputModeToOfficialMode(props.data.inputMode)));
-  const models = useMemo(
+  const rawModels = useMemo(
     () => allModels.filter((model) => model.enabled && model.category === "video" && isRuntimeUsableVideoModel(model) && modelSupportsVideoCategory(model, videoCategory)),
     [allModels, videoCategory]
   );
+  const models = useMemo(() => dedupeModelConfigsForSelect(rawModels), [rawModels]);
   const [dynamicOptions, setDynamicOptions] = useState<AvailableVideoOptions | null>(null);
   const [localError, setLocalError] = useState("");
   const [localPrompt, setLocalPrompt] = useState(props.data.prompt || "");
@@ -294,6 +301,20 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
   const selectedModel = models.find((model) => model.id === props.data.modelConfigId);
   const staleModel = props.data.modelConfigId && !allModels.some((model) => model.id === props.data.modelConfigId && model.enabled);
   const resolvedInputs = useMemo(() => resolveVideoNodeInputs(props.id, nodes, edges), [edges, nodes, props.id]);
+  const channelDiagnostic = useMemo(
+    () => diagnoseVideoChannel(selectedModel, allModels, resolvedInputs.imageInputs.length > 0),
+    [allModels, resolvedInputs.imageInputs.length, selectedModel]
+  );
+
+  useEffect(() => {
+    if (selectedModel || !models.length) return;
+    const canonical = findCanonicalModelConfig(rawModels, props.data.modelConfigId);
+    if (canonical) {
+      update(props.id, { modelConfigId: canonical.id, errorCode: undefined, errorMessage: undefined, debugMessage: undefined });
+      return;
+    }
+    update(props.id, { modelConfigId: models[0].id, errorCode: undefined, errorMessage: undefined, debugMessage: undefined });
+  }, [models, props.data.modelConfigId, props.id, rawModels, selectedModel, update]);
 
   useEffect(() => {
     function closeFloatingPanels(event: PointerEvent) {
@@ -328,7 +349,7 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
       return;
     }
     const nextMode = defaultModeForCategory(category);
-    const nextModel = allModels.find((model) => model.enabled && model.category === "video" && isRuntimeUsableVideoModel(model) && modelSupportsVideoCategory(model, category));
+    const nextModel = dedupeModelConfigsForSelect(allModels.filter((model) => model.enabled && model.category === "video" && isRuntimeUsableVideoModel(model) && modelSupportsVideoCategory(model, category)))[0];
     setVideoCategory(category);
     update(props.id, {
       modelConfigId: nextModel?.id ?? props.data.modelConfigId,
@@ -411,6 +432,9 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
   const availableRatios = useMemo(() => dynamicOptions?.availableAspectRatios ?? selectedAspectRatios ?? emptyStrings, [dynamicOptions?.availableAspectRatios, selectedAspectRatios]);
   const availableResolutions = useMemo(() => dynamicOptions?.availableResolutions ?? selectedResolutions ?? emptyStrings, [dynamicOptions?.availableResolutions, selectedResolutions]);
   const availableDurations = useMemo(() => dynamicOptions?.availableDurations ?? durationOptions(selectedModel) ?? emptyNumbers, [dynamicOptions?.availableDurations, selectedModel]);
+  const selectedAspectRatio = parameterValue(props.data.aspectRatio, availableRatios);
+  const selectedResolution = parameterValue(props.data.resolution, availableResolutions);
+  const selectedDuration = parameterValue(props.data.duration, availableDurations);
   const outputUrl = absoluteUploadUrl(props.data.outputUrl);
   const outputIsVideo = isVideoOutput(props.data.outputUrl);
   const actualOutputInfo = outputInfo(props.data.payloadSummary, props.data.resolution);
@@ -439,7 +463,10 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
     const mode = props.data.videoMode ?? legacyInputModeToOfficialMode(props.data.inputMode);
     if (mode === "reference_images_to_video") {
       const label = selectedModel?.providerId === "seedance" || selectedModel?.modelName === "kling-v3-omni" ? "全能参考素材" : "参考图片";
-      return [{ icon: ImageIcon, label, connected: resolvedInputs.hasReferenceImage }];
+      const connected = selectedModel?.providerId === "seedance"
+        ? resolvedInputs.hasReferenceImage || resolvedInputs.hasVideoInput || resolvedInputs.audioInputs.length > 0
+        : resolvedInputs.hasReferenceImage;
+      return [{ icon: ImageIcon, label, connected }];
     }
     if (mode === "image_to_video_first_last_frame") {
       return [
@@ -469,18 +496,39 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
     update(props.id, { status: "generating", errorCode: undefined, errorMessage: undefined, debugMessage: undefined });
     setLocalError("");
     try {
+      if (channelDiagnostic.whyBlocked) {
+        const suggestion = channelDiagnostic.sameModelImageCapableChannels[0];
+        if (suggestion) throw new Error(`当前通道不支持图生视频，可切换到「${suggestion.label}」继续生成。`);
+        throw new Error("当前模型暂无图生视频能力。");
+      }
       const videoMode = props.data.videoMode ?? legacyInputModeToOfficialMode(props.data.inputMode);
+      const promptReferencedInputs = selectedModel.providerId === "seedance" && videoMode === "reference_images_to_video"
+        ? resolvePromptReferencedVideoInputs(promptForRequest, resolvedInputs)
+        : { ...resolvedInputs, hasPromptReferences: false, missingPromptReferences: [] as string[] };
+      const requestInputs = promptReferencedInputs.hasPromptReferences ? promptReferencedInputs : resolvedInputs;
+      if (promptReferencedInputs.missingPromptReferences.length) {
+        throw new Error(`提示词中的引用不存在：${promptReferencedInputs.missingPromptReferences.join("、")}。请使用 @素材1、@图像1、@视频1 或 @音频1。`);
+      }
       const maxImages = maxImagesForMode(selectedModel, videoMode);
-      if (maxImages && resolvedInputs.imageInputs.length > maxImages) throw new Error(`当前模式最多支持 ${maxImages} 张图片。你当前连接了 ${resolvedInputs.imageInputs.length} 张，请删除多余图片或切换到支持多参考图的模型。`);
-      if (videoMode === "image_to_video_first_frame" && !resolvedInputs.hasImageInput) throw new Error("首帧图生视频需要连接一张首帧图片。");
-      if (videoMode === "reference_images_to_video" && !resolvedInputs.hasReferenceImage) {
+      if (maxImages && requestInputs.imageInputs.length > maxImages) throw new Error(`当前模式最多支持 ${maxImages} 张图片。你当前引用了 ${requestInputs.imageInputs.length} 张，请删除多余图片或切换到支持多参考图的模型。`);
+      const maxVideos = selectedModel.capabilities.maxReferenceVideos;
+      const maxAudios = selectedModel.capabilities.maxReferenceAudios;
+      const maxReferenceFiles = selectedModel.capabilities.maxReferenceFiles;
+      if (maxVideos && requestInputs.videoInputs.length > maxVideos) throw new Error(`当前模型最多支持 ${maxVideos} 个参考视频。`);
+      if (maxAudios && requestInputs.audioInputs.length > maxAudios) throw new Error(`当前模型最多支持 ${maxAudios} 段参考音频。`);
+      if (maxReferenceFiles && requestInputs.imageInputs.length + requestInputs.videoInputs.length + requestInputs.audioInputs.length > maxReferenceFiles) throw new Error(`当前模型最多支持 ${maxReferenceFiles} 个混合参考素材。`);
+      if (videoMode === "image_to_video_first_frame" && !requestInputs.hasImageInput) throw new Error("首帧图生视频需要连接一张首帧图片。");
+      if (videoMode === "reference_images_to_video" && selectedModel.providerId === "seedance" && !requestInputs.hasReferenceImage && !requestInputs.hasVideoInput && !requestInputs.audioInputs.length) {
+        throw new Error("全能参考至少需要连接或 @ 引用一张图片、一个视频或一段音频。");
+      }
+      if (videoMode === "reference_images_to_video" && selectedModel.providerId !== "seedance" && !requestInputs.hasReferenceImage) {
         const isOmniReference = selectedModel.providerId === "seedance" || selectedModel.modelName === "kling-v3-omni";
         throw new Error(isOmniReference ? "全能参考需要至少连接一张参考图片。" : "参考图生视频需要至少一张参考图片。");
       }
-      if (videoMode === "image_to_video_first_last_frame" && !resolvedInputs.hasFirstFrame) throw new Error("首尾帧模式需要连接首帧图片。");
-      if (videoMode === "image_to_video_first_last_frame" && !resolvedInputs.hasLastFrame) throw new Error("首尾帧模式已连接首帧，还需要一张尾帧图片。");
-      if ((videoMode === "video_to_video" || videoMode === "video_edit" || videoMode === "video_continuation") && !resolvedInputs.hasVideoInput) throw new Error("当前模式需要连接视频素材。");
-      if (videoMode === "audio_driven_video" && !resolvedInputs.audioInputs.length) throw new Error("音频驱动视频需要连接驱动音频。");
+      if (videoMode === "image_to_video_first_last_frame" && !requestInputs.hasFirstFrame) throw new Error("首尾帧模式需要连接首帧图片。");
+      if (videoMode === "image_to_video_first_last_frame" && !requestInputs.hasLastFrame) throw new Error("首尾帧模式已连接首帧，还需要一张尾帧图片。");
+      if ((videoMode === "video_to_video" || videoMode === "video_edit" || videoMode === "video_continuation" || videoMode === "video_extension") && !requestInputs.hasVideoInput) throw new Error("当前模式需要连接视频素材。");
+      if (videoMode === "audio_driven_video" && !requestInputs.audioInputs.length) throw new Error("音频驱动视频需要连接驱动音频。");
 
       const result = await generationApi.video({
         nodeId: props.id,
@@ -488,12 +536,12 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
         inputMode: props.data.inputMode,
         videoMode,
         prompt: promptForRequest,
-        imageAssetIds: compactAssetIds(resolvedInputs.imageInputs),
-        videoAssetIds: compactAssetIds(resolvedInputs.videoInputs),
-        audioAssetIds: compactAssetIds(resolvedInputs.audioInputs),
-        duration: props.data.duration ?? availableDurations[0],
-        aspectRatio: props.data.aspectRatio ?? availableRatios[0],
-        resolution: props.data.resolution ?? availableResolutions[0],
+        imageAssetIds: compactAssetIds(requestInputs.imageInputs),
+        videoAssetIds: compactAssetIds(requestInputs.videoInputs),
+        audioAssetIds: compactAssetIds(requestInputs.audioInputs),
+        ...(selectedDuration !== undefined ? { duration: selectedDuration } : {}),
+        ...(selectedAspectRatio ? { aspectRatio: selectedAspectRatio } : {}),
+        ...(selectedResolution ? { resolution: selectedResolution } : {}),
         generateCount: props.data.generateCount,
         qualityMode: props.data.qualityMode ?? "full_quality",
         promptExtend: true,
@@ -531,12 +579,16 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
   const preview = models.length === 0 ? (
     <div className="creation-preview-empty"><Film size={29} /><span>请先配置视频模型</span></div>
   ) : (
-    <MediaPreview type="video" title={props.data.title} outputUrl={outputIsVideo ? props.data.outputUrl : undefined} aspectRatio={aspectRatioCss(props.data.aspectRatio)} className="creation-media-preview">
+    <MediaPreview type="video" title={props.data.title} outputUrl={outputIsVideo ? props.data.outputUrl : undefined} aspectRatio={aspectRatioCss(selectedAspectRatio)} className="creation-media-preview">
       {props.data.status === "generating" ? <div className="creation-preview-empty"><Loader2 className="animate-spin" size={25} /><span>正在生成视频</span></div> : props.data.status === "error" ? <div className="creation-preview-empty is-error"><AlertCircle size={25} /><span>生成失败</span></div> : <div className="creation-preview-empty"><Play size={24} fill="currentColor" /><span>视频预览</span></div>}
     </MediaPreview>
   );
 
-  const referencedInputs = [...resolvedInputs.imageInputs, ...resolvedInputs.videoInputs, ...resolvedInputs.audioInputs];
+  const referencedInputs = [
+    ...resolvedInputs.imageInputs.map((input, index) => ({ input, kind: "图像", kindIndex: index + 1 })),
+    ...resolvedInputs.videoInputs.map((input, index) => ({ input, kind: "视频", kindIndex: index + 1 })),
+    ...resolvedInputs.audioInputs.map((input, index) => ({ input, kind: "音频", kindIndex: index + 1 }))
+  ];
   const referencedImageNodeIds = new Set(resolvedInputs.imageInputs.map((input) => input.sourceNodeId));
   const dock = (
     <div className="creation-dock-content relative">
@@ -550,7 +602,7 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
         <button type="button" title={expanded ? "收起详情" : "展开详情"} className="creation-detail-toggle" onClick={() => setExpanded((value) => !value)}><Maximize2 size={14} /></button>
       </div>
       <div className="creation-dock-composer">
-        {referencedInputs.length > 0 && <div className="creation-reference-strip">{referencedInputs.map((input, index) => <span key={`${input.sourceNodeId}-${index}`} title={`引用素材 ${index + 1}`}>{input.url && referencedImageNodeIds.has(input.sourceNodeId) ? <img src={absoluteUploadUrl(input.url)} alt="" /> : <Library size={13} />}<small>素材 {index + 1}</small></span>)}</div>}
+        {referencedInputs.length > 0 && <div className="creation-reference-strip">{referencedInputs.map((item, index) => <span key={`${item.input.sourceNodeId}-${index}`} title={`可在提示词中输入 @素材${index + 1} 或 @${item.kind}${item.kindIndex}`}>{item.input.url && referencedImageNodeIds.has(item.input.sourceNodeId) ? <img src={absoluteUploadUrl(item.input.url)} alt="" /> : <Library size={13} />}<small>素材{index + 1} · {item.kind}{item.kindIndex}</small></span>)}</div>}
         <Textarea className="creation-prompt-input nodrag nopan nowheel" placeholder="描述你想生成的画面，或输入 @ 引用素材" value={localPrompt} onChange={handlePromptChange} onCompositionStart={handleCompositionStart} onCompositionEnd={handleCompositionEnd} />
       </div>
       {(props.data.errorMessage || localError) && <button type="button" className="creation-error-line" onClick={() => setExpanded(true)}><AlertCircle size={12} /><span>{props.data.errorMessage || localError}</span><strong>诊断</strong></button>}
@@ -558,12 +610,12 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
         <div className="creation-dock-identity">
           <div className="creation-model-field"><Activity size={14} /><Select className="creation-model-select" value={props.data.modelConfigId ?? ""} onChange={(event) => update(props.id, { modelConfigId: event.target.value })}><option value="">选择模型</option>{models.map((model) => <option key={model.id} value={model.id}>{model.displayName}</option>)}</Select></div>
           <div ref={parameterAnchorRef} className={`creation-parameter-wrap nodrag nopan ${parametersOpen ? "is-open" : ""}`}>
-          <button type="button" className="creation-parameter-pill" onClick={() => { setActiveTool(null); setParametersOpen((value) => !value); }}>{props.data.aspectRatio ?? availableRatios[0] ?? "比例"} · {props.data.resolution ?? availableResolutions[0] ?? "清晰度"} · {props.data.duration ?? availableDurations[0] ?? "-"}s</button>
+          <button type="button" className="creation-parameter-pill" onClick={() => { setActiveTool(null); setParametersOpen((value) => !value); }}>{parameterSummary({ aspectRatio: selectedAspectRatio, resolution: selectedResolution, duration: selectedDuration, ratios: availableRatios, resolutions: availableResolutions, durations: availableDurations })}</button>
           <NodeParameterPopover open={parametersOpen} anchorRef={parameterAnchorRef} onClose={() => setParametersOpen(false)} sections={[
             { label: "生成方式", value: props.data.videoMode ?? legacyInputModeToOfficialMode(props.data.inputMode), options: availableVideoModes, format: (value) => dynamicOptions?.videoModeLabels?.[value as OfficialVideoMode] ?? officialVideoModeLabels[value as OfficialVideoMode], onChange: (value) => update(props.id, { videoMode: value, inputMode: officialModeToLegacyInputMode(value as OfficialVideoMode) }) },
-            { label: "比例", value: props.data.aspectRatio ?? availableRatios[0], options: availableRatios, onChange: (value) => update(props.id, { aspectRatio: value }) },
-            { label: "清晰度", value: props.data.resolution ?? availableResolutions[0], options: availableResolutions, onChange: (value) => update(props.id, { resolution: value }) },
-            { label: "生成时长", value: props.data.duration ?? availableDurations[0], options: availableDurations, format: (value) => `${value}s`, onChange: (value) => update(props.id, { duration: Number(value) }) },
+            { label: "比例", value: selectedAspectRatio, options: availableRatios, onChange: (value) => update(props.id, { aspectRatio: value }) },
+            { label: "清晰度", value: selectedResolution, options: availableResolutions, onChange: (value) => update(props.id, { resolution: value }) },
+            { label: "生成时长", value: selectedDuration, options: availableDurations, format: durationLabel, onChange: (value) => update(props.id, { duration: Number(value) }) },
             { label: "生成数量", value: props.data.generateCount, options: [1, 2, 3, 4], format: (value) => `${value} 个`, onChange: (value) => update(props.id, { generateCount: Number(value) }) }
           ]} />
           </div>
@@ -579,9 +631,13 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
         <div className="creation-detail-section"><strong>生成方式</strong><div className="flex flex-wrap gap-1.5">{videoCategories.map((category) => { const disabledReason = disabledCategoryReason(selectedModel, category); return <button key={category} disabled={Boolean(disabledReason)} title={disabledReason} className={videoCategory === category ? "is-active" : ""} onClick={() => changeVideoCategory(category)}>{officialVideoCategoryLabels[category]}</button>; })}</div></div>
         {actualOutputInfo && props.data.status === "success" && <div className="creation-detail-copy">实际输出：{actualOutputInfo.width && actualOutputInfo.height ? `${actualOutputInfo.width}×${actualOutputInfo.height}` : "未知尺寸"}{actualOutputInfo.ratio ? ` · ${actualOutputInfo.ratio}` : ""}{actualOutputInfo.duration ? ` · ${actualOutputInfo.duration.toFixed(1)}s` : ""}</div>}
         {dynamicOptions?.warningMessage && <div className="creation-detail-copy">{dynamicOptions.warningMessage}</div>}
+        {channelDiagnostic.whyBlocked && <div className="creation-detail-copy is-error">{channelDiagnostic.sameModelImageCapableChannels[0]
+          ? <>当前通道不支持图生视频。<Button className="ml-2 h-7" variant="secondary" onClick={() => update(props.id, { modelConfigId: channelDiagnostic.sameModelImageCapableChannels[0].id, errorCode: undefined, errorMessage: undefined })}>切换到 {channelDiagnostic.sameModelImageCapableChannels[0].label}</Button></>
+          : "当前模型暂无图生视频能力。"}</div>}
         {staleModel && <div className="creation-detail-copy is-error">当前模型配置已失效，请重新选择模型。</div>}
         {isVeoRaiFiltered && <div className="creation-detail-copy">安全过滤：{veoRaiReasons.join("；") || "当前内容需要安全改写"}<div className="mt-2 flex gap-2"><Button className="h-7" variant="secondary" onClick={() => retryWithPrompt(veoSafePrompt || props.data.prompt)}>安全改写重试</Button><Button className="h-7" variant="ghost" onClick={switchOtherVideoModel}>切换模型</Button></div></div>}
         <PayloadSummary data={props.data.payloadSummary} />
+        <PayloadSummary data={channelDiagnostic as unknown as Record<string, unknown>} />
         {(props.data.errorMessage || localError) && <AgentAnalyzeErrorButton nodeId={props.id} errorMessage={props.data.errorMessage || localError} nodeData={props.data as unknown as Record<string, unknown>} />}
       </div>}
     </div>

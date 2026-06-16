@@ -1,5 +1,5 @@
 export function normalizeVideoAspectRatio(aspectRatio?: string) {
-  if (aspectRatio === "9:16" || aspectRatio === "16:9" || aspectRatio === "1:1") return aspectRatio;
+  if (aspectRatio === "9:16" || aspectRatio === "16:9" || aspectRatio === "1:1" || aspectRatio === "3:4" || aspectRatio === "4:3" || aspectRatio === "21:9") return aspectRatio;
   return "16:9";
 }
 
@@ -11,12 +11,8 @@ export function normalizeVideoResolution(resolution?: string) {
 }
 
 export function mapVideoSize(aspectRatio?: string, resolution?: string) {
-  const normalizedRatio = normalizeVideoAspectRatio(aspectRatio);
-  const normalizedResolution = normalizeVideoResolution(resolution);
-  const { long, short } = videoLongShort(normalizedResolution);
-  if (normalizedRatio === "9:16") return `${short}*${long}`;
-  if (normalizedRatio === "1:1") return `${short}*${short}`;
-  return `${long}*${short}`;
+  const dimensions = mapVideoDimensions(aspectRatio, resolution);
+  return `${dimensions.width}*${dimensions.height}`;
 }
 
 function videoLongShort(resolution?: string) {
@@ -32,9 +28,11 @@ function videoLongShort(resolution?: string) {
 export function mapVideoDimensions(aspectRatio?: string, resolution?: string) {
   const normalizedRatio = normalizeVideoAspectRatio(aspectRatio);
   const { long, short } = videoLongShort(resolution);
-  if (normalizedRatio === "9:16") return { width: short, height: long };
   if (normalizedRatio === "1:1") return { width: short, height: short };
-  return { width: long, height: short };
+  const [ratioWidth, ratioHeight] = normalizedRatio.split(":").map(Number);
+  if (!ratioWidth || !ratioHeight) return { width: long, height: short };
+  if (ratioHeight > ratioWidth) return { width: Math.round(long * ratioWidth / ratioHeight), height: long };
+  return { width: long, height: Math.round(long * ratioHeight / ratioWidth) };
 }
 
 export function mapVideoParams(providerId: string | undefined, modelName: string, inputMode: string, aspectRatio?: string, resolution?: string, duration?: number) {

@@ -91,6 +91,7 @@ function videoModel(
 const imageRatios = ["1:1", "3:4", "4:3", "9:16", "16:9"];
 const imageFormats = ["png", "jpeg", "webp"];
 const grokRatios: NonNullable<ModelCapabilities["aspectRatios"]> = ["16:9", "9:16", "1:1", "2:3", "3:2", "3:4", "4:3"];
+const grokAi666Ratios: NonNullable<ModelCapabilities["aspectRatios"]> = ["16:9", "9:16", "2:3", "3:2", "1:1"];
 const grokInputModes: ModelCapabilities["inputModes"] = ["text-to-video", "image-to-video", "reference-to-video", "video-to-video"];
 
 function grokVideoModel(id: string, name: string, displayName: string, duration: ModelCapabilities["duration"]): ModelCatalogItem {
@@ -267,8 +268,8 @@ const rawFallbackModelCatalog: ModelCatalogItem[] = [
     resolutions: ["720p"],
     supportsReferenceImage: true,
     supportsMultiImageInput: true,
-    supportsVideoInput: false,
-    supportsAudio: false
+    supportsVideoInput: true,
+    supportsAudio: true
   }),
 
   videoModel("alibaba-wan-2-7-t2v", "alibaba", "wan2.7-t2v", "Wan 2.7 Text to Video", "text-to-video", { duration: { type: "range", min: 2, max: 15, step: 1 }, aspectRatios: wanRatios, resolutions: wanResolutions, inputModes: ["text-to-video"] }),
@@ -288,16 +289,47 @@ const rawFallbackModelCatalog: ModelCatalogItem[] = [
   videoModel("kling-1-5", "kling", "kling-v1-5", "Kling 1.5", "text-to-video", { inputModes: ["text-to-video", "image-to-video", "first-last-frame"], duration: { type: "enum", values: [5, 10] }, aspectRatios: klingRatios, resolutions: ["720P", "1080P"], supportsFirstLastFrame: true, supportsMotionControl: true, supportsCameraControl: true }),
   videoModel("kling-1", "kling", "kling-v1", "Kling 1.0", "text-to-video", { inputModes: ["text-to-video", "image-to-video", "first-last-frame"], duration: { type: "enum", values: [5, 10] }, aspectRatios: klingRatios, resolutions: ["720P", "1080P"], supportsFirstLastFrame: true, supportsMotionControl: true, supportsCameraControl: true }),
 
-  videoModel("grok-imagine-video-1-5-preview", "grok", "grok-imagine-video-1.5-preview", "Grok Imagine Video 1.5 Preview (Official)", "text-to-video", { inputModes: grokInputModes, duration: { type: "range", min: 3, max: 15, step: 1 }, aspectRatios: grokRatios, resolutions: ["480p", "720p"], supportsReferenceImage: true, supportsMultiImageInput: true, supportsVideoInput: true, supportsAudio: true }),
-  videoModel("grok-imagine-video", "grok", "grok-imagine-video", "Grok Imagine Video (Official)", "text-to-video", { inputModes: grokInputModes, duration: { type: "range", min: 3, max: 15, step: 1 }, aspectRatios: grokRatios, resolutions: ["480p", "720p"], supportsReferenceImage: true, supportsMultiImageInput: true, supportsVideoInput: true, supportsAudio: true }),
-  videoModel("grok-video-3", "grok", "grok-video-3", "Grok Video 3 (Relay)", "text-to-video", { inputModes: grokInputModes, duration: { type: "range", min: 3, max: 15, step: 1 }, aspectRatios: grokRatios, resolutions: ["480p", "720p"], supportsReferenceImage: true, supportsMultiImageInput: true, supportsVideoInput: true, supportsAudio: true }),
-  videoModel("grok-video-3-pro", "grok", "grok-video-3-pro", "Grok Video 3 Pro (Relay 10s)", "text-to-video", { inputModes: grokInputModes, duration: { type: "enum", values: [10] }, aspectRatios: grokRatios, resolutions: ["480p", "720p"], supportsReferenceImage: true, supportsMultiImageInput: true, supportsVideoInput: true, supportsAudio: true }),
-  videoModel("grok-video-3-max", "grok", "grok-video-3-max", "Grok Video 3 Max (Relay 15s)", "text-to-video", { inputModes: grokInputModes, duration: { type: "enum", values: [15] }, aspectRatios: grokRatios, resolutions: ["480p", "720p"], supportsReferenceImage: true, supportsMultiImageInput: true, supportsVideoInput: true, supportsAudio: true }),
-  videoModel("grok-1-5-video-6s", "grok", "grok-1.5-video-6s", "Grok 1.5 Video 6s (Relay)", "text-to-video", { inputModes: grokInputModes, duration: { type: "enum", values: [6] }, aspectRatios: grokRatios, resolutions: ["480p", "720p"], supportsReferenceImage: true, supportsMultiImageInput: true, supportsVideoInput: true, supportsAudio: true }),
-  videoModel("grok-1-5-video-10s", "grok", "grok-1.5-video-10s", "Grok 1.5 Video 10s (Relay)", "text-to-video", { inputModes: grokInputModes, duration: { type: "enum", values: [10] }, aspectRatios: grokRatios, resolutions: ["480p", "720p"], supportsReferenceImage: true, supportsMultiImageInput: true, supportsVideoInput: true, supportsAudio: true }),
-  videoModel("grok-1-5-video-15s", "grok", "grok-1.5-video-15s", "Grok 1.5 Video 15s (Relay)", "text-to-video", { inputModes: grokInputModes, duration: { type: "enum", values: [15] }, aspectRatios: grokRatios, resolutions: ["480p", "720p"], supportsReferenceImage: true, supportsMultiImageInput: true, supportsVideoInput: true, supportsAudio: true }),
+  videoModel("grok-imagine-video-1-5-preview", "grok", "grok-imagine-video-1.5-preview", "Grok Imagine Video 1.5 Preview", "text-to-video", { inputModes: grokInputModes, duration: { type: "range", min: 3, max: 15, step: 1 }, aspectRatios: grokRatios, resolutions: ["480p", "720p"], supportsReferenceImage: true, supportsMultiImageInput: true, supportsVideoInput: true, supportsAudio: true }),
+  videoModel("grok-imagine-video", "grok", "grok-imagine-video", "Grok Imagine Video", "text-to-video", { inputModes: grokInputModes, duration: { type: "range", min: 3, max: 15, step: 1 }, aspectRatios: grokRatios, resolutions: ["480p", "720p"], supportsReferenceImage: true, supportsMultiImageInput: true, supportsVideoInput: true, supportsAudio: true }),
+  videoModel("grok-video-3", "grok", "grok-video-3", "Grok Video 3", "text-to-video", { inputModes: grokInputModes, duration: { type: "range", min: 1, max: 15, step: 1 }, aspectRatios: grokAi666Ratios, resolutions: ["720P", "1080P"], supportsReferenceImage: true, supportsMultiImageInput: true, supportsVideoInput: true, supportsAudio: true }),
+  videoModel("grok-video-3-pro", "grok", "grok-video-3-pro", "Grok Video 3 Pro", "text-to-video", { inputModes: grokInputModes, duration: { type: "enum", values: [10] }, aspectRatios: grokAi666Ratios, resolutions: ["720P", "1080P"], supportsReferenceImage: true, supportsMultiImageInput: true, supportsVideoInput: true, supportsAudio: true }),
+  videoModel("grok-video-3-max", "grok", "grok-video-3-max", "Grok Video 3 Max", "text-to-video", { inputModes: grokInputModes, duration: { type: "enum", values: [15] }, aspectRatios: grokAi666Ratios, resolutions: ["720P", "1080P"], supportsReferenceImage: true, supportsMultiImageInput: true, supportsVideoInput: true, supportsAudio: true }),
+  videoModel("grok-1-5-video-6s", "grok", "grok-1.5-video-6s", "Grok 1.5 Video 6s", "text-to-video", { inputModes: grokInputModes, duration: { type: "enum", values: [6] }, aspectRatios: grokRatios, resolutions: ["480p", "720p"], supportsReferenceImage: true, supportsMultiImageInput: true, supportsVideoInput: true, supportsAudio: true }),
+  videoModel("grok-1-5-video-10s", "grok", "grok-1.5-video-10s", "Grok 1.5 Video 10s", "text-to-video", { inputModes: grokInputModes, duration: { type: "enum", values: [10] }, aspectRatios: grokRatios, resolutions: ["480p", "720p"], supportsReferenceImage: true, supportsMultiImageInput: true, supportsVideoInput: true, supportsAudio: true }),
+  videoModel("grok-1-5-video-15s", "grok", "grok-1.5-video-15s", "Grok 1.5 Video 15s", "text-to-video", { inputModes: grokInputModes, duration: { type: "enum", values: [15] }, aspectRatios: grokRatios, resolutions: ["480p", "720p"], supportsReferenceImage: true, supportsMultiImageInput: true, supportsVideoInput: true, supportsAudio: true }),
 
-  videoModel("seedance-2-0", "seedance", "seedance-2.0", "Seedance 2.0", "text-to-video", { inputModes: ["text-to-video", "image-to-video", "reference-to-video", "video-to-video"], duration: { type: "range", min: 2, max: 15, step: 1 }, aspectRatios: ["16:9", "9:16", "1:1"], resolutions: ["720P", "1080P"], supportsReferenceImage: true, supportsMultiImageInput: true, supportsVideoInput: true, supportsCameraControl: true }),
+  videoModel("seedance-2-0", "seedance", "seedance-2.0", "Seedance 2.0", "text-to-video", {
+    inputModes: ["text-to-video", "image-to-video", "first-last-frame", "reference-to-video", "video-to-video"],
+    duration: { type: "enum", values: [0, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15] },
+    aspectRatios: ["9:16", "16:9", "1:1", "3:4", "4:3", "21:9"],
+    resolutions: ["480P", "720P", "1080P"],
+    supportsReferenceImage: true,
+    supportsMultiImageInput: true,
+    supportsFirstLastFrame: true,
+    supportsVideoInput: true,
+    supportsAudio: true,
+    maxReferenceImages: 9,
+    maxReferenceVideos: 3,
+    maxReferenceAudios: 3,
+    maxReferenceFiles: 12,
+    supportsCameraControl: true
+  }),
+  videoModel("seedance-2-0-fast", "seedance", "seedance-2.0-fast", "Seedance 2.0 Fast", "text-to-video", {
+    inputModes: ["text-to-video", "image-to-video", "first-last-frame", "reference-to-video", "video-to-video"],
+    duration: { type: "enum", values: [0, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15] },
+    aspectRatios: ["9:16", "16:9", "1:1", "3:4", "4:3", "21:9"],
+    resolutions: ["480P", "720P", "1080P"],
+    supportsReferenceImage: true,
+    supportsMultiImageInput: true,
+    supportsFirstLastFrame: true,
+    supportsVideoInput: true,
+    supportsAudio: true,
+    maxReferenceImages: 9,
+    maxReferenceVideos: 3,
+    maxReferenceAudios: 3,
+    maxReferenceFiles: 12,
+    supportsCameraControl: true
+  }),
   videoModel("seedance-1-5-pro", "seedance", "seedance-1.5-pro", "Seedance 1.5 Pro", "text-to-video", { inputModes: ["text-to-video", "image-to-video", "reference-to-video"], duration: { type: "enum", values: [5, 10, 15] }, aspectRatios: ["16:9", "9:16", "1:1"], resolutions: ["720P", "1080P"], supportsReferenceImage: true, supportsCameraControl: true }),
   videoModel("seedance-1-0-pro", "seedance", "seedance-1.0-pro", "Seedance 1.0 Pro", "text-to-video", { inputModes: ["text-to-video", "image-to-video"], duration: { type: "enum", values: [5, 10] }, aspectRatios: ["16:9", "9:16", "1:1"], resolutions: ["720P", "1080P"] })
 ];

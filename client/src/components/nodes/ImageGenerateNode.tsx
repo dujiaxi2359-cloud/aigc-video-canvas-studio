@@ -10,6 +10,7 @@ import { modelConfigApi } from "../../services/modelConfigApi";
 import { useCanvasStore } from "../../store/canvasStore";
 import { useModelConfigStore } from "../../store/modelConfigStore";
 import { compactAssetIds, resolveImageNodeInputs } from "../../utils/workflowInputs";
+import { dedupeModelConfigsForSelect, findCanonicalModelConfig } from "../../utils/modelConfigSelection";
 import { AgentAnalyzeErrorButton } from "../agent/AgentAnalyzeErrorButton";
 import type { AvailableImageOptions, ImageInputMode } from "../../types/model";
 import type { ImageGenerateNodeData } from "../../types/node";
@@ -114,7 +115,8 @@ function ImageGenerateNodeComponent(props: NodeProps<ImageGenerateNodeData>) {
   const edges = useCanvasStore((state) => state.edges);
   const nodes = useCanvasStore((state) => state.nodes);
   const allModels = useModelConfigStore((state) => state.modelConfigs);
-  const imageModels = useMemo(() => allModels.filter((model) => model.enabled && model.category === "image"), [allModels]);
+  const rawImageModels = useMemo(() => allModels.filter((model) => model.enabled && model.category === "image"), [allModels]);
+  const imageModels = useMemo(() => dedupeModelConfigsForSelect(rawImageModels), [rawImageModels]);
   const selectedModel = imageModels.find((model) => model.id === props.data.modelConfigId);
   const [options, setOptions] = useState<AvailableImageOptions | null>(null);
   const [localError, setLocalError] = useState("");
@@ -125,6 +127,16 @@ function ImageGenerateNodeComponent(props: NodeProps<ImageGenerateNodeData>) {
   const isComposingRef = useRef(false);
   const parameterAnchorRef = useRef<HTMLDivElement | null>(null);
   const resolvedInputs = useMemo(() => resolveImageNodeInputs(props.id, nodes, edges), [edges, nodes, props.id]);
+
+  useEffect(() => {
+    if (selectedModel || !imageModels.length) return;
+    const canonical = findCanonicalModelConfig(rawImageModels, props.data.modelConfigId);
+    if (canonical) {
+      update(props.id, { modelConfigId: canonical.id, errorMessage: undefined });
+      return;
+    }
+    update(props.id, { modelConfigId: imageModels[0].id, errorMessage: undefined });
+  }, [imageModels, props.data.modelConfigId, props.id, rawImageModels, selectedModel, update]);
 
   useEffect(() => {
     function closeFloatingPanels(event: PointerEvent) {

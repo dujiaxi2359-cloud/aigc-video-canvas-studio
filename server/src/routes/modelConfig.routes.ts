@@ -2,8 +2,11 @@ import { Router } from "express";
 import {
   createModelConfig,
   deleteModelConfig,
+  deleteModelConfigs,
   getRuntimeModelConfig,
   listModelConfigs,
+  probeOpenAiCompatibleModels,
+  saveModelConfigsBulk,
   testModelConfig,
   updateModelConfig
 } from "../services/modelConfig.service.js";
@@ -37,6 +40,30 @@ modelConfigRouter.get("/runtime/:id", requireInternalService, async (req, res, n
 modelConfigRouter.post("/", requireWorkspaceManager, async (req, res, next) => {
   try {
     res.status(201).json(await createModelConfig(req.body));
+  } catch (error) {
+    next(error);
+  }
+});
+
+modelConfigRouter.post("/probe", requireWorkspaceManager, async (req, res, next) => {
+  try {
+    res.json(await probeOpenAiCompatibleModels(req.body));
+  } catch (error) {
+    next(error);
+  }
+});
+
+modelConfigRouter.post("/bulk", requireWorkspaceManager, async (req, res, next) => {
+  try {
+    res.json(await saveModelConfigsBulk(req.body?.models, { replaceExisting: req.body?.replaceExisting === true }));
+  } catch (error) {
+    next(error);
+  }
+});
+
+modelConfigRouter.post("/bulk-delete", requireWorkspaceManager, async (req, res, next) => {
+  try {
+    res.json(await deleteModelConfigs(Array.isArray(req.body?.ids) ? req.body.ids : []));
   } catch (error) {
     next(error);
   }

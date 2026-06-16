@@ -4,6 +4,7 @@ import { legacyInputModeToOfficialMode, type OfficialVideoMode } from "../../typ
 import { downloadGeneratedFile } from "../../utils/downloadGeneratedFile.js";
 import { ProviderError, rawErrorMessage } from "../../utils/providerErrors.js";
 import { getAsset } from "../asset.service.js";
+import { prepareVideoFrameForAspectRatio } from "../assets/prepareVideoFrame.service.js";
 import { saveGenerationTask } from "../generationTask.service.js";
 import type { ProviderGenerateResult, VideoProviderParams } from "./providerTypes.js";
 
@@ -13,11 +14,21 @@ function sleep(ms: number) {
 
 export function isVeoProxyEndpoint(apiBaseUrl?: string) {
   if (!apiBaseUrl) return false;
+  if (/generativelanguage\.googleapis\.com/i.test(apiBaseUrl)) return false;
   try {
-    return /\/v1\/videos\/?$/i.test(new URL(apiBaseUrl).pathname) || /\/v1\/video\/create\/?$/i.test(new URL(apiBaseUrl).pathname);
+    const pathname = new URL(apiBaseUrl).pathname.replace(/\/$/, "");
+    return /\/v1$/i.test(pathname) || /\/v1\/videos$/i.test(pathname) || /\/v1\/video\/create$/i.test(pathname);
   } catch {
-    return /\/v1\/videos\/?$/i.test(apiBaseUrl) || /\/v1\/video\/create\/?$/i.test(apiBaseUrl);
+    const value = apiBaseUrl.replace(/\/$/, "");
+    return /\/v1$/i.test(value) || /\/v1\/videos$/i.test(value) || /\/v1\/video\/create$/i.test(value);
   }
+}
+
+export function veoProxyCreateEndpoint(apiBaseUrl: string) {
+  const base = apiBaseUrl.trim().replace(/^(?:POST|GET|PUT|PATCH|DELETE)\s+/i, "").replace(/\/$/, "");
+  if (/\/v1\/videos$/i.test(base) || /\/v1\/video\/create$/i.test(base)) return base;
+  if (/\/v1$/i.test(base)) return `${base}/videos`;
+  return `${base}/v1/videos`;
 }
 
 function mimeTypeFromPath(filePath: string) {
@@ -27,31 +38,43 @@ function mimeTypeFromPath(filePath: string) {
   return "image/jpeg";
 }
 
-async function imageDataUris(assetIds?: string[]) {
+async function imageDataUris(assetIds?: string[], aspectRatio?: string) {
   const images: string[] = [];
+  const audits: Array<Record<string, unknown>> = [];
   for (const assetId of assetIds ?? []) {
     const asset = await getAsset(assetId);
     if (!asset?.localPath || !fs.existsSync(asset.localPath)) {
       throw new ProviderError("MISSING_INPUT_ASSET", "Veo 中转接口引用的图片素材不存在或已被删除。");
     }
-    const mimeType = asset.mimeType || mimeTypeFromPath(asset.localPath);
-    images.push(`data:${mimeType};base64,${fs.readFileSync(asset.localPath).toString("base64")}`);
+    const prepared = aspectRatio
+      ? await prepareVideoFrameForAspectRatio(asset.localPath, aspectRatio, "smart_crop")
+      : undefined;
+    const inputPath = prepared?.localPath ?? asset.localPath;
+    const stat = fs.statSync(inputPath);
+    const mimeType = prepared?.transformed ? "image/png" : asset.mimeType || mimeTypeFromPath(inputPath);
+    images.push(`data:${mimeType};base64,${fs.readFileSync(inputPath).toString("base64")}`);
+    audits.push({
+      assetId,
+      inputImageSource: prepared?.transformed ? "smartCropAspectRatio" : "localPath",
+      requestedAspectRatio: aspectRatio,
+      inputImageWidth: prepared?.width,
+      inputImageHeight: prepared?.height,
+      inputImageFileSize: stat.size,
+      modelInputAspectRatio: prepared?.aspectRatio,
+      frameFitMode: prepared?.fitMode,
+      usesOriginalFile: !prepared?.transformed,
+      inputImageWasCompressed: Boolean(prepared?.transformed)
+    });
   }
-  return images;
-}
-
-function proxyModelName(params: VideoProviderParams, mode: OfficialVideoMode) {
-  if (params.modelName === "omni_flash-10s") return params.modelName;
-  return mode === "image_to_video_first_last_frame" ? "veo_3_1-fast-fl" : "veo_3_1-fast";
+  return { images, audits };
 }
 
 function relayProtocol(endpoint: string) {
   return /\/v1\/video\/create\/?$/i.test(new URL(endpoint).pathname) ? "unified-create-query" : "openai-videos";
 }
 
-function configuredRelayModelName(params: VideoProviderParams, mode: OfficialVideoMode, protocol: ReturnType<typeof relayProtocol>) {
-  if (protocol === "unified-create-query") return params.modelName;
-  return proxyModelName(params, mode);
+export function configuredRelayModelName(params: Pick<VideoProviderParams, "modelName">) {
+  return params.modelName;
 }
 
 function unifiedQueryEndpoint(endpoint: string, taskId: string) {
@@ -63,10 +86,18 @@ function unifiedQueryEndpoint(endpoint: string, taskId: string) {
 }
 
 function taskIdFromResponse(payload: Record<string, unknown>): string | undefined {
-  for (const key of ["id", "task_id", "taskId"]) {
+  for (const key of ["id", "task_id", "taskId", "request_id", "requestId", "generation_id", "generationId", "job_id", "jobId", "operation_id", "operationId"]) {
     if (typeof payload[key] === "string" && payload[key]) return payload[key] as string;
   }
   const data = payload.data;
+  if (Array.isArray(data)) {
+    for (const item of data) {
+      if (item && typeof item === "object") {
+        const found = taskIdFromResponse(item as Record<string, unknown>);
+        if (found) return found;
+      }
+    }
+  }
   return data && typeof data === "object" ? taskIdFromResponse(data as Record<string, unknown>) : undefined;
 }
 
@@ -155,10 +186,20 @@ function isLikelyVideoUrl(value: string) {
   return isHttpUrl(value) && /\.(mp4|webm|mov|m4v)(?:[?#]|$)/i.test(value);
 }
 
+function urlsFromText(value: string) {
+  return Array.from(value.matchAll(/https?:\/\/[^\s"'<>\\)]+/gi)).map((match) => match[0]!.replace(/[，。,.]+$/g, ""));
+}
+
 function findVideoUrl(value: unknown, preferred = false): string | undefined {
   if (typeof value === "string") {
-    if (!isHttpUrl(value)) return undefined;
-    return preferred || isLikelyVideoUrl(value) || /(video|media|download|file|preview|play)/i.test(value) ? value : undefined;
+    const trimmed = value.trim();
+    if (isHttpUrl(trimmed)) {
+      return preferred || isLikelyVideoUrl(trimmed) || /(video|media|download|file|preview|play|output|cdn|oss|cos|storage|signed)/i.test(trimmed) ? trimmed : undefined;
+    }
+    const urls = urlsFromText(trimmed);
+    if (!urls.length) return undefined;
+    const selected = urls.find((url) => isLikelyVideoUrl(url) || /(video|media|download|file|preview|play|output|cdn|oss|cos|storage|signed)/i.test(url));
+    return selected ?? (preferred ? urls[0] : undefined);
   }
   if (Array.isArray(value)) {
     for (const item of value) {
@@ -182,7 +223,7 @@ function findVideoUrl(value: unknown, preferred = false): string | undefined {
 }
 
 export async function generateVideoWithVeoProxy(params: VideoProviderParams): Promise<ProviderGenerateResult> {
-  const endpoint = params.apiBaseUrl.replace(/\/$/, "");
+  const endpoint = veoProxyCreateEndpoint(params.apiBaseUrl);
   const protocol = relayProtocol(endpoint);
   const mode = params.videoMode ?? legacyInputModeToOfficialMode(params.inputMode, "google");
   const isOmni = params.modelName === "omni_flash-10s";
@@ -194,22 +235,28 @@ export async function generateVideoWithVeoProxy(params: VideoProviderParams): Pr
   }
 
   try {
-    const images = await imageDataUris(params.imageAssetIds);
-    const relayModel = configuredRelayModelName(params, mode, protocol);
+    const relayModel = configuredRelayModelName(params);
+    const requestAspectRatio = isOmni ? params.aspectRatio : params.aspectRatio ?? "16:9";
+    const requestResolution = isOmni ? params.resolution : params.resolution ?? "720p";
+    const requestSize = requestAspectRatio && requestResolution ? proxySize(requestAspectRatio, requestResolution) : undefined;
+    const { images, audits: inputImageAudits } = await imageDataUris(params.imageAssetIds, requestAspectRatio);
     const body = protocol === "unified-create-query"
       ? {
           model: relayModel,
           prompt: params.prompt,
           images,
-          aspect_ratio: params.aspectRatio,
-          size: params.resolution,
+          ...(requestAspectRatio ? { aspect_ratio: requestAspectRatio } : {}),
+          ...(requestResolution ? { size: requestResolution } : {}),
           enhance_prompt: params.promptExtend ?? true,
-          enable_upsample: params.resolution.toLowerCase() !== "720p"
+          ...(requestResolution ? { enable_upsample: requestResolution.toLowerCase() !== "720p" } : {})
         }
       : {
           model: relayModel,
           prompt: params.prompt,
-          size: proxySize(params.aspectRatio, params.resolution),
+          ...(requestSize ? { size: requestSize } : {}),
+          ...(requestAspectRatio ? { aspect_ratio: requestAspectRatio, aspectRatio: requestAspectRatio } : {}),
+          ...(requestResolution ? { resolution: requestResolution } : {}),
+          ...(params.duration ? { duration: params.duration, seconds: params.duration } : {}),
           images
         };
     const response = await fetch(endpoint, {
@@ -225,7 +272,45 @@ export async function generateVideoWithVeoProxy(params: VideoProviderParams): Pr
       throw new ProviderError("PROVIDER_ERROR", `Veo 中转接口创建任务失败：${errorMessage(created)}`, JSON.stringify(created));
     }
 
+    const directVideoUrl = findVideoUrl(created);
     const taskId = taskIdFromResponse(created);
+    if (directVideoUrl) {
+      await saveGenerationTask({
+        id: taskId ?? `direct_${Date.now()}_${params.nodeId}`,
+        status: "success",
+        progress: 100,
+        result: {
+          provider: "google-veo-proxy",
+          endpoint,
+          nodeId: params.nodeId,
+          configuredModel: params.modelName,
+          relayModel,
+          relayProtocol: protocol,
+          response: created
+        }
+      });
+      const saved = await downloadGeneratedFile(directVideoUrl, "video_veo_proxy");
+      return {
+        status: "success",
+        outputUrl: saved.outputUrl,
+        localPath: saved.localPath,
+        rawResponse: created,
+        payloadSummary: {
+          endpointType: "openai-compatible.videos",
+          relayProtocol: protocol,
+          proxyEndpoint: endpoint,
+          proxyTaskId: taskId,
+          proxyModel: relayModel,
+          configuredModel: params.modelName,
+          requestedAspectRatio: requestAspectRatio,
+          requestedResolution: requestResolution,
+          requestedDuration: params.duration,
+          inputImageCount: images.length,
+          inputImages: inputImageAudits,
+          directResult: true
+        }
+      };
+    }
     if (!taskId) {
       throw new ProviderError("PROVIDER_ERROR", "Veo 中转接口没有返回任务 id。", JSON.stringify(created));
     }
@@ -247,9 +332,10 @@ export async function generateVideoWithVeoProxy(params: VideoProviderParams): Pr
           model: relayModel,
           promptLength: params.prompt.length,
           imageCount: images.length,
-          aspectRatio: params.aspectRatio,
-          resolution: params.resolution,
-          duration: params.duration
+          aspectRatio: requestAspectRatio,
+          resolution: requestResolution,
+          duration: params.duration,
+          inputImages: inputImageAudits
         },
         response: created
       }
@@ -304,10 +390,11 @@ export async function generateVideoWithVeoProxy(params: VideoProviderParams): Pr
         proxyModel: relayModel,
         configuredModel: params.modelName,
         relayDisplayNote: protocol === "openai-videos" ? "中转后台的平台列可能显示 Omni，但实际请求 model 字段仍是 proxyModel。" : undefined,
-        requestedAspectRatio: params.aspectRatio,
-        requestedResolution: params.resolution,
+        requestedAspectRatio: requestAspectRatio,
+        requestedResolution: requestResolution,
         requestedDuration: params.duration,
-        inputImageCount: images.length
+        inputImageCount: images.length,
+        inputImages: inputImageAudits
       }
     };
   } catch (error) {
