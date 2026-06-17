@@ -152,6 +152,19 @@ function durationLabel(value: string | number) {
   return Number(value) === 0 ? "Auto" : `${value}s`;
 }
 
+type MentionRange = { start: number; end: number };
+
+function findReferenceMentionRange(value: string, caret = value.length): MentionRange | null {
+  const safeCaret = Math.max(0, Math.min(caret, value.length));
+  const beforeCaret = value.slice(0, safeCaret);
+  const at = beforeCaret.lastIndexOf("@");
+  if (at < 0) return null;
+  const token = beforeCaret.slice(at);
+  if (!token || /\s/.test(token.slice(1))) return null;
+  if (!/^@{1,2}[\p{L}\p{N}_-]*$/u.test(token)) return null;
+  return { start: at, end: safeCaret };
+}
+
 function universalReferenceDescription(model: ModelConfig | undefined) {
   if (!supportsUniversalReference(model)) return undefined;
   const images = model?.capabilities.maxReferenceImages ?? (isSeedanceModel(model) ? 9 : 4);
@@ -355,7 +368,9 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
   const [expanded, setExpanded] = useState(false);
   const [activeTool, setActiveTool] = useState<NodeTool>(null);
   const [listening, setListening] = useState(false);
+  const [pendingMentionRange, setPendingMentionRange] = useState<MentionRange | null>(null);
   const isComposingRef = useRef(false);
+  const promptTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const parameterAnchorRef = useRef<HTMLDivElement | null>(null);
 
   const selectedModel = models.find((model) => model.id === props.data.modelConfigId);
@@ -428,10 +443,7 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
     const value = event.target.value;
     setLocalPrompt(value);
     if (!isComposingRef.current) update(props.id, { prompt: value });
-    if (!isComposingRef.current && /@{1,2}$/.test(value) && (resolvedInputs.imageInputs.length || resolvedInputs.videoInputs.length || resolvedInputs.audioInputs.length)) {
-      setParametersOpen(false);
-      setActiveTool("assets");
-    }
+    maybeOpenReferenceMenu(event.currentTarget);
   }
 
   function handleCompositionStart() {
@@ -443,7 +455,18 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
     const value = event.currentTarget.value;
     setLocalPrompt(value);
     update(props.id, { prompt: value });
-    if (/@{1,2}$/.test(value) && (resolvedInputs.imageInputs.length || resolvedInputs.videoInputs.length || resolvedInputs.audioInputs.length)) {
+    maybeOpenReferenceMenu(event.currentTarget);
+  }
+
+  function hasReferenceInputs() {
+    return Boolean(resolvedInputs.imageInputs.length || resolvedInputs.videoInputs.length || resolvedInputs.audioInputs.length);
+  }
+
+  function maybeOpenReferenceMenu(textarea = promptTextareaRef.current) {
+    if (isComposingRef.current || !textarea || !hasReferenceInputs()) return;
+    const range = findReferenceMentionRange(textarea.value, textarea.selectionStart ?? textarea.value.length);
+    setPendingMentionRange(range);
+    if (range) {
       setParametersOpen(false);
       setActiveTool("assets");
     }
@@ -653,14 +676,42 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
   }
 
   function insertReferenceToken(token: string) {
-    const trimmedRight = localPrompt.replace(/\s+$/g, "");
-    const trailingAt = trimmedRight.match(/@+$/)?.[0] ?? "";
-    const inserted = trailingAt
-      ? `${trimmedRight.slice(0, -trailingAt.length)}${trimmedRight.length > trailingAt.length ? " " : ""}${token}`
-      : `${trimmedRight}${trimmedRight ? " " : ""}${token}`;
-    const next = `${inserted} `;
+    const textarea = promptTextareaRef.current;
+    const selectionStart = textarea?.selectionStart ?? localPrompt.length;
+    const selectionEnd = textarea?.selectionEnd ?? selectionStart;
+    const detectedRange = findReferenceMentionRange(localPrompt, selectionStart);
+    const range = pendingMentionRange ?? detectedRange;
+    let next: string;
+    let cursor: number;
+    if (range) {
+      const before = localPrompt.slice(0, range.start);
+      const after = localPrompt.slice(Math.max(range.end, selectionEnd));
+      const leadingSpace = before && !/\s$/.test(before) ? " " : "";
+      const trailingSpace = after && !/^\s/.test(after) ? " " : " ";
+      next = `${before}${leadingSpace}${token}${trailingSpace}${after}`;
+      cursor = before.length + leadingSpace.length + token.length + 1;
+    } else if (selectionStart !== selectionEnd) {
+      const before = localPrompt.slice(0, selectionStart);
+      const after = localPrompt.slice(selectionEnd);
+      const leadingSpace = before && !/\s$/.test(before) ? " " : "";
+      const trailingSpace = after && !/^\s/.test(after) ? " " : " ";
+      next = `${before}${leadingSpace}${token}${trailingSpace}${after}`;
+      cursor = before.length + leadingSpace.length + token.length + 1;
+    } else {
+      const before = localPrompt.slice(0, selectionStart);
+      const after = localPrompt.slice(selectionStart);
+      const leadingSpace = before && !/\s$/.test(before) ? " " : "";
+      const trailingSpace = after && !/^\s/.test(after) ? " " : " ";
+      next = `${before}${leadingSpace}${token}${trailingSpace}${after}`;
+      cursor = before.length + leadingSpace.length + token.length + 1;
+    }
     setLocalPrompt(next);
+    setPendingMentionRange(null);
     update(props.id, { prompt: next, errorCode: undefined, errorMessage: undefined, debugMessage: undefined });
+    window.requestAnimationFrame(() => {
+      promptTextareaRef.current?.focus();
+      promptTextareaRef.current?.setSelectionRange(cursor, cursor);
+    });
   }
 
   const preview = models.length === 0 ? (
@@ -722,7 +773,13 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
           {mentionedReferences.length > 0 && (
             <div className="creation-mentioned-references">
               {mentionedReferences.map((item) => (
-                <button type="button" key={item.genericToken} title={`${item.genericToken} · ${item.name}`} onClick={() => insertReferenceToken(item.genericToken)}>
+                <button
+                  type="button"
+                  key={item.genericToken}
+                  title={`${item.genericToken} · ${item.name}`}
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => insertReferenceToken(item.genericToken)}
+                >
                   {item.previewUrl ? <img src={item.previewUrl} alt="" /> : <Library size={13} />}
                   <span>{item.kind}</span>
                   <strong>{item.name}</strong>
@@ -731,7 +788,17 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
               ))}
             </div>
           )}
-          <Textarea className="creation-prompt-input nodrag nopan nowheel" placeholder="描述你想生成的画面，或输入 @ 引用素材" value={localPrompt} onChange={handlePromptChange} onCompositionStart={handleCompositionStart} onCompositionEnd={handleCompositionEnd} />
+          <Textarea
+            ref={promptTextareaRef}
+            className="creation-prompt-input nodrag nopan nowheel"
+            placeholder="描述你想生成的画面，或输入 @ 引用素材"
+            value={localPrompt}
+            onChange={handlePromptChange}
+            onClick={(event) => maybeOpenReferenceMenu(event.currentTarget)}
+            onKeyUp={(event) => maybeOpenReferenceMenu(event.currentTarget)}
+            onCompositionStart={handleCompositionStart}
+            onCompositionEnd={handleCompositionEnd}
+          />
         </div>
       </div>
       {(props.data.errorMessage || localError) && <button type="button" className="creation-error-line" onClick={() => setExpanded(true)}><AlertCircle size={12} /><span>{props.data.errorMessage || localError}</span><strong>诊断</strong></button>}

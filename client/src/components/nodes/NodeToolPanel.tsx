@@ -42,7 +42,13 @@ export function NodeToolPanel({ tool, onClose, onInsert, referenceItems = [] }: 
           <div className="node-tool-section-label">当前连接素材</div>
           <div className="node-reference-list">
             {referenceItems.map((item) => (
-              <button key={`${item.token}-${item.typedToken}`} type="button" title={`插入 ${item.token}，也可输入 ${item.typedToken}`} onClick={() => onInsert(item.token)}>
+              <button
+                key={`${item.token}-${item.typedToken}`}
+                type="button"
+                title={`插入 ${item.token}，也可输入 ${item.typedToken}`}
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => onInsert(item.token)}
+              >
                 {item.previewUrl ? <img src={item.previewUrl} alt="" /> : <Library size={16} />}
                 <span>
                   <b>{item.label}</b>
