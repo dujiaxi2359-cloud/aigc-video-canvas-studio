@@ -62,6 +62,13 @@ function getEventPoint(event: MouseEvent | TouchEvent) {
   return { x: mouseEvent.clientX, y: mouseEvent.clientY };
 }
 
+function canOpenPaneAddMenu(target: HTMLElement | null) {
+  if (!target) return false;
+  if (target.closest(".react-flow__node, .react-flow__edge, .react-flow__handle")) return false;
+  if (target.closest("[data-add-node-menu], [data-connection-create-menu], button, input, textarea, select, a")) return false;
+  return Boolean(target.closest(".canvas-space, .react-flow, .react-flow__pane, .react-flow__viewport, .react-flow__renderer, .react-flow__background"));
+}
+
 type SnappedHandle = { nodeId: string; handleId: string | null; distance: number };
 
 function nearestTargetHandle(point: { x: number; y: number }, sourceNodeId: string, zoom: number): SnappedHandle | null {
@@ -144,6 +151,18 @@ export function WorkflowCanvas({ showGrid = true, onToggleGrid = () => undefined
       return instance?.project?.(panePosition) ?? panePosition;
     },
     [reactFlow]
+  );
+
+  const openAddNodeMenuAt = useCallback(
+    (point: { x: number; y: number }) => {
+      window.dispatchEvent(new CustomEvent("studio:open-add-node", {
+        detail: {
+          position: screenToFlow(point),
+          menuPosition: point
+        }
+      }));
+    },
+    [screenToFlow]
   );
 
   const closeConnectionMenu = useCallback(() => {
@@ -279,26 +298,13 @@ export function WorkflowCanvas({ showGrid = true, onToggleGrid = () => undefined
       className={`canvas-space relative h-full w-full bg-[#020203] ${isConnecting ? "is-connecting" : ""} ${isCanvasInteracting ? "is-interacting" : ""}`}
       onDoubleClick={(event) => {
         const target = event.target as HTMLElement | null;
-        if (target?.classList.contains("react-flow__pane")) {
-          window.dispatchEvent(new CustomEvent("studio:open-add-node", {
-            detail: {
-              position: screenToFlow({ x: event.clientX, y: event.clientY }),
-              menuPosition: { x: event.clientX, y: event.clientY }
-            }
-          }));
-        }
+        if (canOpenPaneAddMenu(target)) openAddNodeMenuAt({ x: event.clientX, y: event.clientY });
       }}
       onContextMenu={(event) => {
         event.preventDefault();
         const target = event.target as HTMLElement | null;
-        if (!target?.classList.contains("react-flow__pane")) return;
-        const point = { x: event.clientX, y: event.clientY };
-        window.dispatchEvent(new CustomEvent("studio:open-add-node", {
-          detail: {
-            position: screenToFlow(point),
-            menuPosition: point
-          }
-        }));
+        if (!canOpenPaneAddMenu(target)) return;
+        openAddNodeMenuAt({ x: event.clientX, y: event.clientY });
       }}
       onDragOver={(event) => {
         if (event.dataTransfer.types.includes("application/aigc-asset")) event.preventDefault();
@@ -341,13 +347,17 @@ export function WorkflowCanvas({ showGrid = true, onToggleGrid = () => undefined
           clearSelection();
           closeMenus();
         }}
+        onPaneContextMenu={(event: MouseEvent) => {
+          event.preventDefault();
+          openAddNodeMenuAt({ x: event.clientX, y: event.clientY });
+        }}
         nodesDraggable
         nodeDragHandle={nodeDragHandleSelector}
         onNodeDragStart={beginCanvasInteraction}
         onNodeDragStop={endCanvasInteraction}
         onMoveStart={beginCanvasInteraction}
         onMoveEnd={endCanvasInteraction}
-        panOnDrag={[0, 1, 2]}
+        panOnDrag={[0, 1]}
         panOnScroll
         panOnScrollSpeed={0.8}
         zoomOnScroll={false}

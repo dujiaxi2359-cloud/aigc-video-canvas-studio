@@ -685,6 +685,10 @@ function isRetryablePollFailure(response: Response, payload: Record<string, unkn
   return /capacity|fully loaded|try again later|rate limit|too many|busy|queue|queued|pending|processing|timeout|temporar|upstream/i.test(JSON.stringify(payload));
 }
 
+function isRetryablePollNetworkError(error: unknown) {
+  return /fetch failed|network|econn|dns|timeout|socket|reset|tls|terminated/i.test(rawErrorMessage(error));
+}
+
 async function fetchPollTask(params: SeedanceProviderParams, pollEndpoint: string, taskIdValue: string): Promise<PollResult> {
   if (!isRunApiVideoCreate(params)) {
     const response = await fetch(pollEndpoint, {
@@ -1050,7 +1054,28 @@ export async function generateVideoWithSeedance(params: SeedanceProviderParams):
           throw new ProviderError("VEO_OPERATION_TIMEOUT", `${label} 中转任务超过 ${minutes} 分钟仍未完成。`);
         }
         await sleep(5000);
-        const pollResult = await fetchPollTask(params, pollEndpoint, id);
+        let pollResult: PollResult;
+        try {
+          pollResult = await fetchPollTask(params, pollEndpoint, id);
+        } catch (pollError) {
+          if (isRetryablePollNetworkError(pollError)) {
+            const message = rawErrorMessage(pollError);
+            await saveGenerationTask({
+              id,
+              status: "processing",
+              progress: progressValue(task),
+              result: {
+                ...task,
+                pollEndpoint,
+                retryablePollNetworkError: true,
+                pollNetworkError: message
+              },
+              errorMessage: `${label} 中转查询暂时失败，已继续等待上游任务返回。`
+            });
+            continue;
+          }
+          throw pollError;
+        }
         task = pollResult.task;
         const pollResponse = pollResult.response;
         if (!pollResponse.ok && isRetryablePollFailure(pollResponse, task)) {
