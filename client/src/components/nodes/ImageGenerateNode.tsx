@@ -5,8 +5,10 @@ import { Button } from "../common/Button";
 import { Select } from "../common/Select";
 import { Textarea } from "../common/Textarea";
 import { MediaPreview } from "../media/MediaPreview";
+import { ImageAssetEditor } from "../media/ImageAssetEditor";
 import { generationApi } from "../../services/generationApi";
 import { modelConfigApi } from "../../services/modelConfigApi";
+import { useAssetStore } from "../../store/assetStore";
 import { useCanvasStore } from "../../store/canvasStore";
 import { useModelConfigStore } from "../../store/modelConfigStore";
 import { compactAssetIds, resolveImageNodeInputs } from "../../utils/workflowInputs";
@@ -112,6 +114,7 @@ function PayloadSummary({ data }: { data?: Record<string, unknown> }) {
 
 function ImageGenerateNodeComponent(props: NodeProps<ImageGenerateNodeData>) {
   const update = useCanvasStore((state) => state.updateNodeData);
+  const upload = useAssetStore((state) => state.uploadAsset);
   const edges = useCanvasStore((state) => state.edges);
   const nodes = useCanvasStore((state) => state.nodes);
   const allModels = useModelConfigStore((state) => state.modelConfigs);
@@ -123,6 +126,7 @@ function ImageGenerateNodeComponent(props: NodeProps<ImageGenerateNodeData>) {
   const [localPrompt, setLocalPrompt] = useState(props.data.prompt || "");
   const [parametersOpen, setParametersOpen] = useState(false);
   const [expanded, setExpanded] = useState(false);
+  const [editorOpen, setEditorOpen] = useState(false);
   const [activeTool, setActiveTool] = useState<NodeTool>(null);
   const isComposingRef = useRef(false);
   const parameterAnchorRef = useRef<HTMLDivElement | null>(null);
@@ -321,7 +325,39 @@ function ImageGenerateNodeComponent(props: NodeProps<ImageGenerateNodeData>) {
     </div>
   );
 
-  return <CreationNodeFrame id={props.id} type={props.type} selected={props.selected} title={props.data.title || "Image"} ratio={props.data.aspectRatio || "1:1"} status={props.data.status} preview={preview} toolbar={<MediaPreviewActions kind="image" url={props.data.outputUrl} assetId={props.data.outputAssetId} title={props.data.title} nodeId={props.id} onSaved={(assetId) => update(props.id, { outputAssetId: assetId })} />} dock={dock} />;
+  return (
+    <>
+      <CreationNodeFrame
+        id={props.id}
+        type={props.type}
+        selected={props.selected}
+        title={props.data.title || "Image"}
+        ratio={props.data.aspectRatio || "1:1"}
+        status={props.data.status}
+        preview={preview}
+        toolbar={
+          <MediaPreviewActions
+            kind="image"
+            url={props.data.outputUrl}
+            assetId={props.data.outputAssetId}
+            title={props.data.title}
+            nodeId={props.id}
+            onEdit={() => setEditorOpen(true)}
+            onSaved={(assetId) => update(props.id, { outputAssetId: assetId })}
+          />
+        }
+        dock={dock}
+      />
+      <ImageAssetEditor
+        open={editorOpen}
+        src={props.data.outputUrl}
+        title={props.data.title || "生成图片"}
+        uploadAsset={upload}
+        onClose={() => setEditorOpen(false)}
+        onSaved={(asset) => update(props.id, { status: "success", outputAssetId: asset.id, outputUrl: asset.url })}
+      />
+    </>
+  );
 }
 
 export const ImageGenerateNode = memo(ImageGenerateNodeComponent);

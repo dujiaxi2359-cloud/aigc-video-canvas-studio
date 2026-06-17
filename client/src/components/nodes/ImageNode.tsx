@@ -1,8 +1,9 @@
 import type { NodeProps } from "reactflow";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ImagePlus } from "lucide-react";
 import { CreationNodeFrame } from "./CreationNodeFrame";
 import { MediaPreview } from "../media/MediaPreview";
+import { ImageAssetEditor } from "../media/ImageAssetEditor";
 import { useAssetStore } from "../../store/assetStore";
 import { useCanvasStore } from "../../store/canvasStore";
 import type { ImageNodeData } from "../../types/node";
@@ -26,6 +27,7 @@ function ratioFromDimensions(width?: number, height?: number) {
 export function ImageNode(props: NodeProps<ImageNodeData>) {
   const update = useCanvasStore((state) => state.updateNodeData);
   const upload = useAssetStore((state) => state.uploadAsset);
+  const [editorOpen, setEditorOpen] = useState(false);
   const previewUrl = props.data.url || props.data.thumbnailUrl;
   const ratio = useMemo(() => ratioFromDimensions(props.data.width, props.data.height) || props.data.aspectRatio || "9:16", [props.data.aspectRatio, props.data.height, props.data.width]);
 
@@ -50,6 +52,7 @@ export function ImageNode(props: NodeProps<ImageNodeData>) {
   }
 
   return (
+    <>
     <CreationNodeFrame
       id={props.id}
       type={props.type}
@@ -57,7 +60,17 @@ export function ImageNode(props: NodeProps<ImageNodeData>) {
       title={props.data.title || "Image"}
       ratio={ratio}
       status={props.data.assetId ? "success" : "idle"}
-      toolbar={<MediaPreviewActions kind="image" url={props.data.url} assetId={props.data.assetId} title={props.data.title} nodeId={props.id} onSaved={(assetId) => update(props.id, { assetId })} />}
+      toolbar={
+        <MediaPreviewActions
+          kind="image"
+          url={previewUrl}
+          assetId={props.data.assetId}
+          title={props.data.title}
+          nodeId={props.id}
+          onEdit={() => setEditorOpen(true)}
+          onSaved={(assetId) => update(props.id, { assetId })}
+        />
+      }
       preview={
         props.data.url ? <MediaPreview type="image" title={props.data.title} previewUrl={previewUrl} originalUrl={props.data.url} aspectRatio={ratio} className="creation-media-preview" showInlineActions={false} /> :
         <label className="creation-upload-preview">
@@ -66,5 +79,14 @@ export function ImageNode(props: NodeProps<ImageNodeData>) {
         </label>
       }
     />
+    <ImageAssetEditor
+      open={editorOpen}
+      src={previewUrl}
+      title={props.data.title || "图片素材"}
+      uploadAsset={upload}
+      onClose={() => setEditorOpen(false)}
+      onSaved={(asset) => update(props.id, { assetId: asset.id, url: asset.url, localPath: asset.localPath, thumbnailUrl: asset.thumbnailUrl, width: undefined, height: undefined, aspectRatio: undefined })}
+    />
+    </>
   );
 }

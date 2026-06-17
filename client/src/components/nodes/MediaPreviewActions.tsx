@@ -1,4 +1,4 @@
-import { Check, Download, FolderPlus, Loader2 } from "lucide-react";
+import { Brush, Check, Download, FolderPlus, Loader2 } from "lucide-react";
 import { useState } from "react";
 import { assetApi } from "../../services/assetApi";
 import { downloadAsset, downloadAssetById } from "../../services/downloadApi";
@@ -12,6 +12,7 @@ type MediaPreviewActionsProps = {
   title?: string;
   nodeId?: string;
   onSaved?: (assetId: string) => void;
+  onEdit?: () => void;
 };
 
 const mediaDefaults = {
@@ -27,7 +28,7 @@ const mediaDefaults = {
   }
 } as const;
 
-export function MediaPreviewActions({ kind, url, assetId, title, nodeId, onSaved }: MediaPreviewActionsProps) {
+export function MediaPreviewActions({ kind, url, assetId, title, nodeId, onSaved, onEdit }: MediaPreviewActionsProps) {
   const fetchAssets = useAssetStore((state) => state.fetchAssets);
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved">("idle");
   const [downloading, setDownloading] = useState(false);
@@ -80,6 +81,20 @@ export function MediaPreviewActions({ kind, url, assetId, title, nodeId, onSaved
 
   return (
     <div className="creation-preview-toolbar nodrag nopan" onPointerDown={(event) => event.stopPropagation()}>
+      {kind === "image" && url && onEdit ? (
+        <button
+          type="button"
+          data-tooltip="编辑涂抹"
+          aria-label="编辑涂抹"
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            onEdit();
+          }}
+        >
+          <Brush size={15} />
+        </button>
+      ) : null}
       <button type="button" data-tooltip="保存到素材库" aria-label="保存到素材库" onClick={saveToLibrary}>
         {saveStatus === "saving" ? <Loader2 className="animate-spin" size={15} /> : saveStatus === "saved" ? <Check size={15} /> : <FolderPlus size={15} />}
       </button>
