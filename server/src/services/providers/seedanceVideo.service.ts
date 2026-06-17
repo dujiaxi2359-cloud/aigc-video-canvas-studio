@@ -318,12 +318,20 @@ function seedanceAssetEndpointUnavailable(error: unknown) {
   return [404, 405].includes(upstreamStatus) || /not found|not support|unsupported|method not allowed/i.test(`${error.message}\n${error.debugMessage ?? ""}`);
 }
 
+function seedanceAssetUploadShouldFallback(error: unknown) {
+  if (seedanceAssetEndpointUnavailable(error)) return true;
+  const text = error instanceof ProviderError
+    ? `${error.message}\n${error.debugMessage ?? ""}\n${preview(error.details)}`
+    : rawErrorMessage(error);
+  return /fetch failed|network|econn|dns|timeout|socket|reset|tls|terminated|task_id is required/i.test(text);
+}
+
 async function uploadSeedanceAssetsIfAvailable(params: SeedanceProviderParams, urls: string[], type: "Image" | "Video" | "Audio") {
   if (!urls.length) return urls;
   try {
     return await uploadSeedanceAssets(params, urls, type);
   } catch (error) {
-    if (seedanceAssetEndpointUnavailable(error)) {
+    if (seedanceAssetUploadShouldFallback(error)) {
       console.warn("[seedance asset upload skipped]", {
         type,
         baseUrl: seedanceAssetBaseUrl(params),
