@@ -13,6 +13,7 @@ export function CanvasPage({ onNavigate }: { onNavigate: (page: Page, projectId?
   const [drawer, setDrawer] = useState<DrawerName>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [addPosition, setAddPosition] = useState<{ x: number; y: number }>();
+  const [addMenuPosition, setAddMenuPosition] = useState<{ x: number; y: number }>();
   const [shareOpen, setShareOpen] = useState(false);
   const [showGrid, setShowGrid] = useState(true);
   const nodes = useCanvasStore((state) => state.nodes);
@@ -84,9 +85,11 @@ export function CanvasPage({ onNavigate }: { onNavigate: (page: Page, projectId?
 
   useEffect(() => {
     const openAdd = (event: Event) => {
-      const position = (event as CustomEvent<{ position?: { x: number; y: number } }>).detail?.position;
+      const detail = (event as CustomEvent<{ position?: { x: number; y: number }; menuPosition?: { x: number; y: number } }>).detail;
+      const position = detail?.position;
       setDrawer(null);
       setAddPosition(position);
+      setAddMenuPosition(detail?.menuPosition);
       setAddOpen(true);
     };
     const openDrawer = (event: Event) => {
@@ -132,6 +135,7 @@ export function CanvasPage({ onNavigate }: { onNavigate: (page: Page, projectId?
         onAdd={() => {
           setDrawer(null);
           setAddPosition(undefined);
+          setAddMenuPosition(undefined);
           setAddOpen((value) => !value);
         }}
         onDrawer={toggleDrawer}
@@ -141,7 +145,7 @@ export function CanvasPage({ onNavigate }: { onNavigate: (page: Page, projectId?
           openAgent();
         }}
       />
-      <AddNodeMenu open={addOpen} nodePosition={addPosition} onClose={() => setAddOpen(false)} />
+      <AddNodeMenu open={addOpen} nodePosition={addPosition} menuPosition={addMenuPosition} onClose={() => setAddOpen(false)} />
       <CanvasDrawer drawer={drawer} onClose={() => setDrawer(null)} onNavigate={onNavigate} />
       {nodes.length === 0 && <CanvasEmptyGuide onAdd={addNode} onTemplates={() => toggleDrawer("templates")} />}
       <button type="button" title="Moon｜Tv 创作助手" onClick={() => openAgent()} className="canvas-brand-orb">M</button>

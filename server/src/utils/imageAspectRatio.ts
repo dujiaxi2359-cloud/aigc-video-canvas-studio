@@ -29,8 +29,17 @@ export function aspectRatioToQwen20Size(aspectRatio?: string) {
 }
 
 export function aspectRatioToOpenAIImageSize(aspectRatio?: string) {
-  if (normalizeImageAspectRatio(aspectRatio) === "1:1") return "1024x1024";
-  return undefined;
+  switch (normalizeImageAspectRatio(aspectRatio)) {
+    case "3:4":
+    case "9:16":
+      return "1024x1536";
+    case "4:3":
+    case "16:9":
+      return "1536x1024";
+    case "1:1":
+    default:
+      return "1024x1024";
+  }
 }
 
 export function aspectRatioToGoogleSize(aspectRatio?: string) {

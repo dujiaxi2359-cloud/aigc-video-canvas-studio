@@ -18,6 +18,12 @@ function previewWidth(ratio?: string) {
   return 390;
 }
 
+function frameWidth(type: string | undefined, cardWidth: number, hasDock: boolean) {
+  if (type === "imageGenerate") return Math.max(cardWidth, hasDock ? 560 : cardWidth);
+  if (type === "image" || type === "imageAsset") return cardWidth;
+  return Math.max(cardWidth, hasDock ? 560 : 520);
+}
+
 function CreationNodeFrameComponent({ id, type, selected, title, ratio, status, preview, toolbar, dock }: {
   id: string;
   type?: string;
@@ -31,8 +37,9 @@ function CreationNodeFrameComponent({ id, type, selected, title, ratio, status, 
 }) {
   const deleteNode = useCanvasStore((state) => state.deleteNode);
   const width = previewWidth(ratio);
+  const containerWidth = frameWidth(type, width, Boolean(dock));
   return (
-    <div className={`creation-node ${selected ? "is-selected" : ""}`} data-node-type={type} style={{ width: 640 }}>
+    <div className={`creation-node ${selected ? "is-selected" : ""}`} data-node-type={type} style={{ width: containerWidth }}>
       <div className="creation-node-preview-wrap">
         {toolbar}
         <div className="creation-node-label node-floating-label drag-handle mb-2 flex cursor-grab items-center gap-1.5 active:cursor-grabbing"><span className="h-2.5 w-2.5 rounded-[3px] border border-white/20" />{title}</div>

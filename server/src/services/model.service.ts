@@ -21,6 +21,7 @@ import { generateVideoWithSeedance } from "./providers/seedanceVideo.service.js"
 import { channelSupportsImage, resolveVideoRequestConfig, shouldUseProxyVideoAdapter, validateVideoRequestConfig } from "./providers/videoRequestAdapter.js";
 import { resolveProviderApiBaseUrl } from "./providers/providerBaseUrl.js";
 import { ensureVideoAspectRatio } from "./assets/ensureVideoAspectRatio.service.js";
+import { ensureImageAspectRatio } from "./assets/ensureImageAspectRatio.service.js";
 import type { ImageInputMode, ModelCapabilities, ModelCatalogItem, VideoNodeContext } from "../types/model.js";
 import type { OfficialVideoMode } from "../types/videoModes.js";
 import { legacyInputModeToOfficialMode } from "../types/videoModes.js";
@@ -403,6 +404,36 @@ async function enforceVideoAspectRatio(result: ProviderGenerateResult, aspectRat
   };
 }
 
+async function enforceImageAspectRatio(result: ProviderGenerateResult, aspectRatio?: string): Promise<ProviderGenerateResult> {
+  if (!aspectRatio) return result;
+  const ensured = await ensureImageAspectRatio(result.localPath, aspectRatio);
+  if (!ensured) return result;
+  if (!ensured.transformed) {
+    return {
+      ...result,
+      payloadSummary: {
+        ...(result.payloadSummary && typeof result.payloadSummary === "object" ? result.payloadSummary as Record<string, unknown> : {}),
+        outputAspectRatio: ensured.aspectRatio,
+        outputAspectRatioTransformed: false,
+        outputAspectRatioFitMode: ensured.fitMode
+      }
+    };
+  }
+  return {
+    ...result,
+    localPath: ensured.localPath,
+    outputUrl: ensured.outputUrl ?? result.outputUrl,
+    payloadSummary: {
+      ...(result.payloadSummary && typeof result.payloadSummary === "object" ? result.payloadSummary as Record<string, unknown> : {}),
+      outputAspectRatio: ensured.aspectRatio,
+      outputAspectRatioTransformed: true,
+      outputAspectRatioFitMode: ensured.fitMode,
+      originalOutput: ensured.originalMetadata,
+      transformedOutput: ensured.metadata
+    }
+  };
+}
+
 export async function generateText(input: GenerateTextRequest) {
   const { model, apiKey, catalogItem, forceMock } = await getGenerationContext(input.modelConfigId, "text");
   logGenerate({ type: "text", model, catalogItem, apiKey, inputMode: "text" });
@@ -683,6 +714,7 @@ export async function generateImage(input: GenerateImageRequest) {
       default:
         throw new Error("该图片模型暂未支持真实调用");
     }
+    result = await enforceImageAspectRatio(result, input.aspectRatio);
 
     const asset = await createGeneratedAssetFromProvider(result, `image_${input.nodeId}.png`, {
       providerId,

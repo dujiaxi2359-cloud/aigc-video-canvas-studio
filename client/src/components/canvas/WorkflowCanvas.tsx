@@ -281,11 +281,25 @@ export function WorkflowCanvas({ showGrid = true, onToggleGrid = () => undefined
         const target = event.target as HTMLElement | null;
         if (target?.classList.contains("react-flow__pane")) {
           window.dispatchEvent(new CustomEvent("studio:open-add-node", {
-            detail: { position: screenToFlow({ x: event.clientX, y: event.clientY }) }
+            detail: {
+              position: screenToFlow({ x: event.clientX, y: event.clientY }),
+              menuPosition: { x: event.clientX, y: event.clientY }
+            }
           }));
         }
       }}
-      onContextMenu={(event) => event.preventDefault()}
+      onContextMenu={(event) => {
+        event.preventDefault();
+        const target = event.target as HTMLElement | null;
+        if (!target?.classList.contains("react-flow__pane")) return;
+        const point = { x: event.clientX, y: event.clientY };
+        window.dispatchEvent(new CustomEvent("studio:open-add-node", {
+          detail: {
+            position: screenToFlow(point),
+            menuPosition: point
+          }
+        }));
+      }}
       onDragOver={(event) => {
         if (event.dataTransfer.types.includes("application/aigc-asset")) event.preventDefault();
       }}

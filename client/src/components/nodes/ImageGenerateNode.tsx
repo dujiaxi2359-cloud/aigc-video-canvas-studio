@@ -49,6 +49,36 @@ function aspectRatioCss(ratio?: string) {
   return `${width || 1} / ${height || 1}`;
 }
 
+function toNumber(value: unknown) {
+  const number = typeof value === "number" ? value : typeof value === "string" ? Number(value) : NaN;
+  return Number.isFinite(number) && number > 0 ? number : undefined;
+}
+
+function gcd(a: number, b: number): number {
+  return b === 0 ? a : gcd(b, a % b);
+}
+
+function outputRatioFromSummary(data?: Record<string, unknown>, fallback = "1:1") {
+  if (!data) return fallback;
+  const nested = data.payloadSummary && typeof data.payloadSummary === "object" ? data.payloadSummary as Record<string, unknown> : undefined;
+  const output = nested?.output && typeof nested.output === "object" ? nested.output as Record<string, unknown> : undefined;
+  const width = toNumber(data.outputWidth) ?? toNumber(output?.width) ?? toNumber((data.transformedOutput as Record<string, unknown> | undefined)?.width);
+  const height = toNumber(data.outputHeight) ?? toNumber(output?.height) ?? toNumber((data.transformedOutput as Record<string, unknown> | undefined)?.height);
+  if (!width || !height) return fallback;
+  const known = [
+    ["1:1", 1],
+    ["3:4", 3 / 4],
+    ["4:3", 4 / 3],
+    ["9:16", 9 / 16],
+    ["16:9", 16 / 9]
+  ] as const;
+  const value = width / height;
+  const closest = known.reduce((best, current) => Math.abs(value - current[1]) < Math.abs(value - best[1]) ? current : best, known[0]);
+  if (Math.abs(value - closest[1]) < 0.035) return closest[0];
+  const divisor = gcd(Math.round(width), Math.round(height));
+  return `${Math.round(width / divisor)}:${Math.round(height / divisor)}`;
+}
+
 function humanizeError(error: unknown) {
   const message = error instanceof Error ? error.message : "图片生成失败";
   if (/fetch failed/i.test(message)) return "网络请求失败，请检查本地服务、接口地址或第三方 API 网络连接。";
@@ -225,6 +255,7 @@ function ImageGenerateNodeComponent(props: NodeProps<ImageGenerateNodeData>) {
   const selectedQualityTier = imageQualityTiers.includes(props.data.imageSize ?? "")
     ? props.data.imageSize!
     : tierForQuality(props.data.imageQuality, qualities);
+  const displayRatio = outputRatioFromSummary(props.data.payloadSummary, props.data.aspectRatio || "1:1");
 
   async function generate() {
     if (!props.data.modelConfigId || !selectedModel) {
@@ -280,7 +311,7 @@ function ImageGenerateNodeComponent(props: NodeProps<ImageGenerateNodeData>) {
   }
 
   const preview = imageModels.length === 0 ? <div className="creation-preview-empty"><ImagePlus size={29} /><span>请先配置图片模型</span></div> : (
-    <MediaPreview type="image" title={props.data.title} outputUrl={props.data.outputUrl} aspectRatio={aspectRatioCss(props.data.aspectRatio)} className="creation-media-preview">
+    <MediaPreview type="image" title={props.data.title} outputUrl={props.data.outputUrl} aspectRatio={aspectRatioCss(displayRatio)} className="creation-media-preview">
       <div className={`creation-preview-empty ${props.data.status === "error" ? "is-error" : ""}`}><ImagePlus size={28} /><span>{props.data.status === "generating" ? "正在生成图片" : props.data.status === "error" ? "图片生成失败" : "图片预览"}</span></div>
     </MediaPreview>
   );
@@ -332,7 +363,7 @@ function ImageGenerateNodeComponent(props: NodeProps<ImageGenerateNodeData>) {
         type={props.type}
         selected={props.selected}
         title={props.data.title || "Image"}
-        ratio={props.data.aspectRatio || "1:1"}
+        ratio={displayRatio}
         status={props.data.status}
         preview={preview}
         toolbar={
