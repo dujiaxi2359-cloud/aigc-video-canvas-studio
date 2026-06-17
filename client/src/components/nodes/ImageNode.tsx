@@ -47,8 +47,12 @@ export function ImageNode(props: NodeProps<ImageNodeData>) {
 
   async function onFile(file?: File) {
     if (!file) return;
-    const asset = await upload(file);
-    update(props.id, { assetId: asset.id, url: asset.url, localPath: asset.localPath, width: undefined, height: undefined, aspectRatio: undefined });
+    try {
+      const asset = await upload(file);
+      update(props.id, { assetId: asset.id, url: asset.url, localPath: asset.localPath, width: undefined, height: undefined, aspectRatio: undefined });
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : "上传图片素材失败，请检查文件或网络。");
+    }
   }
 
   return (

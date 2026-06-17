@@ -3013,6 +3013,41 @@ select {
   background: rgba(255, 255, 255, 0.055) !important;
 }
 
+select,
+select option,
+select optgroup {
+  color-scheme: dark;
+}
+
+.creation-model-select option,
+.creation-model-select optgroup,
+.studio-input option,
+.studio-input optgroup {
+  background-color: #15161b !important;
+  color: #f7f8fb !important;
+}
+
+.creation-model-select option:checked,
+.studio-input option:checked {
+  background-color: #2e3440 !important;
+  color: #ffffff !important;
+}
+
+.creation-model-select option:disabled,
+.studio-input option:disabled {
+  color: rgba(255, 255, 255, 0.46) !important;
+}
+
+@media (forced-colors: active) {
+  .creation-model-select option,
+  .creation-model-select optgroup,
+  .studio-input option,
+  .studio-input optgroup {
+    background-color: Canvas !important;
+    color: CanvasText !important;
+  }
+}
+
 .creation-model-channel {
   max-width: 86px;
   overflow: hidden;

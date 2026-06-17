@@ -172,6 +172,16 @@ function AssetDrawer({ onClose }: { onClose: () => void }) {
     }
   }
 
+  async function uploadFromPicker(file?: File) {
+    if (!file) return;
+    try {
+      await uploadAsset(file, { folderId: folderId ?? null });
+      await fetchAssets(folderId === undefined ? {} : { folderId: folderId ?? "root" });
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : "上传素材失败，请检查文件或网络。");
+    }
+  }
+
   async function removeFolder(id: string) {
     try {
       await deleteFolder(id);
@@ -191,7 +201,7 @@ function AssetDrawer({ onClose }: { onClose: () => void }) {
         <>
           <label className="drawer-icon cursor-pointer" title="上传素材">
             <Upload size={15} />
-            <input hidden type="file" accept="image/*,video/*,audio/*" onChange={(event) => event.target.files?.[0] && uploadAsset(event.target.files[0], { folderId: folderId ?? null }).then(() => fetchAssets(folderId === undefined ? {} : { folderId: folderId ?? "root" })).catch(() => undefined)} />
+            <input hidden type="file" accept="image/*,video/*,audio/*" onChange={(event) => { void uploadFromPicker(event.target.files?.[0]); event.currentTarget.value = ""; }} />
           </label>
           <button type="button" className="drawer-icon" title="新建一级文件夹" onClick={() => void addFolder()}><FolderPlus size={16} /></button>
         </>
