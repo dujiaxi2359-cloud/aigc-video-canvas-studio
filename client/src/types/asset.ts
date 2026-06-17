@@ -20,6 +20,11 @@ export type Asset = {
   duration?: number;
   fps?: number;
   thumbnailUrl?: string;
+  storageProvider?: string;
+  storageKey?: string;
+  storageBucket?: string;
+  storageRegion?: string;
+  storageFileType?: string;
   providerId?: string;
   modelId?: string;
   nodeId?: string;

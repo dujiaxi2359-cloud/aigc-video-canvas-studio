@@ -165,6 +165,8 @@ assetRouter.get("/", async (req, res, next) => {
 assetRouter.get("/:id/download", async (req, res) => {
   try {
     const info = await getAssetDownloadInfo(req.params.id);
+    if (info.redirectUrl) return res.redirect(302, info.redirectUrl);
+    if (!info.localPath) throw new Error("ASSET_FILE_MISSING");
     res.setHeader("Content-Type", info.contentType);
     res.setHeader("Content-Disposition", `attachment; filename*=UTF-8''${encodeURIComponent(info.filename)}`);
     fs.createReadStream(info.localPath).pipe(res);

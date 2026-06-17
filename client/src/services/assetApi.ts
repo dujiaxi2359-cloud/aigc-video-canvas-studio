@@ -19,7 +19,7 @@ export const assetApi = {
   createFolder: (name: string, parentId?: string | null) => api.post<AssetFolder>("/api/assets/folders", { name, parentId }),
   updateFolder: (id: string, input: { name?: string; parentId?: string | null }) => api.patch<AssetFolder>(`/api/assets/folders/${id}`, input),
   removeFolder: (id: string) => api.delete(`/api/assets/folders/${id}`),
-  upload: (file: File, input: { folderId?: string | null; name?: string } = {}) => {
+  upload: async (file: File, input: { folderId?: string | null; name?: string } = {}) => {
     const formData = new FormData();
     formData.append("file", file);
     if (input.folderId) formData.append("folderId", input.folderId);

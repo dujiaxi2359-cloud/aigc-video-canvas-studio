@@ -267,6 +267,11 @@ export async function getDb() {
   await addAssetColumn("width", "ALTER TABLE assets ADD COLUMN width INTEGER");
   await addAssetColumn("height", "ALTER TABLE assets ADD COLUMN height INTEGER");
   await addAssetColumn("fps", "ALTER TABLE assets ADD COLUMN fps REAL");
+  await addAssetColumn("storage_provider", "ALTER TABLE assets ADD COLUMN storage_provider TEXT");
+  await addAssetColumn("storage_key", "ALTER TABLE assets ADD COLUMN storage_key TEXT");
+  await addAssetColumn("storage_bucket", "ALTER TABLE assets ADD COLUMN storage_bucket TEXT");
+  await addAssetColumn("storage_region", "ALTER TABLE assets ADD COLUMN storage_region TEXT");
+  await addAssetColumn("storage_file_type", "ALTER TABLE assets ADD COLUMN storage_file_type TEXT");
   await addAssetColumn("provider_id", "ALTER TABLE assets ADD COLUMN provider_id TEXT");
   await addAssetColumn("model_id", "ALTER TABLE assets ADD COLUMN model_id TEXT");
   await addAssetColumn("node_id", "ALTER TABLE assets ADD COLUMN node_id TEXT");

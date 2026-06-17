@@ -6,6 +6,7 @@ import path from "node:path";
 import dotenv from "dotenv";
 import { getDb } from "./db/database.js";
 import { assetRouter } from "./routes/asset.routes.js";
+import { storageRouter } from "./routes/storage.routes.js";
 import { capabilityRouter } from "./routes/capability.routes.js";
 import { generationRouter } from "./routes/generation.routes.js";
 import { historyRouter } from "./routes/history.routes.js";
@@ -120,6 +121,7 @@ app.get("/api/system/share-info", (_req, res) => {
 app.use("/api/admin", adminRouter);
 app.use("/api/model-configs", requireActiveWorkspace, modelConfigRouter);
 app.use("/api/projects", requireActiveWorkspace, projectRouter);
+app.use("/api/storage", requireActiveWorkspace, storageRouter);
 app.use("/api/assets", requireActiveWorkspace, assetRouter);
 app.use("/api/generate", requireActiveWorkspace, generationRouter);
 app.use("/api/history", requireActiveWorkspace, historyRouter);

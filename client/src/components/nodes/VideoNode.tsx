@@ -317,7 +317,7 @@ function ratioFromDimensions(width?: number, height?: number) {
 }
 
 function displayAspectRatio(nodeRatio?: string, selectedRatio?: string) {
-  return nodeRatio || selectedRatio || "16:9";
+  return selectedRatio || nodeRatio || "16:9";
 }
 
 function outputInfo(data?: Record<string, unknown>, requestedResolution?: string) {
@@ -654,7 +654,18 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
       update(
         props.id,
         result.status === "success"
-          ? { status: "success", outputAssetId: result.outputAssetId, outputUrl: result.outputUrl, payloadSummary: result.payloadSummary, errorCode: undefined, errorMessage: undefined, debugMessage: undefined }
+          ? {
+            status: "success",
+            outputAssetId: result.outputAssetId,
+            outputUrl: result.outputUrl,
+            payloadSummary: result.payloadSummary,
+            aspectRatio: selectedAspectRatio ?? props.data.aspectRatio,
+            resolution: selectedResolution ?? props.data.resolution,
+            duration: selectedDuration ?? props.data.duration,
+            errorCode: undefined,
+            errorMessage: undefined,
+            debugMessage: undefined
+          }
           : { status: "error", errorCode: result.errorCode, errorMessage: result.errorMessage, debugMessage: result.debugMessage, payloadSummary: result.payloadSummary }
       );
     } catch (error) {
@@ -728,10 +739,6 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
       outputUrl={outputIsVideo ? props.data.outputUrl : undefined}
       aspectRatio={aspectRatioCss(displayRatio)}
       className="creation-media-preview"
-      onVideoMetadata={({ width, height }) => {
-        const actualRatio = ratioFromDimensions(width, height);
-        if (actualRatio && actualRatio !== props.data.aspectRatio) update(props.id, { aspectRatio: actualRatio });
-      }}
     >
       {props.data.status === "generating" ? <div className="creation-preview-empty"><Loader2 className="animate-spin" size={25} /><span>正在生成视频</span></div> : props.data.status === "error" ? <div className="creation-preview-empty is-error"><AlertCircle size={25} /><span>生成失败</span></div> : <div className="creation-preview-empty"><Play size={24} fill="currentColor" /><span>视频预览</span></div>}
     </MediaPreview>

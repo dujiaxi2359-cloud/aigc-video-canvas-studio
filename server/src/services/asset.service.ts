@@ -9,6 +9,15 @@ import { contentTypeForFilename, sanitizeFilename } from "../utils/exportFiles.j
 import { readGeneratedFileMetadata } from "../utils/mediaMetadata.js";
 import type { Asset, AssetFolder } from "../types/asset.js";
 import { requireRequestContext } from "./requestContext.js";
+import {
+  deleteCosFile,
+  isCosConfigured,
+  isCosLocalPath,
+  signedCosUrl,
+  storageAccessPath,
+  uploadLocalFileToCos
+} from "./storage/cosStorage.service.js";
+import type { StorageFileType } from "./storage/cosStorage.service.js";
 
 type AssetRow = Record<string, any>;
 
@@ -43,6 +52,11 @@ export type CreateAssetInput = {
   prompt?: string;
   negativePrompt?: string;
   generationParams?: Record<string, unknown>;
+  storageProvider?: string;
+  storageKey?: string;
+  storageBucket?: string;
+  storageRegion?: string;
+  storageFileType?: string;
 };
 
 const uploadRoot = () => process.env.UPLOAD_DIR ?? "./uploads";
@@ -74,6 +88,9 @@ function inferTypeFromPath(localPath: string): Asset["type"] {
 }
 
 function toAsset(row: AssetRow): Asset {
+  const storageKey = row.storage_key as string | undefined;
+  const cosUrl = storageKey ? storageAccessPath(storageKey, { disposition: "inline" }) : undefined;
+  const cosDownloadUrl = storageKey ? storageAccessPath(storageKey, { disposition: "attachment" }) : undefined;
   return {
     id: row.id,
     name: row.name || row.original_name,
@@ -83,16 +100,21 @@ function toAsset(row: AssetRow): Asset {
     fileName: row.file_name || path.basename(row.local_path || row.url || row.original_name),
     originalName: row.original_name,
     localPath: row.local_path,
-    url: row.url,
+    url: cosUrl ?? row.url,
     publicUrl: row.public_url,
-    downloadUrl: row.download_url,
+    downloadUrl: cosDownloadUrl ?? row.download_url,
     size: row.size,
     mimeType: row.mime_type,
     width: row.width,
     height: row.height,
     duration: row.duration,
     fps: row.fps,
-    thumbnailUrl: row.thumbnail_path,
+    thumbnailUrl: row.thumbnail_path || (row.type === "image" ? cosUrl : undefined),
+    storageProvider: row.storage_provider,
+    storageKey,
+    storageBucket: row.storage_bucket,
+    storageRegion: row.storage_region,
+    storageFileType: row.storage_file_type,
     providerId: row.provider_id,
     modelId: row.model_id,
     nodeId: row.node_id,
@@ -147,6 +169,14 @@ async function copyIntoAssetStorage(input: { sourcePath: string; type: Asset["ty
   return { fileName, localPath: targetPath, url: publicAssetUrl(input.type, fileName) };
 }
 
+function storageFileTypeForAsset(type: Asset["type"], source?: Asset["source"]): StorageFileType {
+  if (source === "generated" && type === "image") return "generated_image";
+  if (source === "generated" && type === "video") return "generated_video";
+  if (type === "video") return "video";
+  if (type === "image") return "image";
+  return "task_temp";
+}
+
 export async function createAssetFromUpload(file: Express.Multer.File, input: { folderId?: string | null; name?: string; projectId?: string } = {}) {
   const type = assetTypeFromMime(file.mimetype) as Asset["type"];
   const id = createId("asset");
@@ -176,24 +206,49 @@ export async function createAsset(input: CreateAssetInput & { id?: string }) {
   const type = input.type === "generated" ? inferTypeFromPath(input.localPath) : input.type;
   let localPath = input.localPath;
   let url = input.url;
+  let downloadUrl = input.downloadUrl;
+  let storageProvider = input.storageProvider;
+  let storageKey = input.storageKey;
+  let storageBucket = input.storageBucket;
+  let storageRegion = input.storageRegion;
+  let storageFileType = input.storageFileType;
   if ((input.source === "generated" || input.source === "imported") && localPath && fs.existsSync(localPath) && !path.resolve(localPath).startsWith(assetRoot())) {
     const stored = await copyIntoAssetStorage({ sourcePath: localPath, type, assetId: id, originalName: input.originalName });
     localPath = stored.localPath;
     url = stored.url;
   }
   const metadata = await metadataFor(localPath);
-  const fileName = path.basename(localPath || url || input.originalName);
+  const localFileExists = Boolean(localPath && fs.existsSync(localPath));
+  const fileName = path.basename(storageKey || localPath || url || input.originalName);
   let thumbnailUrl = input.thumbnailUrl;
   if (type === "image" && localPath && fs.existsSync(localPath)) {
     thumbnailUrl = await createImageThumbnail(localPath, id).catch(() => input.thumbnailUrl);
+  }
+  if (!storageKey && isCosConfigured() && localFileExists && ["uploaded", "generated", "imported"].includes(input.source ?? "uploaded")) {
+    const stored = await uploadLocalFileToCos({
+      workspaceId: workspace.id,
+      localPath,
+      fileType: storageFileTypeForAsset(type, input.source),
+      originalName: input.originalName || fileName,
+      mimeType: input.mimeType ?? contentTypeForFilename(fileName)
+    });
+    storageProvider = "tencent_cos";
+    storageKey = stored.fileKey;
+    storageBucket = stored.bucket;
+    storageRegion = stored.region;
+    storageFileType = storageFileTypeForAsset(type, input.source);
+    localPath = stored.localPath;
+    url = stored.url;
+    downloadUrl = stored.downloadUrl;
   }
 
   await db.run(
     `INSERT INTO assets (
       id, workspace_id, owner_user_id, name, type, source, folder_id, file_name, original_name, local_path, url, public_url, download_url,
-      size, mime_type, width, height, duration, fps, thumbnail_path, provider_id, model_id, node_id, project_id,
+      size, mime_type, width, height, duration, fps, thumbnail_path, storage_provider, storage_key, storage_bucket, storage_region, storage_file_type,
+      provider_id, model_id, node_id, project_id,
       prompt, negative_prompt, generation_params_json, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     id,
     workspace.id,
     user.id,
@@ -206,7 +261,7 @@ export async function createAsset(input: CreateAssetInput & { id?: string }) {
     localPath,
     url,
     input.publicUrl,
-    `/api/assets/${id}/download`,
+    downloadUrl ?? `/api/assets/${id}/download`,
     metadata.fileSize ?? input.size,
     input.mimeType ?? contentTypeForFilename(fileName),
     metadata.width,
@@ -214,6 +269,11 @@ export async function createAsset(input: CreateAssetInput & { id?: string }) {
     metadata.duration ?? input.duration,
     metadata.fps,
     thumbnailUrl,
+    storageProvider,
+    storageKey,
+    storageBucket,
+    storageRegion,
+    storageFileType,
     input.providerId,
     input.modelId,
     input.nodeId,
@@ -287,6 +347,7 @@ export async function updateAsset(id: string, input: { name?: string; folderId?:
 }
 
 function assertManagedPath(localPath: string) {
+  if (isCosLocalPath(localPath)) throw new Error("COS_ASSET_PATH");
   const absolute = path.resolve(localPath);
   const uploadAbsolute = path.resolve(process.cwd(), uploadRoot());
   if (!absolute.startsWith(uploadAbsolute)) throw new Error("UNSAFE_ASSET_PATH");
@@ -298,10 +359,20 @@ export async function deleteAsset(id: string, physical = false) {
   const asset = await getAsset(id);
   if (!asset) return;
   await db.run("UPDATE assets SET deleted_at = ?, updated_at = ? WHERE id = ?", now(), now(), id);
-  if (physical && asset.localPath) {
+  if (physical && asset.storageKey) {
+    await deleteCosFile(asset.storageKey).catch(() => undefined);
+  } else if (physical && asset.localPath) {
     const filePath = assertManagedPath(asset.localPath);
     fs.rmSync(filePath, { force: true });
   }
+}
+
+export async function deleteCosAssetFile(id: string) {
+  const db = await getDb();
+  const asset = await getAsset(id);
+  if (!asset?.storageKey) throw new Error("ASSET_NOT_FOUND");
+  await deleteCosFile(asset.storageKey);
+  await db.run("UPDATE assets SET deleted_at = ?, updated_at = ? WHERE id = ?", now(), now(), id);
 }
 
 export async function listFolders(projectId?: string) {
@@ -365,12 +436,22 @@ export async function deleteFolder(id: string) {
 export async function getAssetDownloadInfo(id: string) {
   const asset = await getAsset(id);
   if (!asset) throw new Error("ASSET_NOT_FOUND");
-  const localPath = assertManagedPath(asset.localPath);
-  if (!fs.existsSync(localPath)) throw new Error("ASSET_FILE_MISSING");
-  const ext = path.extname(asset.fileName || asset.originalName || localPath) || path.extname(localPath);
+  const ext = path.extname(asset.fileName || asset.originalName || asset.localPath) || path.extname(asset.localPath);
   const rawName = asset.name || asset.originalName || "asset";
   const safeBaseName = sanitizeFilename(rawName.replace(/\.[^.]+$/, ""));
   const filename = `${safeBaseName || "asset"}${ext}`;
+  if (asset.storageKey) {
+    return {
+      redirectUrl: await signedCosUrl({
+        fileKey: asset.storageKey,
+        responseContentDisposition: `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`
+      }),
+      filename,
+      contentType: asset.mimeType || contentTypeForFilename(filename)
+    };
+  }
+  const localPath = assertManagedPath(asset.localPath);
+  if (!fs.existsSync(localPath)) throw new Error("ASSET_FILE_MISSING");
   return {
     localPath,
     filename,
