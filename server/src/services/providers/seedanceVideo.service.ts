@@ -254,7 +254,7 @@ async function seedanceAssetRequest(params: SeedanceProviderParams, endpoint: st
   }
   throw new ProviderError(
     "SEEDANCE_ASSET_UPLOAD_FAILED",
-    `Seedance 素材库接口调用失败：${errorMessage(lastPayload)}`,
+    `Seedance 素材库接口调用失败：${upstreamFriendlyErrorMessage("Seedance", lastPayload)}`,
     preview(lastPayload),
     { endpoint, upstreamStatus: lastStatus }
   );
@@ -450,6 +450,34 @@ function errorMessage(payload: Record<string, unknown>) {
   const message = findStringByKeys(payload, ["message", "error_message", "errorMessage", "detail", "reason"]);
   const error = record(payload.error);
   return String(message ?? error.message ?? payload.error ?? "未知错误");
+}
+
+function decodedErrorText(value: unknown, depth = 0): string {
+  if (depth > 6 || value === undefined || value === null) return "";
+  if (typeof value === "string") {
+    const parsed = parseJsonCandidate(value);
+    if (parsed && parsed !== value) return `${value}\n${decodedErrorText(parsed, depth + 1)}`;
+    return value;
+  }
+  if (Array.isArray(value)) return value.map((item) => decodedErrorText(item, depth + 1)).filter(Boolean).join("\n");
+  if (typeof value === "object") {
+    return Object.entries(value as Record<string, unknown>)
+      .map(([key, item]) => `${key}: ${decodedErrorText(item, depth + 1)}`)
+      .join("\n");
+  }
+  return String(value);
+}
+
+function upstreamFriendlyErrorMessage(label: string, payload: Record<string, unknown>) {
+  const fallback = errorMessage(payload);
+  const decoded = `${fallback}\n${decodedErrorText(payload)}`;
+  if (/InputImageSensitiveContentDetected|PrivacyInformation|may contain real person/i.test(decoded)) {
+    return `${label} 上游内容审核拒绝：参考图可能包含真人或隐私信息（upstream_InputImageSensitiveContentDetected.PrivacyInformation）。请换用非真人/虚拟角色/背影远景素材，或减少人脸特写后重试；也可以切换到允许真人参考的中转通道。`;
+  }
+  if (/content review|unsafe content|protected IP|identifiable real person|sensitive content|内容审核|敏感内容/i.test(decoded)) {
+    return `${label} 上游内容审核拒绝：提示词或参考素材未通过审核。请调整素材/提示词后重试，或切换其他通道。`;
+  }
+  return fallback;
 }
 
 function assetDownloadError(payload: Record<string, unknown>) {
@@ -965,7 +993,7 @@ export async function generateVideoWithSeedance(params: SeedanceProviderParams):
               { endpoint, whyBlocked: "noPublicImageUrl", upstreamResponse: task }
             );
           }
-          createError = new ProviderError("PROVIDER_ERROR", `${label} 中转任务创建失败：${errorMessage(task)}`, preview(task), { endpoint });
+          createError = new ProviderError("PROVIDER_ERROR", `${label} 中转任务创建失败：${upstreamFriendlyErrorMessage(label, task)}`, preview(task), { endpoint });
           if (params.videoRequestConfig) break;
           continue;
         }
@@ -1010,8 +1038,9 @@ export async function generateVideoWithSeedance(params: SeedanceProviderParams):
       while (!remoteUrl) {
         const status = configuredStatus(task, params.videoRequestConfig);
         if (isFailedStatus(status)) {
-          await saveGenerationTask({ id, status: "failed", result: task, errorMessage: errorMessage(task) });
-          throw new ProviderError("VEO_OPERATION_FAILED", `${label} 中转任务失败：${errorMessage(task)}`, preview(task));
+          const friendlyMessage = upstreamFriendlyErrorMessage(label, task);
+          await saveGenerationTask({ id, status: "failed", result: task, errorMessage: friendlyMessage });
+          throw new ProviderError("VEO_OPERATION_FAILED", `${label} 中转任务失败：${friendlyMessage}`, preview(task));
         }
         if (isCompletedStatus(status)) completedSeenAt ??= Date.now();
         if (completedSeenAt && Date.now() - completedSeenAt > completedWithoutUrlGraceMs) break;
@@ -1047,7 +1076,7 @@ export async function generateVideoWithSeedance(params: SeedanceProviderParams):
             pollEndpoint: pollResult.endpoint
           }
         });
-        if (!pollResponse.ok) throw new ProviderError("PROVIDER_ERROR", `${label} 中转任务查询失败：${errorMessage(task)}`, preview(task));
+        if (!pollResponse.ok) throw new ProviderError("PROVIDER_ERROR", `${label} 中转任务查询失败：${upstreamFriendlyErrorMessage(label, task)}`, preview(task));
         remoteUrl = videoUrl(configuredResult(task, params.videoRequestConfig));
       }
       if (remoteUrl) await saveGenerationTask({ id, status: "success", progress: 100, result: task });
