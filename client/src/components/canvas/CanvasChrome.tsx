@@ -37,7 +37,7 @@ const templateItems = [
 ];
 
 function assetDragPayload(asset: Asset) {
-  return JSON.stringify({ assetId: asset.id, type: asset.type, filePath: asset.localPath, url: asset.url, publicUrl: asset.publicUrl, thumbnailUrl: asset.thumbnailUrl });
+  return JSON.stringify({ assetId: asset.id, type: asset.type, filePath: asset.localPath, url: asset.url, publicUrl: asset.publicUrl, thumbnailUrl: asset.thumbnailUrl, width: asset.width, height: asset.height, duration: asset.duration });
 }
 
 function historyKind(item: GenerationHistory) {
@@ -239,7 +239,7 @@ function AssetDrawer({ onClose }: { onClose: () => void }) {
                     {asset.type === "image" && src ? <img src={src} alt="" /> : asset.type === "video" && src ? <video src={src} muted /> : <FileAudio size={20} />}
                     <span className="drawer-resource-actions">
                       {(asset.type === "image" || asset.type === "video") && <button type="button" title="预览" onClick={() => setPreview(asset)}><Eye size={12} /></button>}
-                      <button type="button" title="加入画布" onClick={() => addAssetNode({ assetId: asset.id, type: asset.type, url: asset.url, filePath: asset.localPath, thumbnailUrl: asset.thumbnailUrl })}><Plus size={12} /></button>
+                      <button type="button" title="加入画布" onClick={() => addAssetNode({ assetId: asset.id, type: asset.type, url: asset.url, filePath: asset.localPath, thumbnailUrl: asset.thumbnailUrl, width: asset.width, height: asset.height, duration: asset.duration })}><Plus size={12} /></button>
                       <button type="button" title="下载" onClick={() => { const link = document.createElement("a"); link.href = absoluteUploadUrl(asset.downloadUrl || asset.url) || ""; link.download = asset.name; link.click(); }}><Download size={12} /></button>
                       <button type="button" title="删除" onClick={() => void deleteAsset(asset.id)}><Trash2 size={12} /></button>
                     </span>
@@ -300,7 +300,7 @@ function HistoryDrawer({ onClose }: { onClose: () => void }) {
               {src && kind === "image" ? <img src={src} alt="" /> : src && kind === "video" ? <video src={src} muted /> : <span>{kind === "image" ? <ImageIcon size={19} /> : <Video size={19} />}</span>}
               {item.outputUrl && <span className="drawer-resource-actions">
                 <button type="button" title="预览" onClick={() => setPreview(item)}><Eye size={12} /></button>
-                <button type="button" title="加入画布" onClick={() => addAssetNode({ assetId: item.id, type: kind === "image" ? "image" : "video", url: item.outputUrl })}><Plus size={12} /></button>
+                <button type="button" title="加入画布" onClick={() => addAssetNode({ assetId: item.id, type: kind === "image" ? "image" : "video", url: item.outputUrl, aspectRatio: item.aspectRatio, duration: item.duration })}><Plus size={12} /></button>
                 <button type="button" title="下载" onClick={() => download(item)}><Download size={12} /></button>
                 <button type="button" title="删除" onClick={() => void deleteHistory(item.id)}><Trash2 size={12} /></button>
               </span>}

@@ -43,7 +43,7 @@ type State = {
   edges: Edge[];
   selectedNodeId?: string;
   addNode: (type: WorkflowNodeType, position?: { x: number; y: number }) => void;
-  addAssetNode: (asset: { assetId: string; type: string; url?: string; filePath?: string; thumbnailUrl?: string }, position?: { x: number; y: number }) => void;
+  addAssetNode: (asset: { assetId: string; type: string; url?: string; filePath?: string; thumbnailUrl?: string; width?: number; height?: number; aspectRatio?: string; duration?: number }, position?: { x: number; y: number }) => void;
   addConnectedNode: (sourceId: string, type: WorkflowNodeType, position?: { x: number; y: number }) => void;
   updateNodeData: (id: string, data: Record<string, unknown>) => void;
   deleteNode: (id: string) => void;
@@ -94,6 +94,16 @@ function createFlowEdge(sourceId: string, targetId: string): Edge {
   return { id: createClientId("edge"), source: sourceId, target: targetId, sourceHandle: "out", type: "studioEdge", animated: false, style: edgeStyle() };
 }
 
+function ratioFromAsset(asset: { width?: number; height?: number; aspectRatio?: string }) {
+  if (asset.aspectRatio) return asset.aspectRatio;
+  if (!asset.width || !asset.height) return undefined;
+  const value = asset.width / asset.height;
+  if (Math.abs(value - 16 / 9) < 0.04) return "16:9";
+  if (Math.abs(value - 9 / 16) < 0.04) return "9:16";
+  if (Math.abs(value - 1) < 0.04) return "1:1";
+  return `${asset.width}:${asset.height}`;
+}
+
 export const useCanvasStore = create<State>((set, get) => ({
   nodes: [],
   edges: [],
@@ -109,11 +119,11 @@ export const useCanvasStore = create<State>((set, get) => ({
       const type: WorkflowNodeType = asset.type === "video" ? "video" : asset.type === "audio" ? "audio" : asset.type === "text" || asset.type === "script" ? "text" : "image";
       const data =
         type === "image"
-          ? { ...(defaults.image as Record<string, unknown>), title: "图片素材", assetId: asset.assetId, url: asset.url, localPath: asset.filePath, thumbnailUrl: asset.thumbnailUrl }
+          ? { ...(defaults.image as Record<string, unknown>), title: "图片素材", assetId: asset.assetId, url: asset.url, localPath: asset.filePath, thumbnailUrl: asset.thumbnailUrl, width: asset.width, height: asset.height, aspectRatio: ratioFromAsset(asset) }
           : type === "audio"
             ? { ...(defaults.audio as Record<string, unknown>), title: "音频素材", assetId: asset.assetId, url: asset.url }
             : type === "video"
-              ? { ...(defaults.video as Record<string, unknown>), title: "视频素材", assetId: asset.assetId, outputAssetId: asset.assetId, outputUrl: asset.url, status: "success" }
+              ? { ...(defaults.video as Record<string, unknown>), title: "视频素材", assetId: asset.assetId, outputAssetId: asset.assetId, outputUrl: asset.url, aspectRatio: ratioFromAsset(asset), duration: asset.duration, status: "success" }
               : { ...(defaults.text as Record<string, unknown>), title: "文本素材", content: "" };
       return {
         nodes: [

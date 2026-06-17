@@ -316,6 +316,10 @@ function ratioFromDimensions(width?: number, height?: number) {
   return `${width}:${height}`;
 }
 
+function displayAspectRatio(nodeRatio?: string, selectedRatio?: string) {
+  return nodeRatio || selectedRatio || "16:9";
+}
+
 function outputInfo(data?: Record<string, unknown>, requestedResolution?: string) {
   if (!data) return undefined;
   const transformedOutput = nestedRecord(data.transformedOutput);
@@ -528,6 +532,7 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
   const selectedDuration = parameterValue(props.data.duration, availableDurations);
   const outputUrl = absoluteUploadUrl(props.data.outputUrl);
   const outputIsVideo = isVideoOutput(props.data.outputUrl);
+  const displayRatio = displayAspectRatio(props.data.aspectRatio, selectedAspectRatio);
   const selectedChannelHost = channelHost(selectedModel?.apiBaseUrl);
   const actualOutputInfo = outputInfo(props.data.payloadSummary, props.data.resolution);
   const veoSafetyDetails = (props.data.payloadSummary ?? {}) as Record<string, unknown>;
@@ -717,7 +722,17 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
   const preview = models.length === 0 ? (
     <div className="creation-preview-empty"><Film size={29} /><span>请先配置视频模型</span></div>
   ) : (
-    <MediaPreview type="video" title={props.data.title} outputUrl={outputIsVideo ? props.data.outputUrl : undefined} aspectRatio={aspectRatioCss(selectedAspectRatio)} className="creation-media-preview">
+    <MediaPreview
+      type="video"
+      title={props.data.title}
+      outputUrl={outputIsVideo ? props.data.outputUrl : undefined}
+      aspectRatio={aspectRatioCss(displayRatio)}
+      className="creation-media-preview"
+      onVideoMetadata={({ width, height }) => {
+        const actualRatio = ratioFromDimensions(width, height);
+        if (actualRatio && actualRatio !== props.data.aspectRatio) update(props.id, { aspectRatio: actualRatio });
+      }}
+    >
       {props.data.status === "generating" ? <div className="creation-preview-empty"><Loader2 className="animate-spin" size={25} /><span>正在生成视频</span></div> : props.data.status === "error" ? <div className="creation-preview-empty is-error"><AlertCircle size={25} /><span>生成失败</span></div> : <div className="creation-preview-empty"><Play size={24} fill="currentColor" /><span>视频预览</span></div>}
     </MediaPreview>
   );
@@ -839,7 +854,7 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
     </div>
   );
 
-  return <CreationNodeFrame id={props.id} type={props.type} selected={props.selected} title={props.data.title || "Video"} ratio={props.data.aspectRatio || "16:9"} status={props.data.status} preview={preview} toolbar={<MediaPreviewActions kind="video" url={outputIsVideo ? props.data.outputUrl : undefined} assetId={props.data.outputAssetId} title={props.data.title} nodeId={props.id} onSaved={(assetId) => update(props.id, { outputAssetId: assetId })} />} dock={dock} />;
+  return <CreationNodeFrame id={props.id} type={props.type} selected={props.selected} title={props.data.title || "Video"} ratio={displayRatio} status={props.data.status} preview={preview} toolbar={<MediaPreviewActions kind="video" url={outputIsVideo ? props.data.outputUrl : undefined} assetId={props.data.outputAssetId} title={props.data.title} nodeId={props.id} onSaved={(assetId) => update(props.id, { outputAssetId: assetId })} />} dock={dock} />;
 }
 
 export const VideoNode = memo(VideoNodeComponent);

@@ -13,6 +13,7 @@ type MediaPreviewProps = {
   aspectRatio?: string;
   className?: string;
   showInlineActions?: boolean;
+  onVideoMetadata?: (metadata: { width: number; height: number; duration?: number }) => void;
   children?: React.ReactNode;
   meta?: Array<{ label: string; value?: string | number | null }>;
 };
@@ -22,7 +23,7 @@ function ratioToCss(ratio?: string) {
   return ratio.replace(":", " / ");
 }
 
-export function MediaPreview({ type, title, previewUrl, originalUrl, outputUrl, thumbnailUrl, aspectRatio, className = "", showInlineActions = true, children, meta }: MediaPreviewProps) {
+export function MediaPreview({ type, title, previewUrl, originalUrl, outputUrl, thumbnailUrl, aspectRatio, className = "", showInlineActions = true, onVideoMetadata, children, meta }: MediaPreviewProps) {
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const allowNodeDrag = className.includes("creation-media-preview");
   const previewSrc = useMemo(() => absoluteUploadUrl(previewUrl || outputUrl || originalUrl || thumbnailUrl), [originalUrl, outputUrl, previewUrl, thumbnailUrl]);
@@ -69,7 +70,17 @@ export function MediaPreview({ type, title, previewUrl, originalUrl, outputUrl, 
             type === "image" ? (
               <img src={previewSrc} alt={title || "图片预览"} draggable={false} />
             ) : (
-              <video src={previewSrc} controls draggable={false} />
+              <video
+                src={previewSrc}
+                controls
+                draggable={false}
+                onLoadedMetadata={(event) => {
+                  const video = event.currentTarget;
+                  if (video.videoWidth && video.videoHeight) {
+                    onVideoMetadata?.({ width: video.videoWidth, height: video.videoHeight, duration: video.duration });
+                  }
+                }}
+              />
             )
           ) : children}
         </div>

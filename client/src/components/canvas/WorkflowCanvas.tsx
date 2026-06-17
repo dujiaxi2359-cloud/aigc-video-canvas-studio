@@ -314,7 +314,7 @@ export function WorkflowCanvas({ showGrid = true, onToggleGrid = () => undefined
         if (!raw) return;
         event.preventDefault();
         try {
-          const asset = JSON.parse(raw) as { assetId: string; type: string; url?: string; filePath?: string; thumbnailUrl?: string };
+          const asset = JSON.parse(raw) as { assetId: string; type: string; url?: string; filePath?: string; thumbnailUrl?: string; width?: number; height?: number; duration?: number };
           addAssetNode(asset, screenToFlow({ x: event.clientX, y: event.clientY }));
         } catch {
           // Ignore malformed drag payloads from outside the app.
