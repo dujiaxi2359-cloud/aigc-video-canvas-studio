@@ -1,6 +1,8 @@
 import { Router } from "express";
+import fs from "node:fs";
 import path from "node:path";
-import { createAsset, deleteCosAssetFile, getAsset } from "../services/asset.service.js";
+import multer from "multer";
+import { createAsset, createAssetFromUpload, deleteCosAssetFile, getAsset } from "../services/asset.service.js";
 import {
   deleteCosFile,
   getCosConfig,
@@ -14,6 +16,11 @@ import { contentTypeForFilename, sanitizeFilename } from "../utils/exportFiles.j
 import { requireRequestContext } from "../services/requestContext.js";
 
 export const storageRouter = Router();
+
+const uploadRoot = process.env.UPLOAD_DIR ?? "./uploads";
+const tempDir = path.resolve(process.cwd(), uploadRoot, "tmp");
+fs.mkdirSync(tempDir, { recursive: true });
+const upload = multer({ dest: tempDir });
 
 function assertWorkspaceKey(fileKey: string) {
   const key = normalizeCosKey(fileKey);
@@ -82,6 +89,23 @@ storageRouter.post("/confirm-upload", async (req, res) => {
       errorCode: code,
       errorMessage: code === "COS_FILE_FORBIDDEN" ? "当前工作空间无权确认这个 COS 文件。" : "确认 COS 上传失败。"
     });
+  }
+});
+
+storageRouter.post("/upload", upload.single("file"), async (req, res, next) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ status: "error", errorCode: "UPLOAD_FAILED", errorMessage: "没有选择上传文件。" });
+    }
+    const asset = await createAssetFromUpload(req.file, {
+      folderId: req.body?.folderId || null,
+      name: req.body?.name,
+      projectId: req.body?.projectId,
+      storageFileType: req.body?.fileType
+    });
+    res.status(201).json(asset);
+  } catch (error) {
+    next(error);
   }
 });
 

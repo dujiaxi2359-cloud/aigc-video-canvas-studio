@@ -14,6 +14,7 @@ import {
   deleteCosFile,
   isCosConfigured,
   isCosLocalPath,
+  normalizeStorageFileType,
   storageAccessPath,
   uploadLocalFileToCos
 } from "./storage/cosStorage.service.js";
@@ -109,7 +110,7 @@ function toAsset(row: AssetRow): Asset {
     height: row.height,
     duration: row.duration,
     fps: row.fps,
-    thumbnailUrl: row.thumbnail_path || (row.type === "image" ? cosUrl : undefined),
+    thumbnailUrl: row.type === "image" && cosUrl ? cosUrl : row.thumbnail_path,
     storageProvider: row.storage_provider,
     storageKey,
     storageBucket: row.storage_bucket,
@@ -191,7 +192,8 @@ async function copyIntoAssetStorage(input: { sourcePath: string; type: Asset["ty
   return { fileName, localPath: targetPath, url: publicAssetUrl(input.type, fileName) };
 }
 
-function storageFileTypeForAsset(type: Asset["type"], source?: Asset["source"]): StorageFileType {
+function storageFileTypeForAsset(type: Asset["type"], source?: Asset["source"], preferred?: string): StorageFileType {
+  if (preferred) return normalizeStorageFileType(preferred);
   if (source === "generated" && type === "image") return "generated_image";
   if (source === "generated" && type === "video") return "generated_video";
   if (type === "video") return "video";
@@ -199,7 +201,7 @@ function storageFileTypeForAsset(type: Asset["type"], source?: Asset["source"]):
   return "task_temp";
 }
 
-export async function createAssetFromUpload(file: Express.Multer.File, input: { folderId?: string | null; name?: string; projectId?: string } = {}) {
+export async function createAssetFromUpload(file: Express.Multer.File, input: { folderId?: string | null; name?: string; projectId?: string; storageFileType?: string } = {}) {
   const type = assetTypeFromMime(file.mimetype) as Asset["type"];
   const id = createId("asset");
   const stored = await copyIntoAssetStorage({ sourcePath: file.path, type, assetId: id, originalName: file.originalname });
@@ -216,7 +218,8 @@ export async function createAssetFromUpload(file: Express.Multer.File, input: { 
     url: stored.url,
     mimeType: file.mimetype,
     size: file.size,
-    projectId: input.projectId
+    projectId: input.projectId,
+    storageFileType: input.storageFileType
   });
 }
 
@@ -246,11 +249,12 @@ export async function createAsset(input: CreateAssetInput & { id?: string }) {
   if (type === "image" && localPath && fs.existsSync(localPath)) {
     thumbnailUrl = await createImageThumbnail(localPath, id).catch(() => input.thumbnailUrl);
   }
+  const targetStorageFileType = storageFileTypeForAsset(type, input.source, input.storageFileType);
   if (!storageKey && isCosConfigured() && localFileExists && ["uploaded", "generated", "imported"].includes(input.source ?? "uploaded")) {
     const stored = await uploadLocalFileToCos({
       workspaceId: workspace.id,
       localPath,
-      fileType: storageFileTypeForAsset(type, input.source),
+      fileType: targetStorageFileType,
       originalName: input.originalName || fileName,
       mimeType: input.mimeType ?? contentTypeForFilename(fileName)
     });
@@ -258,7 +262,7 @@ export async function createAsset(input: CreateAssetInput & { id?: string }) {
     storageKey = stored.fileKey;
     storageBucket = stored.bucket;
     storageRegion = stored.region;
-    storageFileType = storageFileTypeForAsset(type, input.source);
+    storageFileType = targetStorageFileType;
     localPath = stored.localPath;
     url = stored.url;
     downloadUrl = stored.downloadUrl;
