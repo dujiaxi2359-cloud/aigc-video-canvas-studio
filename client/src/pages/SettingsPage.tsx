@@ -9,6 +9,10 @@ import { isLocalAdminHost } from "../utils/localAdmin";
 export function SettingsPage({ onNavigate }: { onNavigate: (page: Page) => void }) {
   const user = useAuthStore((state) => state.user);
   const isAdmin = isLocalAdminHost() || Boolean(user && ["admin", "super_admin"].includes(user.role));
+  function returnHome() {
+    window.sessionStorage.setItem("moon.home.skipLaunch", "1");
+    onNavigate("home");
+  }
 
   return (
     <div className="settings-workspace h-full overflow-auto">
@@ -16,7 +20,7 @@ export function SettingsPage({ onNavigate }: { onNavigate: (page: Page) => void 
         <div className="mx-auto flex max-w-[1280px] items-center gap-3 px-4 py-3 md:px-6">
             <button
               type="button"
-              onClick={() => onNavigate("home")}
+              onClick={returnHome}
               className="settings-icon-button"
               aria-label="返回首页"
             >

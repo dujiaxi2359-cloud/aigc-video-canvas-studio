@@ -14,7 +14,12 @@ export function BrandGatewayPage({ onNavigate }: { onNavigate: (page: Page, proj
   const promptSectionRef = useRef<HTMLElement>(null);
   const heroCopyRef = useRef<HTMLDivElement>(null);
   const spotlightFrameRef = useRef(0);
-  const [launchComplete, setLaunchComplete] = useState(false);
+  const [launchComplete, setLaunchComplete] = useState(() => {
+    if (typeof window === "undefined") return false;
+    const shouldSkipLaunch = window.sessionStorage.getItem("moon.home.skipLaunch") === "1";
+    if (shouldSkipLaunch) window.sessionStorage.removeItem("moon.home.skipLaunch");
+    return shouldSkipLaunch;
+  });
 
   useEffect(() => {
     const focusPrompt = () => {
@@ -64,7 +69,7 @@ export function BrandGatewayPage({ onNavigate }: { onNavigate: (page: Page, proj
       transition={{ duration: 0.28 }}
       onMouseMove={updateSpotlight}
     >
-      <HomeLaunchIntro onFinish={() => setLaunchComplete(true)} />
+      {!launchComplete ? <HomeLaunchIntro onFinish={() => setLaunchComplete(true)} /> : null}
       {launchComplete ? <FerrofluidBackground className="home-page-ferrofluid" /> : null}
       <HomeTopNav page="home" onNavigate={onNavigate} />
 
