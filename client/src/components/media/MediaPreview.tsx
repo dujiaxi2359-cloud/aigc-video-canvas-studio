@@ -26,7 +26,12 @@ function ratioToCss(ratio?: string) {
 export function MediaPreview({ type, title, previewUrl, originalUrl, outputUrl, thumbnailUrl, aspectRatio, className = "", showInlineActions = true, onVideoMetadata, children, meta }: MediaPreviewProps) {
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const allowNodeDrag = className.includes("creation-media-preview");
-  const previewSrc = useMemo(() => absoluteUploadUrl(previewUrl || outputUrl || originalUrl || thumbnailUrl), [originalUrl, outputUrl, previewUrl, thumbnailUrl]);
+  const previewSrc = useMemo(() => {
+    const selected = type === "image"
+      ? thumbnailUrl || previewUrl || outputUrl || originalUrl
+      : previewUrl || outputUrl || originalUrl || thumbnailUrl;
+    return absoluteUploadUrl(selected);
+  }, [originalUrl, outputUrl, previewUrl, thumbnailUrl, type]);
   const highResSrc = useMemo(() => {
     const selected = type === "image"
       ? originalUrl || outputUrl || previewUrl || thumbnailUrl

@@ -28,7 +28,7 @@ export function ImageNode(props: NodeProps<ImageNodeData>) {
   const update = useCanvasStore((state) => state.updateNodeData);
   const upload = useAssetStore((state) => state.uploadAsset);
   const [editorOpen, setEditorOpen] = useState(false);
-  const previewUrl = props.data.url || props.data.thumbnailUrl;
+  const previewUrl = props.data.thumbnailUrl || props.data.url;
   const ratio = useMemo(() => ratioFromDimensions(props.data.width, props.data.height) || props.data.aspectRatio || "9:16", [props.data.aspectRatio, props.data.height, props.data.width]);
 
   useEffect(() => {
@@ -49,7 +49,7 @@ export function ImageNode(props: NodeProps<ImageNodeData>) {
     if (!file) return;
     try {
       const asset = await upload(file);
-      update(props.id, { assetId: asset.id, url: asset.url, localPath: asset.localPath, width: undefined, height: undefined, aspectRatio: undefined });
+      update(props.id, { assetId: asset.id, url: asset.url, localPath: asset.localPath, thumbnailUrl: asset.thumbnailUrl, width: undefined, height: undefined, aspectRatio: undefined });
     } catch (error) {
       window.alert(error instanceof Error ? error.message : "上传图片素材失败，请检查文件或网络。");
     }
@@ -76,7 +76,7 @@ export function ImageNode(props: NodeProps<ImageNodeData>) {
         />
       }
       preview={
-        props.data.url ? <MediaPreview type="image" title={props.data.title} previewUrl={previewUrl} originalUrl={props.data.url} aspectRatio={ratio} className="creation-media-preview" showInlineActions={false} /> :
+        props.data.url ? <MediaPreview type="image" title={props.data.title} previewUrl={previewUrl} originalUrl={props.data.url} thumbnailUrl={props.data.thumbnailUrl} aspectRatio={ratio} className="creation-media-preview" showInlineActions={false} /> :
         <label className="creation-upload-preview">
           <ImagePlus size={30} /><span>图片素材</span><small>点击或拖入上传</small>
           <input hidden type="file" accept="image/*" onChange={(event) => onFile(event.target.files?.[0])} />

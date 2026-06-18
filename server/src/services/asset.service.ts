@@ -110,7 +110,7 @@ function toAsset(row: AssetRow): Asset {
     height: row.height,
     duration: row.duration,
     fps: row.fps,
-    thumbnailUrl: row.type === "image" && cosUrl ? cosUrl : row.thumbnail_path,
+    thumbnailUrl: row.thumbnail_path || (row.type === "image" ? cosUrl : undefined),
     storageProvider: row.storage_provider,
     storageKey,
     storageBucket: row.storage_bucket,
@@ -143,7 +143,7 @@ async function hydrateCosAsset(asset: Asset): Promise<Asset> {
       ...asset,
       url,
       downloadUrl,
-      thumbnailUrl: asset.type === "image" && asset.thumbnailUrl === asset.url ? url : asset.thumbnailUrl
+      thumbnailUrl: asset.thumbnailUrl || (asset.type === "image" ? url : undefined)
     };
   } catch {
     return asset;
