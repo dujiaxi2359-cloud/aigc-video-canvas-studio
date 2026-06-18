@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   Bell,
@@ -41,6 +41,8 @@ function accountInitial(value?: string) {
 }
 
 export function HomeTopNav({ page, onNavigate }: { page: Page; onNavigate: (page: Page, projectId?: string) => void }) {
+  const accountShellRef = useRef<HTMLDivElement>(null);
+  const notificationRef = useRef<HTMLDivElement>(null);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
@@ -55,6 +57,37 @@ export function HomeTopNav({ page, onNavigate }: { page: Page; onNavigate: (page
   const avatarInitial = accountInitial(auth.user?.email || displayName);
   const planLabel = activeWorkspace?.planId?.trim() ? activeWorkspace.planId.toUpperCase() : "FREE";
   const credits = activeWorkspace?.credits ?? 0;
+
+  useEffect(() => {
+    if (!accountOpen && !notificationsOpen) return;
+
+    function closeFloatingMenus(event: PointerEvent) {
+      const target = event.target as Node | null;
+      if (!target) return;
+      const insideAccount = accountShellRef.current?.contains(target);
+      const insideNotification = notificationRef.current?.contains(target);
+      if (insideAccount || insideNotification) return;
+      setAccountOpen(false);
+      setHelpOpen(false);
+      setLanguageOpen(false);
+      setNotificationsOpen(false);
+    }
+
+    function closeWithEscape(event: KeyboardEvent) {
+      if (event.key !== "Escape") return;
+      setAccountOpen(false);
+      setHelpOpen(false);
+      setLanguageOpen(false);
+      setNotificationsOpen(false);
+    }
+
+    document.addEventListener("pointerdown", closeFloatingMenus, true);
+    document.addEventListener("keydown", closeWithEscape);
+    return () => {
+      document.removeEventListener("pointerdown", closeFloatingMenus, true);
+      document.removeEventListener("keydown", closeWithEscape);
+    };
+  }, [accountOpen, notificationsOpen]);
 
   function handleNav(target: Page) {
     if (target === "photos") {
@@ -87,7 +120,7 @@ export function HomeTopNav({ page, onNavigate }: { page: Page; onNavigate: (page
         {auth.user && (
           <>
             <button type="button" title={t("account.helpIconTitle")} onClick={() => onNavigate("settings")} className="studio-nav-icon"><Headphones size={16} /></button>
-            <div className="relative">
+            <div ref={notificationRef} className="relative">
               <button
                 type="button"
                 title={t("account.notificationTitle")}
@@ -107,7 +140,7 @@ export function HomeTopNav({ page, onNavigate }: { page: Page; onNavigate: (page
                 </div>
               )}
             </div>
-            <div className="studio-account-shell">
+            <div ref={accountShellRef} className="studio-account-shell">
               <motion.button
                 type="button"
                 onClick={() => {
