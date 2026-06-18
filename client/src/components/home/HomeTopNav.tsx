@@ -212,8 +212,11 @@ export function HomeTopNav({ page, onNavigate }: { page: Page; onNavigate: (page
                             </button>
                           </div>
                           <div className="studio-account-qr-card">
+                            <div className="studio-account-qr-brand">
+                              <img src="/account-assets/moon-tv-brand-strip.png" alt="Moon Tv" loading="lazy" decoding="async" />
+                            </div>
                             <img src="/account-assets/wechat-support-qr.png" alt="Moon Tv 微信联系二维码" loading="lazy" decoding="async" />
-                            <div>
+                            <div className="studio-account-qr-copy">
                               <strong>微信联系 Moon | Tv</strong>
                               <p>扫码添加微信，反馈账号、额度、生成或素材加载问题。</p>
                             </div>

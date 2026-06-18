@@ -2244,32 +2244,53 @@ select {
 
 .studio-account-qr-card {
   margin-top: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 15px;
-  background: rgba(255, 255, 255, 0.052);
-  padding: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 18px;
+  background: #f7f4ee;
+  padding: 9px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72);
 }
 
-.studio-account-qr-card img {
+.studio-account-qr-brand {
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  margin-bottom: 7px;
+  border-radius: 13px;
+  background: #fff;
+  padding: 7px 8px;
+}
+
+.studio-account-qr-brand img {
+  display: block;
+  width: 100%;
+  max-height: 42px;
+  object-fit: contain;
+}
+
+.studio-account-qr-card > img {
   display: block;
   width: 100%;
   border-radius: 12px;
   background: #fff;
+  box-shadow: 0 1px 0 rgba(15, 23, 42, 0.06);
 }
 
-.studio-account-qr-card strong {
+.studio-account-qr-copy strong {
   display: block;
-  margin-top: 9px;
-  color: rgba(255, 255, 255, 0.9);
+  margin-top: 8px;
+  color: rgba(15, 23, 42, 0.82);
   font-size: 12px;
-  font-weight: 760;
+  font-weight: 800;
+  text-align: center;
 }
 
-.studio-account-qr-card p {
-  margin-top: 4px;
-  color: rgba(255, 255, 255, 0.48);
+.studio-account-qr-copy p {
+  margin-top: 3px;
+  color: rgba(15, 23, 42, 0.48);
   font-size: 11px;
   line-height: 1.55;
+  text-align: center;
 }
 
 @media (max-width: 1180px) {
