@@ -36,6 +36,7 @@ export type ProviderErrorCode =
   | "VEO_VIDEO_FILE_EMPTY"
   | "MISSING_VIDEO_INPUT"
   | "SEEDANCE_ASSET_UPLOAD_FAILED"
+  | "UPSTREAM_QUOTA_EXHAUSTED"
   | "PROVIDER_ERROR";
 
 export class ProviderError extends Error {

@@ -28,7 +28,7 @@ export function SettingsPage({ onNavigate }: { onNavigate: (page: Page) => void 
               </div>
               <h1 className="mt-3 text-[28px] font-semibold tracking-[-0.03em] text-white">设置中心</h1>
               <p className="mt-2 max-w-[560px] text-[13px] leading-6 text-white/46">
-                管理模型 API、充值与 Agent 配置。
+                管理模型 API 与 Agent 配置。
               </p>
             </div>
           </div>

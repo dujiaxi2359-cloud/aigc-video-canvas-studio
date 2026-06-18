@@ -97,9 +97,37 @@ function forceMockGeneration() {
   return process.env.ALLOW_MOCK_GENERATION === "true" || process.env.FORCE_MOCK_GENERATION === "true";
 }
 
+function safeStringify(value: unknown) {
+  if (!value) return "";
+  if (typeof value === "string") return value;
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
+}
+
+function upstreamQuotaMessage(providerId?: string) {
+  const channel = providerId ? `当前 ${providerId} 线路` : "当前上游线路";
+  return `${channel}额度已耗尽或达到并发上限，请切换到其他可用通道，或到对应中转/官方后台补充额度后再试。`;
+}
+
+function isUpstreamQuotaError(text: string) {
+  return /PUBLIC_ERROR_USER_QUOTA_REACHED|USER_QUOTA_REACHED|RESOURCE_EXHAUSTED|quota|credit|balance|insufficient|capacity|at capacity|exhausted|余额不足|额度不足|额度耗尽|并发上限|资源耗尽/i.test(text);
+}
+
 function providerErrorMeta(providerId: string | undefined, error: unknown) {
   console.error("[provider adapter error]", providerId, error);
   if (isProviderError(error)) {
+    const text = `${error.message}\n${error.debugMessage ?? ""}\n${safeStringify(error.details)}`;
+    if (isUpstreamQuotaError(text)) {
+      return {
+        errorCode: "UPSTREAM_QUOTA_EXHAUSTED",
+        errorMessage: upstreamQuotaMessage(providerId),
+        debugMessage: text,
+        payloadSummary: error.details
+      };
+    }
     return {
       errorCode: error.errorCode,
       errorMessage: error.message,
@@ -108,6 +136,13 @@ function providerErrorMeta(providerId: string | undefined, error: unknown) {
     };
   }
   const message = error instanceof Error ? error.message : "生成失败";
+  if (isUpstreamQuotaError(message)) {
+    return {
+      errorCode: "UPSTREAM_QUOTA_EXHAUSTED",
+      errorMessage: upstreamQuotaMessage(providerId),
+      debugMessage: message
+    };
+  }
   if (/model not available for your tier|可用渠道不存在/i.test(message)) {
     return {
       errorCode: "MODEL_ACCESS_DENIED",

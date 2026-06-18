@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Check, CreditCard, Image, KeyRound, Loader2, MessageSquare, Plus, RefreshCw, Trash2, Video, WalletCards } from "lucide-react";
+import { Check, Image, KeyRound, Loader2, MessageSquare, Plus, RefreshCw, Trash2, Video } from "lucide-react";
 import { Button } from "../common/Button";
 import { Input } from "../common/Input";
 import { modelConfigApi } from "../../services/modelConfigApi";
@@ -7,7 +7,6 @@ import { useModelConfigStore } from "../../store/modelConfigStore";
 import { fallbackModelCatalog } from "../../data/modelCatalog";
 import type { ModelCapabilities, ModelCatalogItem, ModelConfig, ModelType } from "../../types/model";
 
-type ApiMode = "platform" | "custom";
 type ModelCategory = "image" | "video" | "text";
 const lastApiRouteStorageKey = "aigcnong-last-custom-api-route";
 
@@ -483,7 +482,6 @@ function savedApiRoutes(models: ModelConfig[]) {
 
 export function ModelConfigCenter() {
   const { modelConfigs, fetchModelConfigs, saveModelConfigsBulk, deleteModelConfigs } = useModelConfigStore();
-  const [mode, setMode] = useState<ApiMode>("custom");
   const [apiBaseUrl, setApiBaseUrl] = useState("");
   const [apiKey, setApiKey] = useState("");
   const [manualModel, setManualModel] = useState("");
@@ -639,16 +637,12 @@ export function ModelConfigCenter() {
           <aside className="border-r border-white/[0.08] bg-black/25 p-5">
             <div className="text-[14px] font-semibold tracking-[0.04em] text-white">Moon｜Tv</div>
             <div className="mt-8 space-y-2">
-              <button type="button" className="flex h-11 w-full items-center gap-3 rounded-[12px] px-3 text-left text-[13px] text-white/45">
-                <WalletCards size={16} /> 充值中心
-              </button>
               <button type="button" className="flex h-11 w-full items-center gap-3 rounded-[12px] border border-sky-200/15 bg-sky-300/[0.10] px-3 text-left text-[13px] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
                 <KeyRound size={16} /> API 接入
               </button>
             </div>
             <div className="mt-auto pt-[360px]">
               <button type="button" className="h-10 w-full rounded-full border border-white/[0.08] bg-white/[0.03] text-[12px] text-white/60">联系客服</button>
-              <p className="mt-3 text-[11px] leading-5 text-white/25">支付接口已预留，默认可使用平台 API 充值付费。</p>
             </div>
           </aside>
 
@@ -663,30 +657,7 @@ export function ModelConfigCenter() {
               </div>
             </div>
 
-            <div className="mt-6 rounded-[18px] border border-white/[0.08] bg-white/[0.025] p-3">
-              <div className="grid grid-cols-2 rounded-[14px] border border-white/[0.08] bg-black/20 p-1">
-                <button type="button" onClick={() => setMode("custom")} className={`flex h-12 items-center justify-center gap-2 rounded-[12px] text-[13px] font-semibold transition ${mode === "custom" ? "bg-gradient-to-r from-slate-100 via-sky-100 to-cyan-100 text-slate-950 shadow-[0_14px_42px_rgba(125,211,252,0.16)]" : "text-white/45"}`}>
-                  <KeyRound size={16} /> 使用 API 接口
-                </button>
-                <button type="button" onClick={() => setMode("platform")} className={`flex h-12 items-center justify-center gap-2 rounded-[12px] text-[13px] font-semibold transition ${mode === "platform" ? "bg-white text-black" : "text-white/45"}`}>
-                  <CreditCard size={16} /> 使用平台余额
-                </button>
-              </div>
-            </div>
-
-            {mode === "platform" ? (
-              <div className="mt-4 rounded-[18px] border border-white/[0.08] bg-[#151519] p-6">
-                <div className="flex items-center gap-3">
-                  <div className="grid h-11 w-11 place-items-center rounded-[14px] bg-cyan-300/10 text-cyan-100"><CreditCard size={20} /></div>
-                  <div>
-                    <div className="text-[15px] font-semibold text-white">平台 API 与充值付费</div>
-                    <p className="mt-1 text-[12px] text-white/40">接口位置已预留，后续接支付后客户无需自带 Key。</p>
-                  </div>
-                </div>
-                <Button className="mt-5 h-10 rounded-full" variant="primary" disabled>充值入口待接入</Button>
-              </div>
-            ) : (
-              <div className="mt-4 rounded-[18px] border border-white/[0.08] bg-[#151519]">
+            <div className="mt-6 rounded-[18px] border border-white/[0.08] bg-[#151519]">
                 <div className="flex items-center justify-between border-b border-white/[0.08] px-5 py-4">
                   <div>
                     <div className="text-[15px] font-semibold text-white">自定义 API 线路</div>
@@ -822,8 +793,7 @@ export function ModelConfigCenter() {
                     </div>
                   </div>
                 </div>
-              </div>
-            )}
+            </div>
           </div>
         </div>
       </section>

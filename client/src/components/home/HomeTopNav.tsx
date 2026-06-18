@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Bell, Headphones, LogIn, LogOut, Settings, UserRound, WalletCards, Zap } from "lucide-react";
+import { Bell, Headphones, LogIn, LogOut, Settings, UserRound, WalletCards } from "lucide-react";
 import type { Page } from "../../App";
 import { useAuthStore } from "../../store/authStore";
 import { BrandIdentity } from "../common/BrandIdentity";
@@ -17,8 +17,6 @@ export function HomeTopNav({ page, onNavigate }: { page: Page; onNavigate: (page
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
   const auth = useAuthStore();
-  const activeWorkspace = auth.workspaces.find((workspace) => workspace.id === auth.activeWorkspaceId);
-  const sparkBalance = activeWorkspace?.credits ?? 0;
 
   function handleNav(target: Page) {
     if (target === "photos") {
@@ -46,10 +44,6 @@ export function HomeTopNav({ page, onNavigate }: { page: Page; onNavigate: (page
         )}
         {auth.user && (
           <>
-        <button type="button" className="studio-spark-pill" onClick={() => onNavigate("settings")} title="充值中心">
-          <Zap size={15} /> {sparkBalance} Spark
-          <span />
-        </button>
         <button type="button" title="帮助中心" onClick={() => onNavigate("settings")} className="studio-nav-icon"><Headphones size={16} /></button>
         <div className="relative">
           <button type="button" title="通知" className={`studio-nav-icon ${notificationsOpen ? "is-active" : ""}`} onClick={() => setNotificationsOpen((value) => !value)}><Bell size={16} /></button>
@@ -71,7 +65,6 @@ export function HomeTopNav({ page, onNavigate }: { page: Page; onNavigate: (page
             <strong>{auth.user?.email}</strong>
           </div>
           <div className="studio-account-divider" />
-          <button type="button" onClick={() => { setAccountOpen(false); onNavigate("settings"); }}><Zap size={14}/> 充值</button>
           <button type="button" onClick={() => { setAccountOpen(false); onNavigate("settings"); }}><Settings size={14}/> 用户设置</button>
           <div className="studio-account-divider" />
           {auth.workspaces.map((workspace)=><button key={workspace.id} type="button" className={workspace.id===auth.activeWorkspaceId?"is-active":""} onClick={()=>{auth.selectWorkspace(workspace.id);setAccountOpen(false);window.location.reload();}}><WalletCards size={14}/><span className="min-w-0 flex-1 truncate text-left">{workspace.name}</span><small>{workspace.type === "team" ? "团队" : "个人"}</small></button>)}

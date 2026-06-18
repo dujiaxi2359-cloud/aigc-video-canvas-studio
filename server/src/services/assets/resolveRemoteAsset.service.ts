@@ -5,6 +5,15 @@ import { readGeneratedFileMetadata } from "../../utils/mediaMetadata.js";
 import { getProviderAssetStrategy, type AssetInputStrategy } from "./providerAssetStrategy.js";
 import { uploadLocalFileToOss } from "./ossUpload.service.js";
 import { signedAssetUrl } from "../../utils/assetAccessToken.js";
+import { requireRequestContext } from "../requestContext.js";
+import {
+  cachedSignedCosUrl,
+  isCosConfigured,
+  isCosLocalPath,
+  normalizeCosKey,
+  uploadLocalFileToCos,
+  type StorageFileType
+} from "../storage/cosStorage.service.js";
 
 export type AssetLike = {
   id?: string;
@@ -15,6 +24,11 @@ export type AssetLike = {
   filename?: string;
   originalName?: string;
   projectId?: string;
+  storageKey?: string;
+  storageProvider?: string;
+  storageBucket?: string;
+  storageRegion?: string;
+  storageFileType?: string;
 };
 
 export type ResolvedRemoteAsset = {
@@ -28,7 +42,7 @@ export type ResolvedRemoteAsset = {
   height?: number;
   aspectRatio?: string;
   fileSize?: number;
-  source?: "publicUrl" | "remoteUrl" | "localPath" | "backendPublicUrl" | "oss";
+  source?: "publicUrl" | "remoteUrl" | "localPath" | "backendPublicUrl" | "oss" | "cos";
   wasCompressed?: boolean;
 };
 
@@ -181,6 +195,76 @@ function assetTypeForMime(mimeType: string) {
   return "image";
 }
 
+function storageFileTypeForMime(mimeType: string): StorageFileType {
+  if (mimeType.startsWith("video/")) return "reference";
+  if (mimeType.startsWith("audio/")) return "task_temp";
+  if (mimeType.startsWith("image/")) return "reference";
+  return "task_temp";
+}
+
+function cosKeyFromSignedPath(url?: string) {
+  if (!url) return undefined;
+  try {
+    const parsed = new URL(url, "http://local.invalid");
+    const key = parsed.searchParams.get("key") || parsed.searchParams.get("fileKey");
+    return key ? normalizeCosKey(key) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function cosKeyFromLocalPath(localPath?: string) {
+  if (!isCosLocalPath(localPath)) return undefined;
+  const withoutScheme = String(localPath).replace(/^cos:\/\//i, "");
+  const slashIndex = withoutScheme.indexOf("/");
+  if (slashIndex < 0) return undefined;
+  return normalizeCosKey(withoutScheme.slice(slashIndex + 1));
+}
+
+function cosKeyFromAsset(asset: AssetLike) {
+  return normalizeCosKey(
+    asset.storageKey ||
+      cosKeyFromLocalPath(asset.localPath) ||
+      cosKeyFromSignedPath(asset.url) ||
+      cosKeyFromSignedPath(asset.publicUrl) ||
+      ""
+  );
+}
+
+async function resolveCosAssetUrl(asset: AssetLike, mimeType: string, filename: string) {
+  if (!isCosConfigured()) return undefined;
+
+  const existingKey = cosKeyFromAsset(asset);
+  if (existingKey) {
+    return {
+      type: "url" as const,
+      url: await cachedSignedCosUrl({ fileKey: existingKey, expiresSeconds: 3600 }),
+      mimeType,
+      filename,
+      localPath: asset.localPath,
+      source: "cos" as const
+    };
+  }
+
+  if (!asset.localPath || isCosLocalPath(asset.localPath) || !fs.existsSync(asset.localPath)) return undefined;
+  const { workspace } = requireRequestContext();
+  const stored = await uploadLocalFileToCos({
+    workspaceId: workspace.id,
+    localPath: asset.localPath,
+    fileType: storageFileTypeForMime(mimeType),
+    originalName: filename,
+    mimeType
+  });
+  return {
+    type: "url" as const,
+    url: await cachedSignedCosUrl({ fileKey: stored.fileKey, expiresSeconds: 3600 }),
+    mimeType,
+    filename,
+    localPath: asset.localPath,
+    source: "cos" as const
+  };
+}
+
 function shouldProbePublicAssetUrl() {
   return process.env.ASSET_URL_PROBE_DISABLED !== "true";
 }
@@ -234,12 +318,15 @@ export async function resolveRemoteAsset(
   const hasPublicUrl = Boolean(asset.publicUrl);
   const hasUrl = Boolean(asset.url);
   const hasLocalPath = Boolean(asset.localPath);
-  const localMetadata = asset.localPath && fs.existsSync(asset.localPath) ? await readGeneratedFileMetadata(asset.localPath) : {};
+  const localMetadata = asset.localPath && !isCosLocalPath(asset.localPath) && fs.existsSync(asset.localPath) ? await readGeneratedFileMetadata(asset.localPath) : {};
 
   let result: ResolvedRemoteAsset | undefined;
 
+  const cosAsset = strategy.supportsPublicUrl ? await resolveCosAssetUrl(asset, mimeType, filename) : undefined;
   const signedBackendUrl = backendAssetUrl(asset.publicUrl);
-  if (signedBackendUrl) {
+  if (cosAsset) {
+    result = cosAsset;
+  } else if (signedBackendUrl) {
     result = { type: "url", url: signedBackendUrl, mimeType, filename, localPath: asset.localPath, source: "backendPublicUrl" };
   } else if (isPublicHttpUrl(asset.publicUrl)) {
     result = { type: "url", url: asset.publicUrl, mimeType, filename, localPath: asset.localPath, source: "publicUrl" };
@@ -255,7 +342,7 @@ export async function resolveRemoteAsset(
   } else if (asset.localPath && strategy.supportsPublicUrl && publicUrlFromLocalPath(asset.localPath)) {
     assertLocalFile(asset.localPath);
     result = { type: "url", url: publicUrlFromLocalPath(asset.localPath), mimeType, filename, localPath: asset.localPath, source: "backendPublicUrl" };
-  } else if (asset.localPath && strategy.supportsPublicUrl) {
+  } else if (asset.localPath && !isCosLocalPath(asset.localPath) && strategy.supportsPublicUrl) {
     const oss = await uploadLocalFileToOss({
       localPath: asset.localPath,
       mimeType,

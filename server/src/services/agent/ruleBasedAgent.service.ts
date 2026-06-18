@@ -167,8 +167,10 @@ export function diagnoseCanvasWithRules(canvasState: AgentCanvasState = {}): Age
 export function explainErrorWithRules(input: AgentExplainErrorInput) {
   const message = input.errorMessage || "未知错误";
   let suggestion = "请检查模型配置、API Key、网络代理和上游素材连接。";
-  if (/PUBLIC_URL_REQUIRED|localhost|公网|public/i.test(message)) {
-    suggestion = "该错误通常表示云端模型无法访问本地图片。请配置 BACKEND_PUBLIC_BASE_URL，或使用 OSS / 内网穿透提供公网图片地址。";
+  if (/PUBLIC_ERROR_USER_QUOTA_REACHED|USER_QUOTA_REACHED|RESOURCE_EXHAUSTED|quota|credit|balance|insufficient|capacity|at capacity|exhausted|余额不足|额度不足|额度耗尽|并发上限|资源耗尽/i.test(message)) {
+    suggestion = "这是上游额度耗尽或当前模型/分组达到容量上限，不是画布素材问题。请切换到另一个已保存通道，或到对应中转/官方后台补充额度后再生成。";
+  } else if (/PUBLIC_URL_REQUIRED|localhost|公网|public/i.test(message)) {
+    suggestion = "该错误通常表示上游模型无法下载参考素材。当前项目已接入腾讯 COS，请优先检查 TENCENT_COS_* 环境变量是否在云端后端生效、素材是否已上传到 COS，并重启后端；不需要再依赖本地图片地址。";
   } else if (/API Key|401|403|unauthorized/i.test(message)) {
     suggestion = "该错误通常和 API Key、模型权限或资源区域不匹配有关。请回到设置中心重新确认对应模型配置。";
   } else if (/image|图片|素材|input/i.test(message)) {
