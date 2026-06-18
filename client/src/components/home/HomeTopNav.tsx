@@ -182,35 +182,45 @@ export function HomeTopNav({ page, onNavigate }: { page: Page; onNavigate: (page
                         <span>帮助中心</span>
                         <ChevronDown size={18} className="studio-account-row-arrow" />
                       </button>
-                      <AnimatePresence initial={false}>
-                        {helpOpen && (
-                          <motion.div
-                            className="studio-account-help-panel"
-                            initial={{ opacity: 0, height: 0, y: -4 }}
-                            animate={{ opacity: 1, height: "auto", y: 0 }}
-                            exit={{ opacity: 0, height: 0, y: -4 }}
-                            transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
-                          >
-                            <button type="button" className="studio-account-row studio-account-contact-row">
-                              <span className="studio-account-row-icon"><MessageCircle size={18} /></span>
-                              <span>联系我们</span>
-                              <ChevronRight size={18} className="studio-account-row-arrow" />
-                            </button>
-                            <div className="studio-account-qr-card">
-                              <img src="/account-assets/wechat-support-qr.png" alt="Moon Tv 微信联系二维码" loading="lazy" decoding="async" />
-                              <div>
-                                <strong>微信联系 Moon | Tv</strong>
-                                <p>扫码添加微信，反馈账号、额度、生成或素材加载问题。</p>
-                              </div>
-                            </div>
-                          </motion.div>
-                        )}
-                      </AnimatePresence>
                       <button type="button" className="studio-account-row studio-account-row-danger" onClick={() => void auth.logout()}>
                         <span className="studio-account-row-icon"><LogOut size={18} /></span>
                         <span>登出账号</span>
                       </button>
                     </div>
+                    <AnimatePresence>
+                      {helpOpen && (
+                        <motion.div
+                          className="studio-account-support-flyout"
+                          initial={{ opacity: 0, x: 8, scale: 0.985 }}
+                          animate={{ opacity: 1, x: 0, scale: 1 }}
+                          exit={{ opacity: 0, x: 8, scale: 0.985 }}
+                          transition={{ duration: 0.16, ease: [0.22, 1, 0.36, 1] }}
+                        >
+                          <div className="studio-account-support-menu">
+                            <button type="button" className="studio-account-support-row is-active">
+                              <MessageCircle size={15} />
+                              <span>联系我们</span>
+                              <ChevronRight size={15} />
+                            </button>
+                            <button type="button" className="studio-account-support-row">
+                              <HelpCircle size={15} />
+                              <span>使用教程</span>
+                            </button>
+                            <button type="button" className="studio-account-support-row">
+                              <Settings size={15} />
+                              <span>快捷设置</span>
+                            </button>
+                          </div>
+                          <div className="studio-account-qr-card">
+                            <img src="/account-assets/wechat-support-qr.png" alt="Moon Tv 微信联系二维码" loading="lazy" decoding="async" />
+                            <div>
+                              <strong>微信联系 Moon | Tv</strong>
+                              <p>扫码添加微信，反馈账号、额度、生成或素材加载问题。</p>
+                            </div>
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
                   </motion.div>
                 )}
               </AnimatePresence>
