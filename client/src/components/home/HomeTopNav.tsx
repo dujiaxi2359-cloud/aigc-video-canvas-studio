@@ -2,17 +2,14 @@ import { useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   Bell,
-  BriefcaseBusiness,
   ChevronDown,
   ChevronRight,
-  Gift,
   Globe2,
   Headphones,
   HelpCircle,
   Infinity,
   LogIn,
   LogOut,
-  Plus,
   Settings,
   UserRound,
   WalletCards
@@ -111,7 +108,7 @@ export function HomeTopNav({ page, onNavigate }: { page: Page; onNavigate: (page
                   setAccountOpen((value) => !value);
                 }}
                 className={`studio-account-pill ${accountOpen ? "is-open" : ""}`}
-                title="账号与团队"
+                title="账号菜单"
                 whileTap={{ scale: 0.985 }}
               >
                 <span className="studio-account-pill-tile">{avatarInitial}</span>
@@ -152,18 +149,6 @@ export function HomeTopNav({ page, onNavigate }: { page: Page; onNavigate: (page
                       <span className="studio-account-quota-bar" />
                     </div>
 
-                    <button
-                      type="button"
-                      className="studio-account-create-team"
-                      onClick={() => {
-                        setAccountOpen(false);
-                        onNavigate("workspace");
-                      }}
-                    >
-                      <Plus size={22} />
-                      创建团队
-                    </button>
-
                     <div className="studio-account-divider" />
                     <div className="studio-account-menu">
                       <button type="button" className="studio-account-row" onClick={() => { setAccountOpen(false); onNavigate("account"); }}>
@@ -175,47 +160,14 @@ export function HomeTopNav({ page, onNavigate }: { page: Page; onNavigate: (page
                         <span>简体中文</span>
                         <ChevronRight size={18} className="studio-account-row-arrow" />
                       </button>
-                      <button type="button" className="studio-account-row" onClick={() => { setAccountOpen(false); onNavigate("assets"); }}>
-                        <span className="studio-account-row-icon"><Gift size={18} /></span>
-                        <span>赚取 Tapies</span>
-                        <ChevronRight size={18} className="studio-account-row-arrow" />
-                      </button>
                       <button type="button" className="studio-account-row" onClick={() => { setAccountOpen(false); onNavigate("settings"); }}>
                         <span className="studio-account-row-icon"><Settings size={18} /></span>
                         <span>账户管理</span>
                       </button>
                     </div>
 
-                    {auth.workspaces.length > 0 && (
-                      <>
-                        <div className="studio-account-divider" />
-                        <div className="studio-account-workspaces">
-                          {auth.workspaces.slice(0, 3).map((workspace) => (
-                            <button
-                              key={workspace.id}
-                              type="button"
-                              className={`studio-account-workspace-row ${workspace.id === auth.activeWorkspaceId ? "is-active" : ""}`}
-                              onClick={() => {
-                                auth.selectWorkspace(workspace.id);
-                                setAccountOpen(false);
-                                window.location.reload();
-                              }}
-                            >
-                              <WalletCards size={16} />
-                              <span>{workspace.name}</span>
-                              <small>{workspace.type === "team" ? "团队" : "个人"}</small>
-                            </button>
-                          ))}
-                        </div>
-                      </>
-                    )}
-
                     <div className="studio-account-divider" />
                     <div className="studio-account-menu">
-                      <button type="button" className="studio-account-row" onClick={() => { setAccountOpen(false); onNavigate("workspace"); }}>
-                        <span className="studio-account-row-icon"><BriefcaseBusiness size={18} /></span>
-                        <span>合作中心</span>
-                      </button>
                       <button type="button" className="studio-account-row" onClick={() => { setAccountOpen(false); onNavigate("settings"); }}>
                         <span className="studio-account-row-icon"><HelpCircle size={18} /></span>
                         <span>帮助中心</span>

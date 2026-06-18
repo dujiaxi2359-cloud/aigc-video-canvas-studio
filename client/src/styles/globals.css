@@ -1927,16 +1927,16 @@ select {
 
 .studio-account-pill {
   display: inline-flex;
-  height: 48px;
-  min-width: 236px;
+  height: 42px;
+  min-width: 196px;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 999px;
   background:
     radial-gradient(circle at 86% 50%, rgba(255, 255, 255, 0.07), transparent 32px),
     linear-gradient(180deg, rgba(36, 36, 39, 0.92), rgba(22, 22, 24, 0.92));
-  padding: 4px 5px 4px 7px;
+  padding: 4px 5px 4px 6px;
   color: rgba(255, 255, 255, 0.86);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.08),
@@ -1968,20 +1968,20 @@ select {
 }
 
 .studio-account-pill-tile {
-  width: 34px;
-  height: 34px;
-  border-radius: 12px;
+  width: 30px;
+  height: 30px;
+  border-radius: 10px;
   background: rgba(255, 255, 255, 0.075);
   color: rgba(255, 255, 255, 0.96);
-  font-size: 15px;
+  font-size: 14px;
 }
 
 .studio-account-pill-name {
   min-width: 0;
   flex: 1;
   overflow: hidden;
-  font-size: 15px;
-  font-weight: 760;
+  font-size: 14px;
+  font-weight: 720;
   line-height: 1;
   text-align: left;
   text-overflow: ellipsis;
@@ -2000,28 +2000,28 @@ select {
 }
 
 .studio-account-pill-avatar {
-  width: 40px;
-  height: 40px;
+  width: 30px;
+  height: 30px;
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 999px;
   background:
     linear-gradient(145deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02)),
     rgba(255, 255, 255, 0.08);
-  color: rgba(255, 255, 255, 0.58);
-  font-size: 18px;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 13px;
 }
 
 .studio-account-panel {
   right: 0;
-  top: 58px;
+  top: 52px;
   z-index: 80;
-  width: min(390px, calc(100vw - 24px));
+  width: min(332px, calc(100vw - 24px));
   border-color: rgba(148, 163, 184, 0.26);
-  border-radius: 28px;
+  border-radius: 22px;
   background:
     radial-gradient(circle at 18% 6%, rgba(255, 255, 255, 0.06), transparent 34%),
     linear-gradient(180deg, rgba(31, 31, 34, 0.985), rgba(19, 19, 22, 0.985));
-  padding: 14px;
+  padding: 12px;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.08),
     0 28px 90px rgba(0, 0, 0, 0.62);
@@ -2029,22 +2029,22 @@ select {
 
 .studio-account-profile {
   display: grid;
-  grid-template-columns: 60px minmax(0, 1fr);
-  gap: 14px;
-  padding: 10px 8px 14px;
+  grid-template-columns: 46px minmax(0, 1fr);
+  gap: 12px;
+  padding: 6px 6px 12px;
 }
 
 .studio-account-large-avatar {
-  width: 60px;
-  height: 60px;
+  width: 46px;
+  height: 46px;
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 999px;
   background:
     linear-gradient(145deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02)),
     rgba(255, 255, 255, 0.08) !important;
   color: rgba(255, 255, 255, 0.58) !important;
-  font-size: 24px;
-  font-weight: 850;
+  font-size: 18px;
+  font-weight: 820;
 }
 
 .studio-account-profile strong {
@@ -2052,8 +2052,8 @@ select {
   min-width: 0;
   overflow: hidden;
   color: rgba(255, 255, 255, 0.96);
-  font-size: 24px;
-  font-weight: 850;
+  font-size: 18px;
+  font-weight: 780;
   letter-spacing: -0.02em;
   line-height: 1.12;
   text-overflow: ellipsis;
@@ -2064,9 +2064,9 @@ select {
   display: block;
   min-width: 0;
   overflow: hidden;
-  margin-top: 6px;
+  margin-top: 4px;
   color: rgba(255, 255, 255, 0.46);
-  font-size: 15px;
+  font-size: 13px;
   font-weight: 650;
   line-height: 1.2;
   text-overflow: ellipsis;
@@ -2074,22 +2074,22 @@ select {
 }
 
 .studio-account-wallet {
-  border-radius: 22px;
+  border-radius: 18px;
   background: rgba(255, 255, 255, 0.055);
-  padding: 16px;
+  padding: 12px;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.055);
 }
 
 .studio-account-wallet-top {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
 }
 
 .studio-account-wallet-brand {
   display: grid;
-  width: 28px;
-  height: 28px;
+  width: 24px;
+  height: 24px;
   place-items: center;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.08);
@@ -2098,17 +2098,17 @@ select {
 
 .studio-account-wallet-top strong {
   color: rgba(255, 255, 255, 0.96);
-  font-size: 22px;
-  font-weight: 850;
+  font-size: 18px;
+  font-weight: 820;
   letter-spacing: -0.02em;
 }
 
 .studio-account-wallet-top em {
-  border-radius: 10px;
+  border-radius: 9px;
   background: rgba(125, 211, 252, 0.13);
-  padding: 5px 10px;
+  padding: 4px 9px;
   color: #38bdf8;
-  font-size: 14px;
+  font-size: 12px;
   font-style: normal;
   font-weight: 850;
   letter-spacing: 0.01em;
@@ -2119,23 +2119,23 @@ select {
   align-items: end;
   justify-content: space-between;
   gap: 12px;
-  margin-top: 14px;
-  padding-top: 14px;
+  margin-top: 11px;
+  padding-top: 11px;
   border-top: 1px solid rgba(255, 255, 255, 0.09);
 }
 
 .studio-account-quota span {
   color: #38bdf8;
-  font-size: 18px;
-  font-weight: 850;
+  font-size: 15px;
+  font-weight: 780;
 }
 
 .studio-account-quota small {
   display: block;
   margin-left: 0;
-  margin-top: 4px;
+  margin-top: 3px;
   color: rgba(255, 255, 255, 0.36);
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .studio-account-quota svg {
@@ -2144,59 +2144,43 @@ select {
 
 .studio-account-quota-bar {
   display: block;
-  height: 9px;
-  margin-top: 10px;
+  height: 7px;
+  margin-top: 8px;
   border: 1px solid rgba(255, 255, 255, 0.18);
   border-radius: 999px;
   background: linear-gradient(90deg, #67e8f9, #38bdf8);
   box-shadow: 0 0 16px rgba(56, 189, 248, 0.25);
 }
 
-.studio-account-create-team {
-  display: flex !important;
-  min-height: 54px !important;
-  align-items: center;
-  gap: 14px;
-  margin-top: 12px;
-  border-radius: 18px !important;
-  padding: 0 14px !important;
-  color: #38bdf8 !important;
-  font-size: 18px !important;
-  font-weight: 850 !important;
-}
-
 .studio-account-menu {
   display: grid;
-  gap: 4px;
+  gap: 3px;
 }
 
-.studio-account-row,
-.studio-account-workspace-row {
+.studio-account-row {
   display: flex !important;
-  min-height: 50px !important;
+  min-height: 42px !important;
   align-items: center;
-  gap: 14px !important;
-  border-radius: 16px !important;
-  padding: 0 10px !important;
+  gap: 11px !important;
+  border-radius: 13px !important;
+  padding: 0 9px !important;
   color: rgba(255, 255, 255, 0.86) !important;
-  font-size: 17px !important;
-  font-weight: 780 !important;
+  font-size: 14px !important;
+  font-weight: 690 !important;
 }
 
-.studio-account-row:hover,
-.studio-account-workspace-row:hover,
-.studio-account-workspace-row.is-active {
+.studio-account-row:hover {
   background: rgba(255, 255, 255, 0.07) !important;
   color: #fff !important;
 }
 
 .studio-account-row-icon {
   display: grid;
-  width: 34px;
-  height: 34px;
+  width: 30px;
+  height: 30px;
   flex: none;
   place-items: center;
-  border-radius: 12px;
+  border-radius: 10px;
   background: rgba(255, 255, 255, 0.06);
   color: rgba(255, 255, 255, 0.58);
 }
@@ -2208,29 +2192,6 @@ select {
 
 .studio-account-row-danger {
   color: rgba(255, 255, 255, 0.8) !important;
-}
-
-.studio-account-workspaces {
-  display: grid;
-  gap: 5px;
-}
-
-.studio-account-workspace-row span {
-  min-width: 0;
-  flex: 1;
-  overflow: hidden;
-  text-align: left;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.studio-account-workspace-row small {
-  flex: none;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.06);
-  padding: 3px 8px;
-  color: rgba(255, 255, 255, 0.48) !important;
-  font-size: 12px !important;
 }
 
 @media (max-width: 1180px) {
