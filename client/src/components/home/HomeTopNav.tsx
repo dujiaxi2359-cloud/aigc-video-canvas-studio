@@ -17,10 +17,13 @@ export function HomeTopNav({ page, onNavigate }: { page: Page; onNavigate: (page
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
   const auth = useAuthStore();
-
   function handleNav(target: Page) {
     if (target === "photos") {
       window.location.assign("/photos");
+      return;
+    }
+    if (target === "video") {
+      onNavigate("canvas", "new");
       return;
     }
     onNavigate(target);
@@ -33,13 +36,13 @@ export function HomeTopNav({ page, onNavigate }: { page: Page; onNavigate: (page
       </button>
       <nav className="absolute left-1/2 hidden -translate-x-1/2 items-center gap-1 rounded-full border border-white/[0.07] bg-white/[0.035] p-1 md:flex">
         {links.map(([target, label]) => (
-          <button key={target} type="button" onClick={() => handleNav(target)} className={`h-9 rounded-full px-4 text-[13px] transition ${page === target ? "bg-white/[0.12] font-medium text-white" : "text-white/48 hover:bg-white/[0.06] hover:text-white"}`}>{label}</button>
+          <button key={target} type="button" onClick={() => handleNav(target)} className={`h-10 rounded-full px-4 text-[14px] transition ${page === target ? "bg-white/[0.12] font-medium text-white" : "text-white/58 hover:bg-white/[0.06] hover:text-white"}`}>{label}</button>
         ))}
       </nav>
       <div className="ml-auto flex items-center gap-1.5">
         {!auth.user && (
-          <button type="button" onClick={() => onNavigate("login")} className="studio-secondary-button">
-            <LogIn size={15} /> 登录
+          <button type="button" onClick={() => onNavigate("login")} className="studio-login-button">
+            <LogIn size={17} /> 登录 / 注册
           </button>
         )}
         {auth.user && (

@@ -377,16 +377,17 @@ export function CanvasDrawer({ drawer, onClose }: { drawer: DrawerName; onClose:
 export function CanvasEmptyGuide({ onAdd, onTemplates }: { onAdd: (type: WorkflowNodeType, position?: { x: number; y: number }) => void; onTemplates: () => void }) {
   return (
     <div className="pointer-events-none fixed inset-0 z-10 grid place-items-center">
-      <div className="pointer-events-auto -translate-y-8 text-center">
-        <div className="text-[14px] text-white/56"><span className="font-semibold text-white">双击</span> 画布自由生成，或者看模板</div>
-        <div className="mt-4 flex flex-wrap justify-center gap-2">
+      <motion.div layout className="canvas-empty-guide pointer-events-auto -translate-y-8 text-center" transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}>
+        <div className="canvas-empty-title"><span>双击画布</span>自由生成，或选择一个起点</div>
+        <p className="canvas-empty-copy">添加素材与生成节点后，可以拖动连接，组合成完整视频工作流。</p>
+        <div className="canvas-empty-actions mt-5 flex flex-wrap justify-center gap-2.5">
           <button onClick={() => onAdd("video")} className="canvas-quick-action">文生视频</button>
           <button onClick={() => onAdd("image")} className="canvas-quick-action">上传参考图</button>
           <button onClick={() => onAdd("imageGenerate")} className="canvas-quick-action">图片生成</button>
           <button onClick={() => onAdd("video")} className="canvas-quick-action">图生 / 首尾帧</button>
-          <button onClick={onTemplates} className="canvas-quick-action"><LayoutTemplate size={13} /> 模板</button>
+          <button onClick={onTemplates} className="canvas-quick-action"><LayoutTemplate size={16} /> 浏览模板</button>
         </div>
-      </div>
+      </motion.div>
     </div>
   );
 }

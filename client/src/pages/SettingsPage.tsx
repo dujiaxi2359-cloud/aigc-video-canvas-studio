@@ -1,62 +1,58 @@
 import { ModelConfigCenter } from "../components/settings/ModelConfigCenter";
 import { AgentSettingsPanel } from "../components/settings/AgentSettingsPanel";
-import { ArrowLeft, KeyRound, ShieldCheck, SlidersHorizontal, Sparkles } from "lucide-react";
+import { ArrowLeft, Bot, KeyRound, ShieldCheck, SlidersHorizontal } from "lucide-react";
 import type { Page } from "../App";
 import { CommercialAdminPanel } from "../components/settings/CommercialAdminPanel";
 import { useAuthStore } from "../store/authStore";
+import { isLocalAdminHost } from "../utils/localAdmin";
 
 export function SettingsPage({ onNavigate }: { onNavigate: (page: Page) => void }) {
   const user = useAuthStore((state) => state.user);
-  const isAdmin = Boolean(user && ["admin", "super_admin"].includes(user.role));
+  const isAdmin = isLocalAdminHost() || Boolean(user && ["admin", "super_admin"].includes(user.role));
 
   return (
-    <div className="h-full overflow-auto bg-[#090a0d] p-6">
-      <div className="mx-auto mb-5 max-w-[1180px] overflow-hidden rounded-[28px] border border-white/[0.08] bg-[linear-gradient(135deg,rgba(255,255,255,0.055),rgba(255,255,255,0.018))] shadow-[0_28px_80px_rgba(0,0,0,0.34)]">
-        <div className="flex flex-col gap-5 border-b border-white/[0.08] px-5 py-5 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex items-start gap-4">
+    <div className="settings-workspace h-full overflow-auto">
+      <header className="settings-command-bar">
+        <div className="mx-auto flex max-w-[1280px] items-center gap-3 px-4 py-3 md:px-6">
             <button
               type="button"
               onClick={() => onNavigate("home")}
-              className="mt-1 inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-[14px] border border-white/[0.08] bg-black/25 text-white/70 hover:bg-white/[0.06] hover:text-white"
+              className="settings-icon-button"
               aria-label="返回首页"
             >
               <ArrowLeft size={17} />
             </button>
-            <div>
-              <div className="inline-flex items-center gap-2 rounded-full border border-emerald-300/15 bg-emerald-300/[0.06] px-3 py-1 text-[12px] text-emerald-100">
-                <ShieldCheck size={14} /> {isAdmin ? "管理员后台已启用" : "API 配置仅当前账号空间使用"}
-              </div>
-              <h1 className="mt-3 text-[28px] font-semibold tracking-[-0.03em] text-white">设置中心</h1>
-              <p className="mt-2 max-w-[560px] text-[13px] leading-6 text-white/46">
-                管理模型 API 与 Agent 配置。
-              </p>
+            <div className="min-w-0">
+              <h1 className="text-[17px] font-semibold tracking-[-0.02em] text-white">设置中心</h1>
+              <p className="truncate text-[12px] text-white/42">模型、Agent 与账户权限</p>
             </div>
-          </div>
-          <div className="grid gap-2 sm:grid-cols-3 lg:w-[430px]">
-            {[
-              { icon: ShieldCheck, label: "管理后台", active: isAdmin },
-              { icon: Sparkles, label: "Agent 配置", active: true },
-              { icon: KeyRound, label: "API 接入", active: true }
-            ].map((item) => {
-              const Icon = item.icon;
-              return (
-                <div key={item.label} className={`rounded-[16px] border px-3 py-3 ${item.active ? "border-sky-100/20 bg-sky-200/[0.07] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]" : "border-white/[0.06] bg-black/20 text-white/32"}`}>
-                  <Icon size={16} />
-                  <div className="mt-2 text-[12px] font-medium">{item.label}</div>
-                </div>
-              );
-            })}
-          </div>
+            <nav className="ml-auto hidden items-center gap-1 sm:flex" aria-label="设置区域">
+              <a href="#agent-settings" className="settings-nav-chip"><Bot size={14} />Agent</a>
+              <a href="#api-settings" className="settings-nav-chip"><KeyRound size={14} />API 接入</a>
+              {isAdmin && <a href="#admin-settings" className="settings-nav-chip"><ShieldCheck size={14} />管理后台</a>}
+            </nav>
+            <div className="settings-account-pill">
+              <span className="settings-presence-dot" />
+              <span className="max-w-[190px] truncate">{user?.email || "本机管理员"}</span>
+            </div>
         </div>
-        <div className="flex flex-wrap items-center gap-2 px-5 py-3 text-[12px] text-white/38">
-          <SlidersHorizontal size={14} className="text-white/45" />
-          <span>当前账号：{user?.email || "未登录"}</span>
-          <span className="h-1 w-1 rounded-full bg-white/20" />
-          <span>角色：{user?.role || "guest"}</span>
-        </div>
-      </div>
+      </header>
 
-      {isAdmin && <CommercialAdminPanel />}
+      <div className="mx-auto max-w-[1280px] px-4 py-5 md:px-6 md:py-7">
+        <div className="mb-5 flex flex-col gap-3 border-b border-white/[0.07] pb-5 md:flex-row md:items-end md:justify-between">
+          <div>
+            <div className="mb-2 flex items-center gap-2 text-[12px] text-emerald-200/75">
+              <span className="settings-presence-dot" /> 系统连接正常
+            </div>
+            <h2 className="text-[28px] font-semibold tracking-[-0.04em] text-white md:text-[34px]">创作引擎配置</h2>
+            <p className="mt-2 max-w-[620px] text-[13px] leading-6 text-white/44">集中管理 Agent 行为和模型线路。修改只影响当前工作空间，不会覆盖其它已保存线路。</p>
+          </div>
+          <div className="flex items-center gap-2 text-[12px] text-white/38">
+            <SlidersHorizontal size={14} /> 角色：{isAdmin ? "管理员" : user?.role || "访客"}
+          </div>
+        </div>
+
+      <div id="admin-settings">{isAdmin && <CommercialAdminPanel />}</div>
       {!isAdmin && (
         <section className="mx-auto mb-6 max-w-[1180px] rounded-[22px] border border-amber-200/15 bg-amber-300/[0.055] px-5 py-4 text-[13px] text-amber-50/80">
           <div className="font-semibold text-amber-50">管理后台仅管理员可见</div>
@@ -66,11 +62,12 @@ export function SettingsPage({ onNavigate }: { onNavigate: (page: Page) => void 
         </section>
       )}
 
-      <div className="mx-auto max-w-[1180px]">
+      <div id="agent-settings">
         <AgentSettingsPanel />
       </div>
 
-      <ModelConfigCenter />
+      <div id="api-settings"><ModelConfigCenter /></div>
+      </div>
     </div>
   );
 }

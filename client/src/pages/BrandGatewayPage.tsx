@@ -1,155 +1,48 @@
 import type { MouseEvent } from "react";
 import { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
-import {
-  Clapperboard,
-  Image,
-  Link2,
-  Palette,
-  Send,
-  Sparkles,
-  type LucideIcon
-} from "lucide-react";
+import gsap from "gsap";
 import type { Page } from "../App";
 import { HomeLaunchIntro } from "../components/home/HomeLaunchIntro";
 import { HomeTopNav } from "../components/home/HomeTopNav";
-import { useCanvasStore } from "../store/canvasStore";
-import { useProjectStore } from "../store/projectStore";
+import { FerrofluidBackground } from "../components/home/FerrofluidBackground";
 
 const ICP_RECORD = "粤ICP备2026074382号";
 const STUDIO_NAME = "Moon｜Tv";
 
-const quickPrompts = [
-  { label: "电商主图", prompt: "为新品生成一组高级电商主图，突出材质、卖点和使用场景。", mode: "photos" as const },
-  { label: "产品视频", prompt: "把产品主图生成 15 秒竖屏商业短视频，包含开场、卖点展示和结尾定格。", mode: "video" as const },
-  { label: "图生视频", prompt: "基于商品图片生成短视频镜头，风格干净高级，适合投放和社媒展示。", mode: "video" as const }
-];
-
-const toolCards: Array<{
-  title: string;
-  desc: string;
-  icon: LucideIcon;
-  className: string;
-  accent: string;
-  stat?: string;
-}> = [
-  {
-    title: "商业视频工作流",
-    desc: "从脚本拆解、镜头编排到字幕与成片导出，用可复用节点流程稳定完成内容生产。",
-    icon: Clapperboard,
-    className: "lg:col-span-3",
-    accent: "from-[#5978ff] via-[#19c8d7] to-transparent"
-  },
-  {
-    title: "统一生产链路",
-    desc: "图文、视频、素材与模型配置在同一空间协作。",
-    icon: Sparkles,
-    className: "",
-    accent: "from-[#f97345] via-[#f5c451] to-transparent",
-    stat: "1套"
-  },
-  {
-    title: "商品视觉生成",
-    desc: "完成背景替换、场景延展、产品主图和详情页素材生成。",
-    icon: Image,
-    className: "",
-    accent: "from-[#6175ff] via-[#16c4d9] to-transparent"
-  },
-  {
-    title: "品牌模板体系",
-    desc: "沉淀品牌字体、色彩与版式规范，让批量内容保持一致。",
-    icon: Palette,
-    className: "",
-    accent: "from-[#15bd8d] via-[#55dfbd] to-transparent"
-  },
-  {
-    title: "可复用生产流程",
-    desc: "通过可视化节点连接模型与素材，支持批量处理、自动化和团队复用。",
-    icon: Link2,
-    className: "lg:col-span-2",
-    accent: "from-[#f14d97] via-[#fa5a68] to-transparent"
-  }
-];
-
-const fadeUp = {
-  hidden: { opacity: 0, y: 24 },
-  show: { opacity: 1, y: 0 }
-};
-
-function inferMode(prompt: string): "photos" | "video" {
-  if (/主图|详情|海报|图文|图片|封面|视觉|商品图/.test(prompt)) return "photos";
-  return "video";
-}
-
 export function BrandGatewayPage({ onNavigate }: { onNavigate: (page: Page, projectId?: string) => void }) {
-  const [prompt, setPrompt] = useState("");
-  const promptInputRef = useRef<HTMLInputElement>(null);
   const promptSectionRef = useRef<HTMLElement>(null);
-  const clearCanvas = useCanvasStore((state) => state.clearCanvas);
-  const addNode = useCanvasStore((state) => state.addNode);
-  const updateNodeData = useCanvasStore((state) => state.updateNodeData);
-  const createProject = useProjectStore((state) => state.createProject);
+  const heroCopyRef = useRef<HTMLDivElement>(null);
+  const [launchComplete, setLaunchComplete] = useState(false);
 
   useEffect(() => {
     const focusPrompt = () => {
       promptSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-      window.setTimeout(() => promptInputRef.current?.focus(), 220);
     };
     window.addEventListener("home:focusPrompt", focusPrompt);
     return () => window.removeEventListener("home:focusPrompt", focusPrompt);
   }, []);
 
+  useEffect(() => {
+    if (!launchComplete) return;
+    const root = heroCopyRef.current;
+    if (!root) return;
+    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const context = gsap.context(() => {
+      if (reduced) {
+        gsap.set("[data-hero-reveal]", { autoAlpha: 1, y: 0 });
+        return;
+      }
+      gsap.timeline({ defaults: { ease: "power3.out", duration: 0.52 } })
+        .fromTo("[data-hero-reveal]", { autoAlpha: 0, y: 20 }, { autoAlpha: 1, y: 0, stagger: 0.075, clearProps: "transform,visibility" });
+    }, root);
+    return () => context.revert();
+  }, [launchComplete]);
+
   function updateSpotlight(event: MouseEvent<HTMLDivElement>) {
     const rect = event.currentTarget.getBoundingClientRect();
     event.currentTarget.style.setProperty("--spotlight-x", `${event.clientX - rect.left}px`);
     event.currentTarget.style.setProperty("--spotlight-y", `${event.clientY - rect.top}px`);
-  }
-
-  async function beginPhotos(input = prompt) {
-    const clean = input.trim() || "图文创作项目";
-    clearCanvas();
-    addNode("textGenerate", { x: 220, y: 150 });
-    addNode("imageGenerate", { x: 700, y: 130 });
-    const nodes = useCanvasStore.getState().nodes;
-    const textNode = nodes.find((node) => node.type === "textGenerate");
-    const imageNode = nodes.find((node) => node.type === "imageGenerate");
-    if (textNode) updateNodeData(textNode.id, { title: "图文策划", prompt: clean, taskType: "prompt-polish" });
-    if (imageNode) updateNodeData(imageNode.id, { title: "图像生成", prompt: clean, aspectRatio: "1:1", inputMode: "text-to-image" });
-    if (textNode && imageNode) useCanvasStore.getState().connectNodes({ source: textNode.id, sourceHandle: "out", target: imageNode.id, targetHandle: "in-0" });
-
-    try {
-      const project = await createProject(clean.slice(0, 24));
-      await useProjectStore.getState().saveProject(useCanvasStore.getState().nodes, useCanvasStore.getState().edges);
-      onNavigate("canvas", project.id);
-    } catch {
-      onNavigate("canvas", "new");
-    }
-  }
-
-  async function beginVideo(input = prompt) {
-    const clean = input.trim() || "商业视频工作流";
-    clearCanvas();
-    addNode("image", { x: 220, y: 170 });
-    addNode("video", { x: 690, y: 130 });
-    const nodes = useCanvasStore.getState().nodes;
-    const imageNode = nodes.find((node) => node.type === "image");
-    const videoNode = [...nodes].reverse().find((node) => node.type === "video");
-    if (videoNode) updateNodeData(videoNode.id, { title: "视频生成", prompt: clean, videoMode: "image_to_video", inputMode: "image-to-video" });
-    if (imageNode && videoNode) useCanvasStore.getState().connectNodes({ source: imageNode.id, sourceHandle: "out", target: videoNode.id, targetHandle: "in-0" });
-
-    try {
-      const project = await createProject(clean.slice(0, 24));
-      await useProjectStore.getState().saveProject(useCanvasStore.getState().nodes, useCanvasStore.getState().edges);
-      onNavigate("canvas", project.id);
-    } catch {
-      onNavigate("canvas", "new");
-    }
-  }
-
-  function submitPrompt() {
-    const clean = prompt.trim();
-    if (inferMode(clean) === "photos") void beginPhotos(clean);
-    else void beginVideo(clean);
   }
 
   return (
@@ -160,83 +53,30 @@ export function BrandGatewayPage({ onNavigate }: { onNavigate: (page: Page, proj
       transition={{ duration: 0.28 }}
       onMouseMove={updateSpotlight}
     >
-      <HomeLaunchIntro />
+      <HomeLaunchIntro onFinish={() => setLaunchComplete(true)} />
+      {launchComplete ? <FerrofluidBackground className="home-page-ferrofluid" /> : null}
       <HomeTopNav page="home" onNavigate={onNavigate} />
 
       <main className="home-flagship-content">
-        <section ref={promptSectionRef} className="mx-auto grid min-h-[calc(100vh-72px)] max-w-[1240px] place-items-center px-5 pb-24 pt-32 text-center md:px-10">
-          <motion.div className="w-full" variants={fadeUp} initial="hidden" whileInView="show" viewport={{ once: true, amount: 0.35 }} transition={{ duration: 0.54 }}>
-            <h2 className="text-[36px] font-black tracking-[-0.035em] text-white md:text-[56px]">描述你的创意</h2>
-            <p className="mt-4 text-[16px] text-white/38">输入一句话，自动生成可继续编辑的图文或视频画布</p>
-            <div className="home-prompt-terminal mt-12">
-              <div className="home-prompt-input">
-                <input
-                  ref={promptInputRef}
-                  value={prompt}
-                  onChange={(event) => setPrompt(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") submitPrompt();
-                  }}
-                  placeholder="把产品主图生成 15 秒竖屏电商短视频..."
-                />
-                <button type="button" onClick={submitPrompt} aria-label="开始生成画布">
-                  <Send size={19} />
-                </button>
-              </div>
-              <div className="mt-7 flex flex-wrap justify-center gap-3">
-                {quickPrompts.map((item) => (
-                  <button
-                    key={item.label}
-                    type="button"
-                    onClick={() => {
-                      setPrompt(item.prompt);
-                      if (item.mode === "photos") void beginPhotos(item.prompt);
-                      else void beginVideo(item.prompt);
-                    }}
-                    className="home-prompt-tag"
-                  >
-                    {item.label}
-                  </button>
-                ))}
-              </div>
+        <section ref={promptSectionRef} className="home-unicorn-hero" aria-label="描述你的创意">
+          <div className="home-unicorn-hero-stage">
+            <div className="home-unicorn-title-shield" />
+            <div ref={heroCopyRef} className="home-unicorn-copy">
+              <p className="home-unicorn-eyebrow" data-hero-reveal>
+                AIGC
+              </p>
+              <div className="home-unicorn-brand-title" data-hero-reveal>Moon | Tv</div>
+              <div className="home-unicorn-cn-title" data-hero-reveal>让灵感成片</div>
+              <div className="home-unicorn-en-title" data-hero-reveal>Your AI Creative Channel.</div>
+              <button
+                type="button"
+                className="home-unicorn-start-button"
+                onClick={() => onNavigate("canvas", "new")}
+                data-hero-reveal
+              >
+                开始体验
+              </button>
             </div>
-          </motion.div>
-        </section>
-
-        <section className="mx-auto max-w-[1380px] px-5 py-24 md:px-10">
-          <div className="mb-16 text-center">
-            <h2 className="text-[34px] font-black tracking-[-0.02em] text-white md:text-[48px]">专业创作工具</h2>
-            <p className="mt-4 text-[16px] text-white/40">一站式 AI 创作平台，覆盖图像、视频、素材与生产流程。</p>
-          </div>
-          <div className="grid gap-4 lg:grid-cols-4">
-            {toolCards.map((card, index) => {
-              const Icon = card.icon;
-              return (
-                <motion.div
-                  key={card.title}
-                  className={`home-tool-card ${card.className}`}
-                  initial={{ opacity: 0, y: 18 }}
-                  whileInView={{ opacity: 1, y: 0 }}
-                  viewport={{ once: true, amount: 0.25 }}
-                  transition={{ delay: index * 0.04, duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
-                >
-                  <div className={`home-tool-accent bg-gradient-to-r ${card.accent}`} />
-                  <span className="home-tool-icon"><Icon size={24} /></span>
-                  {card.stat ? (
-                    <div className="mt-12">
-                      <div className="text-[70px] font-black leading-none tracking-[-0.07em] text-white">{card.stat}</div>
-                      <h3 className="mt-4 text-[18px] font-semibold text-white/88">{card.title}</h3>
-                      <p className="mt-3 text-[14px] leading-7 text-white/42">{card.desc}</p>
-                    </div>
-                  ) : (
-                    <div className="mt-16">
-                      <h3 className="text-[24px] font-black text-white">{card.title}</h3>
-                      <p className="mt-5 max-w-[720px] text-[15px] leading-7 text-white/48">{card.desc}</p>
-                    </div>
-                  )}
-                </motion.div>
-              );
-            })}
           </div>
         </section>
       </main>

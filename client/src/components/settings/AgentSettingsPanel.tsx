@@ -36,22 +36,22 @@ export function AgentSettingsPanel() {
   }
 
   return (
-    <section className="mb-5 rounded-2xl border border-white/[0.08] bg-[#13171f]/90 p-4">
+    <section className="settings-section mb-5 p-5 md:p-6">
       <div className="flex items-center justify-between gap-4">
         <div className="flex items-center gap-3">
-          <span className="grid h-10 w-10 place-items-center rounded-2xl border border-indigo-300/20 bg-indigo-500/15 text-indigo-100">
+          <span className="settings-section-icon">
             <Bot size={18} />
           </span>
           <div>
-            <h2 className="text-[15px] font-semibold text-white">Agent 智能体配置</h2>
-            <p className="text-[12px] text-white/40">只使用已启用的文字模型，API Key 仍由模型配置中心统一管理。</p>
+            <h2 className="text-[16px] font-semibold text-white">Agent 智能体</h2>
+            <p className="mt-1 text-[12px] text-white/42">选择推理模型和执行策略；密钥仍由 API 接入统一管理。</p>
           </div>
         </div>
         <button
           type="button"
           onClick={testAgent}
           disabled={testing}
-          className="inline-flex h-9 items-center gap-2 rounded-xl bg-indigo-500 px-4 text-[13px] font-medium text-white shadow-[0_0_20px_rgba(99,102,241,0.3)] disabled:opacity-50"
+          className="settings-primary-button"
         >
           {testing ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />}
           测试 Agent
@@ -64,7 +64,7 @@ export function AgentSettingsPanel() {
           <select
             value={selectedModelConfigId ?? ""}
             onChange={(event) => setSelectedModelConfigId(event.target.value || undefined)}
-            className="h-9 rounded-xl border border-white/[0.08] bg-[#0b0e14] px-3 text-[13px] text-white/80 outline-none focus:border-indigo-400/50"
+            className="settings-select"
           >
             <option value="">自动选择 Gemini / DeepSeek / 本地规则引擎</option>
             {textModels.map((model) => (
@@ -79,10 +79,10 @@ export function AgentSettingsPanel() {
         <div className="grid gap-2">
           <label className="text-[12px] text-white/45">Agent 执行模式</label>
           <div className="grid grid-cols-2 gap-2">
-            <button type="button" onClick={() => setMode("manual_confirm")} className={`h-9 rounded-xl border text-[12px] ${mode === "manual_confirm" ? "border-indigo-300/30 bg-indigo-500/15 text-white" : "border-white/[0.07] bg-white/[0.025] text-white/50"}`}>
+            <button type="button" onClick={() => setMode("manual_confirm")} className={`settings-segment ${mode === "manual_confirm" ? "is-active" : ""}`}>
               手动确认
             </button>
-            <button type="button" onClick={() => setMode("auto")} className={`h-9 rounded-xl border text-[12px] ${mode === "auto" ? "border-indigo-300/30 bg-indigo-500/15 text-white" : "border-white/[0.07] bg-white/[0.025] text-white/50"}`}>
+            <button type="button" onClick={() => setMode("auto")} className={`settings-segment ${mode === "auto" ? "is-active" : ""}`}>
               自动执行 Beta
             </button>
           </div>
@@ -91,7 +91,7 @@ export function AgentSettingsPanel() {
 
       <div className="mt-4 flex flex-wrap gap-2">
         {featureSwitches.map((item) => (
-          <label key={item} className="inline-flex items-center gap-2 rounded-full border border-white/[0.07] bg-white/[0.025] px-3 py-1.5 text-[12px] text-white/55">
+          <label key={item} className="settings-check-option">
             <input type="checkbox" defaultChecked className="accent-indigo-500" />
             {item}
           </label>
@@ -102,4 +102,3 @@ export function AgentSettingsPanel() {
     </section>
   );
 }
-

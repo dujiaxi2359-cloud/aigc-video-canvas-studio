@@ -631,17 +631,17 @@ export function ModelConfigCenter() {
   }
 
   return (
-    <div className="mx-auto max-w-[1180px] space-y-5">
-      <section className="overflow-hidden rounded-[24px] border border-white/[0.08] bg-[#101114]/95 shadow-[0_24px_80px_rgba(0,0,0,0.35)]">
-        <div className="grid min-h-[620px] grid-cols-[240px_1fr]">
-          <aside className="border-r border-white/[0.08] bg-black/25 p-5">
+    <div className="space-y-5">
+      <section className="settings-section overflow-hidden">
+        <div className="grid min-h-[620px] lg:grid-cols-[210px_1fr]">
+          <aside className="settings-model-aside flex border-b border-white/[0.07] p-4 lg:flex-col lg:border-b-0 lg:border-r lg:p-5">
             <div className="text-[14px] font-semibold tracking-[0.04em] text-white">Moon｜Tv</div>
-            <div className="mt-8 space-y-2">
+            <div className="ml-5 space-y-2 lg:ml-0 lg:mt-8">
               <button type="button" className="flex h-11 w-full items-center gap-3 rounded-[12px] border border-sky-200/15 bg-sky-300/[0.10] px-3 text-left text-[13px] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
                 <KeyRound size={16} /> API 接入
               </button>
             </div>
-            <div className="mt-auto pt-[360px]">
+            <div className="ml-auto lg:ml-0 lg:mt-auto">
               <button type="button" className="h-10 w-full rounded-full border border-white/[0.08] bg-white/[0.03] text-[12px] text-white/60">联系客服</button>
             </div>
           </aside>

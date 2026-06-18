@@ -19,6 +19,7 @@ import { useAuthStore } from "./store/authStore";
 import { LoginPage } from "./pages/LoginPage";
 import { InvitePage } from "./pages/InvitePage";
 import { LegalPage } from "./pages/LegalPage";
+import { isLocalAdminHost } from "./utils/localAdmin";
 
 export type Page = "login" | "invite" | "home" | "photos" | "video" | "workspace" | "canvas" | "templates" | "community" | "arena" | "pricing" | "account" | "settings" | "assets" | "history" | "privacy" | "terms";
 
@@ -37,6 +38,7 @@ function pagePath(page: Page, projectId?: string) {
 }
 
 export default function App() {
+  const isLocalMode = isLocalAdminHost();
   const initialRoute = routeState();
   const [page, setPage] = useState<Page>(initialRoute.page);
   const [routeProjectId, setRouteProjectId] = useState<string | undefined>(initialRoute.projectId);
@@ -45,7 +47,7 @@ export default function App() {
   const loadCanvasProject = useCanvasStore((state) => state.loadProject);
   const loadProject = useProjectStore((state) => state.loadProject);
   const auth = useAuthStore();
-  const canAdmin = auth.user && ["admin", "super_admin"].includes(auth.user.role);
+  const canAdmin = isLocalMode || Boolean(auth.user && ["admin", "super_admin"].includes(auth.user.role));
 
   function navigate(pageName: Page, projectId?: string, replace = false) {
     const nextProjectId = pageName === "canvas" ? projectId || useProjectStore.getState().currentProject?.id || "new" : undefined;
@@ -65,6 +67,10 @@ export default function App() {
 
   useEffect(() => {
     if (auth.loading) return;
+    if (isLocalMode) {
+      if (page === "invite") navigate("home", undefined, true);
+      return;
+    }
     if (!auth.user) {
       if (page === "home") return;
       if (window.location.pathname !== "/login") window.history.replaceState({}, "", "/login");
@@ -77,15 +83,15 @@ export default function App() {
       return;
     }
     if (["login", "invite"].includes(page)) navigate("home", undefined, true);
-  }, [auth.loading, auth.user?.id, auth.user?.inviteStatus]);
+  }, [auth.loading, auth.user?.id, auth.user?.inviteStatus, isLocalMode]);
 
   useEffect(() => {
-    if (!auth.user || auth.user.inviteStatus !== "active") return;
+    if (!isLocalMode && (!auth.user || auth.user.inviteStatus !== "active")) return;
     fetchModelConfigs().then(() => {
       const enabled = useModelConfigStore.getState().modelConfigs.some((model) => model.enabled);
-      if (!enabled && canAdmin) setShowGuide(true);
+      if (!enabled && canAdmin && !isLocalMode) setShowGuide(true);
     }).catch(() => undefined);
-  }, [auth.user?.id, canAdmin, fetchModelConfigs]);
+  }, [auth.user?.id, auth.user?.inviteStatus, canAdmin, fetchModelConfigs, isLocalMode]);
 
   useEffect(() => {
     if (window.location.pathname === "/") navigate("home", undefined, true);
@@ -114,8 +120,9 @@ export default function App() {
       .catch(() => undefined);
   }, [loadCanvasProject, loadProject, page, routeProjectId]);
 
-  if (auth.loading) return <div className="grid h-screen place-items-center bg-[#070708] text-[13px] text-white/45">正在验证会话...</div>;
-  if (!auth.user) {
+  if (auth.loading && !isLocalMode) return <div className="grid h-screen place-items-center bg-[#070708] text-[13px] text-white/45">正在验证会话...</div>;
+  if (page === "login") return <LoginPage />;
+  if (!auth.user && !isLocalMode) {
     if (page === "home") {
       return (
         <AppLayout page={page} onNavigate={navigate}>
@@ -125,7 +132,7 @@ export default function App() {
     }
     return <LoginPage />;
   }
-  if (auth.user.inviteStatus !== "active") return <InvitePage />;
+  if (!isLocalMode && auth.user?.inviteStatus !== "active") return <InvitePage />;
 
   return (
     <AppLayout page={page} onNavigate={navigate}>

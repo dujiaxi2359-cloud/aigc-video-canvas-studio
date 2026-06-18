@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
-import ReactFlow, { Background, BackgroundVariant, ConnectionLineType, Panel, useReactFlow, type ReactFlowInstance } from "reactflow";
+import ReactFlow, { ConnectionLineType, Panel, useReactFlow, type ReactFlowInstance } from "reactflow";
 import { CircleHelp, Grid3X3, Map, Scan } from "lucide-react";
 import { ConnectionCreateMenu, type ConnectionCreateMenuState } from "./ConnectionCreateMenu";
 import { nodeTypes } from "./nodeTypes";
@@ -8,6 +8,7 @@ import { StudioConnectionLine } from "./StudioConnectionLine";
 import { useCanvasHotkeys } from "./useCanvasHotkeys";
 import { useCanvasStore } from "../../store/canvasStore";
 import type { WorkflowNodeType } from "../../types/node";
+import { DotGridBackground } from "./DotGridBackground";
 
 type PendingConnection = {
   sourceNodeId: string;
@@ -295,7 +296,7 @@ export function WorkflowCanvas({ showGrid = true, onToggleGrid = () => undefined
   return (
     <div
       ref={reactFlowWrapper}
-      className={`canvas-space relative h-full w-full bg-[#020203] ${isConnecting ? "is-connecting" : ""} ${isCanvasInteracting ? "is-interacting" : ""}`}
+      className={`canvas-space has-dot-grid relative h-full w-full bg-[#020203] ${isConnecting ? "is-connecting" : ""} ${isCanvasInteracting ? "is-interacting" : ""}`}
       onDoubleClick={(event) => {
         const target = event.target as HTMLElement | null;
         if (canOpenPaneAddMenu(target)) openAddNodeMenuAt({ x: event.clientX, y: event.clientY });
@@ -321,6 +322,7 @@ export function WorkflowCanvas({ showGrid = true, onToggleGrid = () => undefined
         }
       }}
     >
+      {showGrid && <DotGridBackground />}
       <ReactFlowWithExtras
         className="studio-flow"
         nodes={displayNodes}
@@ -378,7 +380,6 @@ export function WorkflowCanvas({ showGrid = true, onToggleGrid = () => undefined
         proOptions={{ hideAttribution: true }}
         defaultEdgeOptions={defaultEdgeOptions}
       >
-        {showGrid && !isCanvasInteracting && <Background color="rgba(255,255,255,0.085)" gap={28} size={1} variant={BackgroundVariant.Dots} />}
         <ZoomControls showGrid={showGrid} onToggleGrid={onToggleGrid} />
       </ReactFlowWithExtras>
 

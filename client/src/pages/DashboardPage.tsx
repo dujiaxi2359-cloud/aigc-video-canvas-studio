@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent, type ReactNode } from "react";
 import { motion } from "framer-motion";
-import { ArrowRight, Mic, Plus, WandSparkles, Workflow } from "lucide-react";
+import { ArrowRight, Clapperboard, Image, Layers3, Mic, Play, Plus, WandSparkles, Workflow } from "lucide-react";
 import type { Page } from "../App";
 import { HomeTopNav } from "../components/home/HomeTopNav";
 import { useCanvasStore } from "../store/canvasStore";
@@ -13,6 +13,23 @@ const featured = [
   { title: "3D 产品广告", subtitle: "材质、灯光与镜头运动", tone: "from-[#2f3348] via-[#58688c] to-[#b1bdd1]" },
   { title: "电商主图工作流", subtitle: "一组素材生成完整视觉", tone: "from-[#4a302e] via-[#936d5e] to-[#d8b693]" }
 ];
+
+const quickWorkflows = [
+  { title: "商品图转视频", desc: "主图、运镜、卖点字幕", icon: Clapperboard, prompt: "把商品主图制作成 15 秒竖屏电商短视频" },
+  { title: "批量素材变体", desc: "多比例、多场景输出", icon: Layers3, prompt: "基于现有素材生成多组适合投放的视频变体" },
+  { title: "首帧视觉设计", desc: "构图、灯光、产品焦点", icon: Image, prompt: "先设计一个具有商业质感的视频首帧" }
+];
+
+function SpotlightPanel({ children, className = "" }: { children: ReactNode; className?: string }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const updateSpotlight = (event: PointerEvent<HTMLDivElement>) => {
+    const rect = ref.current?.getBoundingClientRect();
+    if (!rect || !ref.current) return;
+    ref.current.style.setProperty("--spot-x", `${event.clientX - rect.left}px`);
+    ref.current.style.setProperty("--spot-y", `${event.clientY - rect.top}px`);
+  };
+  return <div ref={ref} onPointerMove={updateSpotlight} className={`video-spotlight-panel ${className}`}>{children}</div>;
+}
 
 export function DashboardPage({ onNavigate, navPage = "video" }: { onNavigate: (page: Page, projectId?: string) => void; navPage?: Page }) {
   const [prompt, setPrompt] = useState("");
@@ -66,44 +83,69 @@ export function DashboardPage({ onNavigate, navPage = "video" }: { onNavigate: (
   }
 
   return (
-    <motion.div className="studio-page min-h-full overflow-auto" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+    <motion.div className="studio-page video-dashboard min-h-full overflow-auto" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.2 }}>
       <HomeTopNav page={navPage} onNavigate={onNavigate} />
-      <main className="mx-auto max-w-[1480px] px-5 pb-16 pt-32 md:px-10">
-        <section className="mx-auto max-w-[820px] text-center">
-          <div className="mx-auto grid h-12 w-12 place-items-center rounded-2xl border border-white/[0.1] bg-white/[0.05] text-white/80 shadow-[0_18px_70px_rgba(0,0,0,.35)]"><WandSparkles size={21} /></div>
-          <h1 className="mt-5 text-[36px] font-semibold tracking-[-0.035em] text-white md:text-[48px]">今天要做点什么？</h1>
-          <p className="mt-3 text-[14px] text-white/38">从一个想法开始，自动搭建图片、视频和素材节点。</p>
-          <div className={`studio-prompt-bar mx-auto mt-8 ${invalid ? "is-invalid" : ""}`}>
+      <main className="video-dashboard-main mx-auto max-w-[1440px] px-5 pb-16 pt-28 md:px-10">
+        <section className="video-dashboard-hero">
+          <SpotlightPanel className="video-command-panel">
+            <div className="video-command-kicker"><WandSparkles size={14} /> AI 视频工作台</div>
+            <h1>从一句话开始<br />搭建视频工作流</h1>
+            <p>描述商品、受众与风格，我们会在无限画布中生成图片、视频和素材节点。</p>
+            <div className={`studio-prompt-bar video-prompt-bar ${invalid ? "is-invalid" : ""}`}>
             <textarea
               value={prompt}
               onChange={(event) => setPrompt(event.target.value)}
               onKeyDown={(event) => {
                 if ((event.metaKey || event.ctrlKey) && event.key === "Enter") void begin(prompt);
               }}
-              placeholder="开始一段灵感对话..."
+              placeholder="例如：为这款智能眼镜制作一条 15 秒小红书竖屏广告…"
             />
             <button type="button" title="语音输入" className="studio-prompt-icon"><Mic size={17} /></button>
             <button type="button" title="开始创作" className="studio-prompt-submit" onClick={() => void begin(prompt)}><ArrowRight size={18} /></button>
-          </div>
+            </div>
+            <div className="video-command-meta"><span>⌘ Enter 创建</span><span>自动连接节点</span><span>可随时继续编辑</span></div>
+          </SpotlightPanel>
+
+          <aside className="video-quick-panel" aria-label="快捷工作流">
+            <div className="video-panel-heading"><div><span>快捷开始</span><strong>常用工作流</strong></div><Play size={16} /></div>
+            <div className="video-quick-list">
+              {quickWorkflows.map((item, index) => {
+                const Icon = item.icon;
+                return (
+                  <button
+                    type="button"
+                    key={item.title}
+                    onClick={() => void begin(item.prompt, item.title)}
+                    className="video-quick-item"
+                    style={{ "--item-index": index } as CSSProperties}
+                  >
+                    <span className="video-quick-icon"><Icon size={17} /></span>
+                    <span><strong>{item.title}</strong><small>{item.desc}</small></span>
+                    <ArrowRight size={15} />
+                  </button>
+                );
+              })}
+            </div>
+          </aside>
         </section>
 
-        <section className="mt-16">
-          <div className="mb-4 flex items-end justify-between">
-            <div><div className="text-[18px] font-semibold">最近项目</div><div className="mt-1 text-[12px] text-white/34">继续上次的创作，或者从空白画布开始。</div></div>
-            <button type="button" onClick={() => onNavigate("workspace")} className="text-[12px] text-white/46 hover:text-white">所有项目 <ArrowRight className="inline" size={13} /></button>
+        <section className="video-recent-section">
+          <div className="video-section-heading">
+            <div><div className="text-[18px] font-semibold">最近项目</div><div className="mt-1 text-[12px] text-white/38">继续编辑，或从空白无限画布开始。</div></div>
+            <button type="button" onClick={() => onNavigate("workspace")}>查看全部 <ArrowRight size={13} /></button>
           </div>
-          <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-5">
-            <button type="button" onClick={() => void begin()} className="studio-home-project group">
-              <div className="grid aspect-[16/10] place-items-center bg-white/[0.025]"><span className="grid h-11 w-11 place-items-center rounded-full bg-white text-black transition group-hover:scale-105"><Plus size={20} /></span></div>
-              <div className="p-3.5 text-left"><div className="text-[13px] font-semibold">新建项目</div><div className="mt-1 text-[11px] text-white/32">空白无限画布</div></div>
+          <div className="video-project-grid">
+            <button type="button" onClick={() => void begin()} className="video-project-card video-project-new group">
+              <div className="video-project-preview"><span><Plus size={20} /></span></div>
+              <div className="video-project-copy"><div><strong>新建项目</strong><small>空白无限画布</small></div><ArrowRight size={14} /></div>
             </button>
             {recent.map((project, index) => (
-              <button key={project.id} type="button" onClick={() => void openProject(project.id)} className="studio-home-project group">
-                <div className={`relative aspect-[16/10] overflow-hidden bg-gradient-to-br ${featured[index % featured.length].tone}`}>
+              <button key={project.id} type="button" onClick={() => void openProject(project.id)} className="video-project-card group">
+                <div className={`video-project-preview relative bg-gradient-to-br ${featured[index % featured.length].tone}`}>
                   <Workflow className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-white/44" size={30} />
                   <div className="absolute inset-0 bg-[linear-gradient(145deg,rgba(255,255,255,.14),transparent_42%,rgba(0,0,0,.28))]" />
                 </div>
-                <div className="p-3.5 text-left"><div className="truncate text-[13px] font-semibold">{project.name}</div><div className="mt-1 text-[11px] text-white/32">{formatTime(project.updatedAt)}</div></div>
+                <div className="video-project-copy"><div><strong>{project.name}</strong><small>{formatTime(project.updatedAt)}</small></div><ArrowRight size={14} /></div>
               </button>
             ))}
           </div>
