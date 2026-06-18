@@ -5,6 +5,7 @@ import { downloadGeneratedFile } from "../../utils/downloadGeneratedFile.js";
 import { ProviderError, rawErrorMessage } from "../../utils/providerErrors.js";
 import { mapVideoDimensions, mapVideoSize, normalizeVideoAspectRatio, normalizeVideoResolution } from "../../utils/videoParams.js";
 import { getAsset } from "../asset.service.js";
+import { ensureAssetLocalFile } from "../assets/ensureAssetLocalFile.service.js";
 import { prepareVideoFrameForAspectRatio } from "../assets/prepareVideoFrame.service.js";
 import { saveGenerationTask } from "../generationTask.service.js";
 import type { ProviderGenerateResult, VideoProviderParams } from "./providerTypes.js";
@@ -27,10 +28,7 @@ function mimeType(filePath: string, configured?: string) {
 async function assetDataUrls(assetIds?: string[], aspectRatio?: string) {
   const urls: string[] = [];
   for (const assetId of assetIds ?? []) {
-    const asset = await getAsset(assetId);
-    if (!asset?.localPath || !fs.existsSync(asset.localPath)) {
-      throw new ProviderError("MISSING_INPUT_ASSET", "Grok 引用的图片或视频素材不存在。");
-    }
+    const asset = await ensureAssetLocalFile(await getAsset(assetId), "Grok 引用的图片或视频素材");
     const sourcePath = asset.mimeType?.startsWith("image/")
       ? (await prepareVideoFrameForAspectRatio(asset.localPath, aspectRatio, "smart_crop")).localPath
       : asset.localPath;
@@ -42,10 +40,7 @@ async function assetDataUrls(assetIds?: string[], aspectRatio?: string) {
 async function assetFiles(assetIds?: string[], aspectRatio?: string) {
   const files: Array<{ blob: Blob; filename: string }> = [];
   for (const assetId of assetIds ?? []) {
-    const asset = await getAsset(assetId);
-    if (!asset?.localPath || !fs.existsSync(asset.localPath)) {
-      throw new ProviderError("MISSING_INPUT_ASSET", "Grok 引用的图片或视频素材不存在。");
-    }
+    const asset = await ensureAssetLocalFile(await getAsset(assetId), "Grok 引用的图片或视频素材");
     const prepared = asset.mimeType?.startsWith("image/")
       ? await prepareVideoFrameForAspectRatio(asset.localPath, aspectRatio, "smart_crop")
       : undefined;

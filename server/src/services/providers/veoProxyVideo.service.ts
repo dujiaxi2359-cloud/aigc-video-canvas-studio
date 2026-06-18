@@ -4,6 +4,7 @@ import { legacyInputModeToOfficialMode, type OfficialVideoMode } from "../../typ
 import { downloadGeneratedFile } from "../../utils/downloadGeneratedFile.js";
 import { ProviderError, rawErrorMessage } from "../../utils/providerErrors.js";
 import { getAsset } from "../asset.service.js";
+import { ensureAssetLocalFile } from "../assets/ensureAssetLocalFile.service.js";
 import { prepareVideoFrameForAspectRatio } from "../assets/prepareVideoFrame.service.js";
 import { saveGenerationTask } from "../generationTask.service.js";
 import type { ProviderGenerateResult, VideoProviderParams } from "./providerTypes.js";
@@ -42,10 +43,7 @@ async function imageDataUris(assetIds?: string[], aspectRatio?: string) {
   const images: string[] = [];
   const audits: Array<Record<string, unknown>> = [];
   for (const assetId of assetIds ?? []) {
-    const asset = await getAsset(assetId);
-    if (!asset?.localPath || !fs.existsSync(asset.localPath)) {
-      throw new ProviderError("MISSING_INPUT_ASSET", "Veo 中转接口引用的图片素材不存在或已被删除。");
-    }
+    const asset = await ensureAssetLocalFile(await getAsset(assetId), "Veo 中转接口引用的图片素材");
     const prepared = aspectRatio
       ? await prepareVideoFrameForAspectRatio(asset.localPath, aspectRatio, "smart_crop")
       : undefined;
@@ -56,6 +54,7 @@ async function imageDataUris(assetIds?: string[], aspectRatio?: string) {
     audits.push({
       assetId,
       inputImageSource: prepared?.transformed ? "smartCropAspectRatio" : "localPath",
+      inputFileSource: asset.localFileSource,
       requestedAspectRatio: aspectRatio,
       inputImageWidth: prepared?.width,
       inputImageHeight: prepared?.height,

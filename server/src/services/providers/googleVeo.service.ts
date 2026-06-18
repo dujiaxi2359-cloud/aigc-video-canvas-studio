@@ -11,6 +11,7 @@ import { ProviderError, rawErrorMessage } from "../../utils/providerErrors.js";
 import { withTemporaryDirectNetwork } from "../../utils/proxy.js";
 import { mapVideoParams } from "../../utils/videoParams.js";
 import { legacyInputModeToOfficialMode } from "../../types/videoModes.js";
+import { ensureAssetLocalFile } from "../assets/ensureAssetLocalFile.service.js";
 import type { OfficialVideoMode } from "../../types/videoModes.js";
 import { prepareVideoFrameForAspectRatio } from "../assets/prepareVideoFrame.service.js";
 import { parseVeoOperationResult, type VeoOperationParseResult } from "./googleVeo/veoOperationParser.js";
@@ -386,10 +387,7 @@ type VeoInputImage = Image & {
 };
 
 async function assetImage(assetId: string, requestedAspectRatio?: string): Promise<VeoInputImage> {
-  const asset = await getAsset(assetId);
-  if (!asset?.localPath || !fs.existsSync(asset.localPath)) {
-    throw new ProviderError("MISSING_INPUT_ASSET", "Google Veo 引用的图片素材不存在或已被删除。");
-  }
+  const asset = await ensureAssetLocalFile(await getAsset(assetId), "Google Veo 引用的图片素材");
 
   const originalMetadata = await readGeneratedFileMetadata(asset.localPath);
   const prepared = requestedAspectRatio
@@ -421,10 +419,7 @@ async function assetImage(assetId: string, requestedAspectRatio?: string): Promi
 
 async function assetImageForRaiFallback(assetId: string): Promise<VeoInputImage> {
   try {
-    const asset = await getAsset(assetId);
-    if (!asset?.localPath || !fs.existsSync(asset.localPath)) {
-      throw new ProviderError("MISSING_INPUT_ASSET", "Google Veo 引用的图片素材不存在或已被删除。");
-    }
+    const asset = await ensureAssetLocalFile(await getAsset(assetId), "Google Veo 引用的图片素材");
 
     const metadata = await sharp(asset.localPath).metadata();
     if (!metadata.width || !metadata.height) return assetImage(assetId);
@@ -545,10 +540,7 @@ async function waitForGoogleFileActive(ai: GoogleGenAI, fileName: string) {
 }
 
 async function assetVideoForExtension(assetId: string, ai: GoogleGenAI) {
-  const asset = await getAsset(assetId);
-  if (!asset?.localPath || !fs.existsSync(asset.localPath)) {
-    throw new ProviderError("MISSING_VIDEO_INPUT", "Veo 视频延展引用的视频素材不存在或已被删除。");
-  }
+  const asset = await ensureAssetLocalFile(await getAsset(assetId), "Veo 视频延展引用的视频素材");
   const providerId = asset.providerId;
   const modelId = asset.modelId ?? "";
   if (providerId !== "google" || !/veo/i.test(modelId)) {

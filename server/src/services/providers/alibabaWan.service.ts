@@ -6,6 +6,7 @@ import { ProviderError, rawErrorMessage } from "../../utils/providerErrors.js";
 import { buildNegativePrompt } from "../../utils/qualityPrompt.js";
 import { mapVideoParams } from "../../utils/videoParams.js";
 import { getAsset } from "../asset.service.js";
+import { ensureAssetLocalFile } from "../assets/ensureAssetLocalFile.service.js";
 import { prepareVideoFrameForAspectRatio } from "../assets/prepareVideoFrame.service.js";
 import { resolveRemoteAsset } from "../assets/resolveRemoteAsset.service.js";
 import type { ProviderGenerateResult, VideoProviderParams } from "./providerTypes.js";
@@ -198,14 +199,17 @@ function findTaskFailureReason(value: unknown): string | undefined {
 }
 
 async function publicAssetUrl(assetId: string, params: VideoProviderParams, index: number) {
-  const asset = await getAsset(assetId);
-  if (!asset) throw new ProviderError("MISSING_INPUT_ASSET", "视频生成引用的素材不存在或已被删除。");
+  const loadedAsset = await getAsset(assetId);
+  if (!loadedAsset) throw new ProviderError("MISSING_INPUT_ASSET", "视频生成引用的素材不存在或已被删除。");
+  let asset = loadedAsset;
 
   let localPath = asset.localPath;
   let filename = asset.originalName;
   let transformed = false;
   const mode = actualWanMode(params);
   if (localPath && ["image_to_video_first_frame", "image_to_video_first_last_frame", "audio_driven_video"].includes(mode)) {
+    asset = await ensureAssetLocalFile(asset, "Wan 引用的图片素材");
+    localPath = asset.localPath;
     const prepared = await prepareVideoFrameForAspectRatio(localPath, params.aspectRatio, "smart_crop");
     localPath = prepared.localPath;
     transformed = prepared.transformed;
@@ -213,7 +217,7 @@ async function publicAssetUrl(assetId: string, params: VideoProviderParams, inde
   }
 
   const resolved = await resolveRemoteAsset(
-    { localPath, url: transformed ? undefined : asset.url, filename },
+    { localPath, url: transformed ? undefined : asset.url, filename, storageKey: transformed ? undefined : asset.storageKey },
     "alibaba",
     "video-input",
     {
@@ -244,7 +248,7 @@ async function publicVideoUrl(assetId: string) {
   const asset = await getAsset(assetId);
   if (!asset) throw new ProviderError("MISSING_INPUT_ASSET", "视频生成引用的视频素材不存在或已被删除。");
   const resolved = await resolveRemoteAsset(
-    { localPath: asset.localPath, url: asset.url, filename: asset.originalName },
+    { localPath: asset.localPath, url: asset.url, filename: asset.originalName, storageKey: asset.storageKey },
     "alibaba",
     "video-input",
     {

@@ -5,6 +5,7 @@ import { downloadGeneratedFile } from "../../utils/downloadGeneratedFile.js";
 import { ProviderError, rawErrorMessage } from "../../utils/providerErrors.js";
 import { mapVideoDimensions, mapVideoSize, normalizeVideoAspectRatio } from "../../utils/videoParams.js";
 import { getAsset } from "../asset.service.js";
+import { ensureAssetLocalFile } from "../assets/ensureAssetLocalFile.service.js";
 import { prepareVideoFrameForAspectRatio } from "../assets/prepareVideoFrame.service.js";
 import { saveGenerationTask } from "../generationTask.service.js";
 import type { ProviderGenerateResult, VideoProviderParams } from "./providerTypes.js";
@@ -32,10 +33,7 @@ export function klingBearerToken(apiKey: string, timestamp = Math.floor(Date.now
 async function imageBase64(assetIds?: string[], aspectRatio?: string) {
   const images: string[] = [];
   for (const assetId of assetIds ?? []) {
-    const asset = await getAsset(assetId);
-    if (!asset?.localPath || !fs.existsSync(asset.localPath)) {
-      throw new ProviderError("MISSING_INPUT_ASSET", "可灵引用的图片素材不存在。");
-    }
+    const asset = await ensureAssetLocalFile(await getAsset(assetId), "可灵引用的图片素材");
     const prepared = await prepareVideoFrameForAspectRatio(asset.localPath, aspectRatio, "contain_blur");
     images.push(fs.readFileSync(prepared.localPath).toString("base64"));
   }

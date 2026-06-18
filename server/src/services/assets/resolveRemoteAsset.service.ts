@@ -4,6 +4,7 @@ import { ProviderError } from "../../utils/providerErrors.js";
 import { readGeneratedFileMetadata } from "../../utils/mediaMetadata.js";
 import { getProviderAssetStrategy, type AssetInputStrategy } from "./providerAssetStrategy.js";
 import { uploadLocalFileToOss } from "./ossUpload.service.js";
+import { ensureAssetLocalFile } from "./ensureAssetLocalFile.service.js";
 import { signedAssetUrl } from "../../utils/assetAccessToken.js";
 import { requireRequestContext } from "../requestContext.js";
 import {
@@ -175,6 +176,10 @@ export function readLocalFileAsStream(localPath: string) {
   return fs.createReadStream(localPath);
 }
 
+async function ensureLocalAssetForRead(asset: AssetLike) {
+  return ensureAssetLocalFile(asset, "模型引用的素材");
+}
+
 function attachLocalMetadata(result: ResolvedRemoteAsset, metadata: Awaited<ReturnType<typeof readGeneratedFileMetadata>>) {
   result.width = metadata.width;
   result.height = metadata.height;
@@ -332,11 +337,12 @@ export async function resolveRemoteAsset(
     result = { type: "url", url: asset.publicUrl, mimeType, filename, localPath: asset.localPath, source: "publicUrl" };
   } else if (isRemoteHttpUrl(asset.url)) {
     result = { type: "url", url: asset.url, mimeType, filename, localPath: asset.localPath, source: "remoteUrl" };
-  } else if (asset.localPath && strategy.prefer === "base64" && strategy.supportsBase64) {
-    result = { type: "base64", base64: readLocalFileAsBase64(asset.localPath), mimeType, filename, localPath: asset.localPath, source: "localPath" };
-  } else if (asset.localPath && strategy.prefer === "multipart" && strategy.supportsMultipart) {
-    assertLocalFile(asset.localPath);
-    result = { type: "multipart", mimeType, filename, localPath: asset.localPath, source: "localPath" };
+  } else if ((asset.localPath || asset.storageKey) && strategy.prefer === "base64" && strategy.supportsBase64) {
+    const localAsset = await ensureLocalAssetForRead(asset);
+    result = { type: "base64", base64: readLocalFileAsBase64(localAsset.localPath), mimeType, filename, localPath: localAsset.localPath, source: "localPath" };
+  } else if ((asset.localPath || asset.storageKey) && strategy.prefer === "multipart" && strategy.supportsMultipart) {
+    const localAsset = await ensureLocalAssetForRead(asset);
+    result = { type: "multipart", mimeType, filename, localPath: localAsset.localPath, source: "localPath" };
   } else if (strategy.supportsPublicUrl && publicUrlFromBackendUrl(asset.url)) {
     result = { type: "url", url: publicUrlFromBackendUrl(asset.url), mimeType, filename, localPath: asset.localPath, source: "backendPublicUrl" };
   } else if (asset.localPath && strategy.supportsPublicUrl && publicUrlFromLocalPath(asset.localPath)) {
@@ -353,12 +359,13 @@ export async function resolveRemoteAsset(
     result = { type: "url", url: oss.publicUrl || oss.signedUrl, mimeType, filename, localPath: asset.localPath, source: "oss" };
   }
 
-  if (!result && asset.localPath && strategy.supportsBase64) {
-    result = { type: "base64", base64: readLocalFileAsBase64(asset.localPath), mimeType, filename, localPath: asset.localPath, source: "localPath" };
+  if (!result && (asset.localPath || asset.storageKey) && strategy.supportsBase64) {
+    const localAsset = await ensureLocalAssetForRead(asset);
+    result = { type: "base64", base64: readLocalFileAsBase64(localAsset.localPath), mimeType, filename, localPath: localAsset.localPath, source: "localPath" };
   }
-  if (!result && asset.localPath && strategy.supportsMultipart) {
-    assertLocalFile(asset.localPath);
-    result = { type: "multipart", mimeType, filename, localPath: asset.localPath, source: "localPath" };
+  if (!result && (asset.localPath || asset.storageKey) && strategy.supportsMultipart) {
+    const localAsset = await ensureLocalAssetForRead(asset);
+    result = { type: "multipart", mimeType, filename, localPath: localAsset.localPath, source: "localPath" };
   }
   if (result?.type === "url" && result.url) await probePublicAssetUrl(result.url);
   if (result) attachLocalMetadata(result, localMetadata);

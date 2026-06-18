@@ -5,6 +5,7 @@ import { downloadGeneratedFile } from "../../utils/downloadGeneratedFile.js";
 import { ProviderError, rawErrorMessage } from "../../utils/providerErrors.js";
 import { mapVideoDimensions, mapVideoSize, normalizeVideoAspectRatio, normalizeVideoResolution } from "../../utils/videoParams.js";
 import { getAsset } from "../asset.service.js";
+import { ensureAssetLocalFile } from "../assets/ensureAssetLocalFile.service.js";
 import { prepareVideoFrameForAspectRatio } from "../assets/prepareVideoFrame.service.js";
 import { resolveRemoteAsset } from "../assets/resolveRemoteAsset.service.js";
 import { saveGenerationTask } from "../generationTask.service.js";
@@ -50,10 +51,7 @@ function mimeType(filePath: string, configured?: string) {
 async function assetDataUrls(assetIds?: string[], aspectRatio?: string) {
   const urls: string[] = [];
   for (const assetId of assetIds ?? []) {
-    const asset = await getAsset(assetId);
-    if (!asset?.localPath || !fs.existsSync(asset.localPath)) {
-      throw new ProviderError("MISSING_INPUT_ASSET", "Seedance 引用的图片、视频或音频素材不存在。");
-    }
+    const asset = await ensureAssetLocalFile(await getAsset(assetId), "Seedance 引用的图片、视频或音频素材");
     const sourcePath = asset.mimeType?.startsWith("image/")
       ? (await prepareVideoFrameForAspectRatio(asset.localPath, aspectRatio, "contain_blur")).localPath
       : asset.localPath;
@@ -65,10 +63,7 @@ async function assetDataUrls(assetIds?: string[], aspectRatio?: string) {
 async function assetMultipartFiles(assetIds?: string[], aspectRatio?: string) {
   const files: Array<{ localPath: string; mimeType: string; filename: string }> = [];
   for (const assetId of assetIds ?? []) {
-    const asset = await getAsset(assetId);
-    if (!asset?.localPath || !fs.existsSync(asset.localPath)) {
-      throw new ProviderError("MISSING_INPUT_ASSET", "视频中转引用的本地图片素材不存在。");
-    }
+    const asset = await ensureAssetLocalFile(await getAsset(assetId), "视频中转引用的图片素材");
     const prepared = asset.mimeType?.startsWith("image/")
       ? await prepareVideoFrameForAspectRatio(asset.localPath, aspectRatio, "contain_blur")
       : undefined;
@@ -100,9 +95,13 @@ async function assetJsonReferences(assetIds: string[] | undefined, aspectRatio: 
   if (!["url", "url_or_asset"].includes(imageTransport ?? "")) return assetDataUrls(assetIds, aspectRatio);
   const urls: string[] = [];
   for (const assetId of assetIds ?? []) {
-    const asset = await getAsset(assetId);
-    if (!asset?.localPath && !asset?.url && !asset?.publicUrl) {
+    const loadedAsset = await getAsset(assetId);
+    if (!loadedAsset?.localPath && !loadedAsset?.url && !loadedAsset?.publicUrl) {
       throw new ProviderError("MISSING_INPUT_ASSET", "中转接口引用的素材不存在或已被删除。");
+    }
+    let asset = loadedAsset;
+    if (asset.localPath && asset.mimeType?.startsWith("image/") && aspectRatio) {
+      asset = await ensureAssetLocalFile(asset, "中转接口引用的素材");
     }
     const prepared = asset.localPath && asset.mimeType?.startsWith("image/")
       ? await prepareVideoFrameForAspectRatio(asset.localPath, aspectRatio, "contain_blur")

@@ -1,5 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
+import { Readable } from "node:stream";
+import { pipeline } from "node:stream/promises";
 import COS from "cos-nodejs-sdk-v5";
 import { createId } from "../../utils/id.js";
 import { sanitizeFilename } from "../../utils/exportFiles.js";
@@ -124,6 +126,14 @@ export function isCosLocalPath(localPath?: string | null) {
   return Boolean(localPath?.startsWith("cos://"));
 }
 
+export function cosKeyFromLocalPath(localPath?: string | null) {
+  if (!isCosLocalPath(localPath)) return undefined;
+  const withoutScheme = String(localPath).replace(/^cos:\/\//i, "");
+  const slashIndex = withoutScheme.indexOf("/");
+  if (slashIndex < 0) return undefined;
+  return normalizeCosKey(withoutScheme.slice(slashIndex + 1));
+}
+
 export async function signCosUpload(input: {
   workspaceId: string;
   fileName?: string;
@@ -242,4 +252,23 @@ export async function deleteCosFile(fileKey: string) {
     Region: config.region,
     Key: normalizeCosKey(fileKey)
   });
+}
+
+export async function downloadCosFileToLocal(input: {
+  fileKey: string;
+  localPath: string;
+  expiresSeconds?: number;
+}) {
+  const key = normalizeCosKey(input.fileKey);
+  fs.mkdirSync(path.dirname(input.localPath), { recursive: true });
+  const url = await cachedSignedCosUrl({
+    fileKey: key,
+    expiresSeconds: input.expiresSeconds ?? 900
+  });
+  const response = await fetch(url);
+  if (!response.ok || !response.body) {
+    throw new Error(`COS_DOWNLOAD_FAILED:${response.status}`);
+  }
+  await pipeline(Readable.fromWeb(response.body as unknown as Parameters<typeof Readable.fromWeb>[0]), fs.createWriteStream(input.localPath));
+  return input.localPath;
 }
