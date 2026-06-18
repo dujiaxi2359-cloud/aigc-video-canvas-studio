@@ -2198,6 +2198,48 @@ select {
   color: rgba(255, 255, 255, 0.8) !important;
 }
 
+.studio-account-language-flyout {
+  position: absolute;
+  right: calc(100% + 10px);
+  top: 174px;
+  display: grid;
+  width: 156px;
+  gap: 3px;
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  border-radius: 16px;
+  background:
+    radial-gradient(circle at 18% 8%, rgba(255, 255, 255, 0.06), transparent 36%),
+    rgba(23, 23, 25, 0.98);
+  padding: 7px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 24px 70px rgba(0, 0, 0, 0.48);
+}
+
+.studio-account-language-row {
+  display: flex;
+  min-height: 34px;
+  align-items: center;
+  justify-content: space-between;
+  border-radius: 11px;
+  padding: 0 10px;
+  color: rgba(255, 255, 255, 0.66);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.studio-account-language-row:hover,
+.studio-account-language-row.is-active {
+  background: rgba(255, 255, 255, 0.075);
+  color: rgba(255, 255, 255, 0.94);
+}
+
+.studio-account-language-row small {
+  color: rgba(232, 216, 154, 0.74);
+  font-size: 10px;
+  font-weight: 760;
+}
+
 .studio-account-support-flyout {
   position: absolute;
   right: calc(100% + 10px);
@@ -2308,6 +2350,12 @@ select {
 }
 
 @media (max-width: 960px) {
+  .studio-account-language-flyout {
+    right: 0;
+    top: calc(100% + 8px);
+    width: min(156px, calc(100vw - 24px));
+  }
+
   .studio-account-support-flyout {
     right: 0;
     top: calc(100% + 8px);

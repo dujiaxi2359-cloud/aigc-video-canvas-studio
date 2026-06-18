@@ -43,6 +43,7 @@ export function HomeTopNav({ page, onNavigate }: { page: Page; onNavigate: (page
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
+  const [languageOpen, setLanguageOpen] = useState(false);
   const auth = useAuthStore();
   const activeWorkspace = auth.workspaces.find((workspace) => workspace.id === auth.activeWorkspaceId) || auth.workspaces[0];
   const displayName = accountName(auth.user?.email, auth.user?.name);
@@ -108,7 +109,10 @@ export function HomeTopNav({ page, onNavigate }: { page: Page; onNavigate: (page
                 onClick={() => {
                   setNotificationsOpen(false);
                   setAccountOpen((value) => {
-                    if (value) setHelpOpen(false);
+                    if (value) {
+                      setHelpOpen(false);
+                      setLanguageOpen(false);
+                    }
                     return !value;
                   });
                 }}
@@ -160,10 +164,17 @@ export function HomeTopNav({ page, onNavigate }: { page: Page; onNavigate: (page
                         <span className="studio-account-row-icon"><UserRound size={18} /></span>
                         <span>个人主页</span>
                       </button>
-                      <button type="button" className="studio-account-row" onClick={() => { setAccountOpen(false); onNavigate("settings"); }}>
+                      <button
+                        type="button"
+                        className={`studio-account-row ${languageOpen ? "is-active" : ""}`}
+                        onClick={() => {
+                          setHelpOpen(false);
+                          setLanguageOpen((value) => !value);
+                        }}
+                      >
                         <span className="studio-account-row-icon"><Globe2 size={18} /></span>
                         <span>简体中文</span>
-                        <ChevronRight size={18} className="studio-account-row-arrow" />
+                        <ChevronDown size={18} className="studio-account-row-arrow" />
                       </button>
                       <button type="button" className="studio-account-row" onClick={() => { setAccountOpen(false); onNavigate("settings"); }}>
                         <span className="studio-account-row-icon"><Settings size={18} /></span>
@@ -176,7 +187,10 @@ export function HomeTopNav({ page, onNavigate }: { page: Page; onNavigate: (page
                       <button
                         type="button"
                         className={`studio-account-row ${helpOpen ? "is-active" : ""}`}
-                        onClick={() => setHelpOpen((value) => !value)}
+                        onClick={() => {
+                          setLanguageOpen(false);
+                          setHelpOpen((value) => !value);
+                        }}
                       >
                         <span className="studio-account-row-icon"><HelpCircle size={18} /></span>
                         <span>帮助中心</span>
@@ -188,6 +202,26 @@ export function HomeTopNav({ page, onNavigate }: { page: Page; onNavigate: (page
                       </button>
                     </div>
                     <AnimatePresence>
+                      {languageOpen && (
+                        <motion.div
+                          className="studio-account-language-flyout"
+                          initial={{ opacity: 0, x: 8, scale: 0.985 }}
+                          animate={{ opacity: 1, x: 0, scale: 1 }}
+                          exit={{ opacity: 0, x: 8, scale: 0.985 }}
+                          transition={{ duration: 0.16, ease: [0.22, 1, 0.36, 1] }}
+                        >
+                          <button type="button" className="studio-account-language-row">
+                            <span>English</span>
+                          </button>
+                          <button type="button" className="studio-account-language-row">
+                            <span>中文繁體</span>
+                          </button>
+                          <button type="button" className="studio-account-language-row is-active">
+                            <span>简体中文</span>
+                            <small>当前</small>
+                          </button>
+                        </motion.div>
+                      )}
                       {helpOpen && (
                         <motion.div
                           className="studio-account-support-flyout"
