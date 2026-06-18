@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Copy, Download, Maximize2, Minus, Plus, RotateCcw, X } from "lucide-react";
 
 type MediaLightboxProps = {
@@ -45,7 +46,7 @@ export function MediaLightbox({ open, type, src, title, meta = [], onClose }: Me
     await navigator.clipboard.writeText(src);
   }
 
-  return (
+  const content = (
     <div className="media-lightbox nodrag nopan" role="dialog" aria-modal="true" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
       <div className="media-lightbox-top">
         <div className="min-w-0">
@@ -65,6 +66,8 @@ export function MediaLightbox({ open, type, src, title, meta = [], onClose }: Me
             src={src}
             alt={title || "高清图片"}
             draggable={false}
+            loading="eager"
+            decoding="async"
             style={{ transform: `translate(${position.x}px, ${position.y}px) scale(${scale})` }}
             onWheel={(event) => {
               event.preventDefault();
@@ -111,4 +114,6 @@ export function MediaLightbox({ open, type, src, title, meta = [], onClose }: Me
       </div>
     </div>
   );
+
+  return createPortal(content, document.body);
 }

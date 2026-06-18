@@ -1,13 +1,59 @@
 import { getDb } from "../db/database.js";
 import { createId } from "../utils/id.js";
 import { now } from "../utils/time.js";
+import { getAsset } from "./asset.service.js";
 import { requireRequestContext } from "./requestContext.js";
 
-function parseProject(row: any) {
+type ProjectNode = {
+  id?: string;
+  type?: string;
+  data?: Record<string, unknown>;
+  [key: string]: unknown;
+};
+
+async function hydrateProjectNodes(nodes: ProjectNode[]) {
+  const assetIds = new Set<string>();
+  for (const node of nodes) {
+    const data = node.data;
+    for (const key of ["assetId", "outputAssetId"]) {
+      const value = data?.[key];
+      if (typeof value === "string" && value) assetIds.add(value);
+    }
+  }
+  if (!assetIds.size) return nodes;
+
+  const assetEntries = await Promise.all([...assetIds].map(async (id) => [id, await getAsset(id).catch(() => undefined)] as const));
+  const assets = new Map(assetEntries.filter((entry) => entry[1]));
+
+  return nodes.map((node) => {
+    const data = node.data;
+    if (!data) return node;
+    const assetId = typeof data.assetId === "string" ? data.assetId : undefined;
+    const outputAssetId = typeof data.outputAssetId === "string" ? data.outputAssetId : undefined;
+    const asset = (assetId && assets.get(assetId)) || (outputAssetId && assets.get(outputAssetId));
+    if (!asset) return node;
+
+    const nextData = { ...data };
+    if (asset.type === "image") {
+      if (!nextData.thumbnailUrl && asset.thumbnailUrl) nextData.thumbnailUrl = asset.thumbnailUrl;
+      if (!nextData.url && asset.url) nextData.url = asset.url;
+      if (!nextData.width && asset.width) nextData.width = asset.width;
+      if (!nextData.height && asset.height) nextData.height = asset.height;
+    }
+    if (asset.type === "video") {
+      if (!nextData.thumbnailUrl && asset.thumbnailUrl) nextData.thumbnailUrl = asset.thumbnailUrl;
+      if (!nextData.outputUrl && asset.url) nextData.outputUrl = asset.url;
+      if (!nextData.duration && asset.duration) nextData.duration = asset.duration;
+    }
+    return { ...node, data: nextData };
+  });
+}
+
+async function parseProject(row: any) {
   return {
     id: row.id,
     name: row.name,
-    nodes: JSON.parse(row.nodes_json),
+    nodes: await hydrateProjectNodes(JSON.parse(row.nodes_json)),
     edges: JSON.parse(row.edges_json),
     createdAt: row.created_at,
     updatedAt: row.updated_at
@@ -18,7 +64,7 @@ export async function listProjects() {
   const db = await getDb();
   const { workspace } = requireRequestContext();
   const rows = await db.all("SELECT * FROM projects WHERE workspace_id = ? ORDER BY updated_at DESC", workspace.id);
-  return rows.map(parseProject);
+  return Promise.all(rows.map(parseProject));
 }
 
 export async function createProject(name = "未命名项目") {
