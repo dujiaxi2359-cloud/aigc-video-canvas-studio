@@ -9,6 +9,7 @@ import {
   deleteAsset,
   deleteFolder,
   getAssetDownloadInfo,
+  getAssetPreviewInfo,
   listAssets,
   listFolders,
   updateAsset,
@@ -159,6 +160,19 @@ assetRouter.get("/", async (req, res, next) => {
     }));
   } catch (error) {
     next(error);
+  }
+});
+
+assetRouter.get("/:id/preview", async (req, res) => {
+  try {
+    const info = await getAssetPreviewInfo(req.params.id);
+    res.setHeader("Content-Type", info.contentType);
+    res.setHeader("Cache-Control", `public, max-age=${info.cacheSeconds}, immutable`);
+    fs.createReadStream(info.localPath).pipe(res);
+  } catch (error) {
+    const code = error instanceof Error ? error.message : "ASSET_PREVIEW_FAILED";
+    const status = code === "ASSET_NOT_FOUND" ? 404 : code === "ASSET_PREVIEW_UNSUPPORTED" ? 415 : 400;
+    res.status(status).json({ status: "error", errorCode: code, errorMessage: "素材预览生成失败。" });
   }
 });
 

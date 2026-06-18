@@ -12,6 +12,7 @@ import { requireRequestContext } from "./requestContext.js";
 import {
   cachedSignedCosUrl,
   deleteCosFile,
+  downloadCosFileToLocal,
   isCosConfigured,
   isCosLocalPath,
   normalizeStorageFileType,
@@ -79,6 +80,10 @@ function publicThumbnailUrl(fileName: string) {
   return `/uploads/assets/thumbnails/${path.basename(fileName)}`;
 }
 
+function previewEndpointUrl(assetId: string) {
+  return `/api/assets/${encodeURIComponent(assetId)}/preview`;
+}
+
 function inferTypeFromPath(localPath: string): Asset["type"] {
   const ext = path.extname(localPath).toLowerCase();
   if ([".png", ".jpg", ".jpeg", ".webp", ".gif"].includes(ext)) return "image";
@@ -110,7 +115,7 @@ function toAsset(row: AssetRow): Asset {
     height: row.height,
     duration: row.duration,
     fps: row.fps,
-    thumbnailUrl: row.thumbnail_path || (row.type === "image" ? cosUrl : undefined),
+    thumbnailUrl: row.thumbnail_path || (row.type === "image" ? previewEndpointUrl(row.id) : undefined),
     storageProvider: row.storage_provider,
     storageKey,
     storageBucket: row.storage_bucket,
@@ -143,7 +148,7 @@ async function hydrateCosAsset(asset: Asset): Promise<Asset> {
       ...asset,
       url,
       downloadUrl,
-      thumbnailUrl: asset.thumbnailUrl || (asset.type === "image" ? url : undefined)
+      thumbnailUrl: asset.thumbnailUrl || (asset.type === "image" ? previewEndpointUrl(asset.id) : undefined)
     };
   } catch {
     return asset;
@@ -168,6 +173,64 @@ async function createImageThumbnail(localPath: string, assetId: string) {
   const target = path.join(thumbnailsDir, fileName);
   await sharp(localPath).resize(480, 480, { fit: "inside", withoutEnlargement: true }).jpeg({ quality: 82 }).toFile(target);
   return publicThumbnailUrl(fileName);
+}
+
+function localPathForPublicUploadUrl(url?: string | null) {
+  if (!url?.startsWith("/uploads/")) return undefined;
+  const relative = url.replace(/^\/uploads\//, "");
+  const absolute = path.resolve(process.cwd(), uploadRoot(), relative);
+  const root = path.resolve(process.cwd(), uploadRoot());
+  if (!absolute.startsWith(root)) return undefined;
+  return absolute;
+}
+
+export async function getAssetPreviewInfo(id: string) {
+  const db = await getDb();
+  const row = await db.get("SELECT * FROM assets WHERE id = ? AND workspace_id = ? AND deleted_at IS NULL", id, requireRequestContext().workspace.id) as AssetRow | undefined;
+  if (!row) throw new Error("ASSET_NOT_FOUND");
+  if (row.type !== "image") throw new Error("ASSET_PREVIEW_UNSUPPORTED");
+
+  const existing = localPathForPublicUploadUrl(row.thumbnail_path);
+  if (existing && fs.existsSync(existing)) {
+    return {
+      localPath: existing,
+      contentType: "image/jpeg",
+      cacheSeconds: 60 * 60 * 24 * 30
+    };
+  }
+
+  const thumbnailsDir = path.join(assetRoot(), "thumbnails");
+  fs.mkdirSync(thumbnailsDir, { recursive: true });
+  const fileName = `${id}.jpg`;
+  const target = path.join(thumbnailsDir, fileName);
+  if (fs.existsSync(target)) {
+    const thumbnailUrl = publicThumbnailUrl(fileName);
+    await db.run("UPDATE assets SET thumbnail_path = ?, updated_at = ? WHERE id = ?", thumbnailUrl, now(), id);
+    return { localPath: target, contentType: "image/jpeg", cacheSeconds: 60 * 60 * 24 * 30 };
+  }
+
+  let sourcePath = row.local_path as string | undefined;
+  let tempSource: string | undefined;
+  if (!sourcePath || isCosLocalPath(sourcePath) || !fs.existsSync(sourcePath)) {
+    if (!row.storage_key) throw new Error("ASSET_PREVIEW_SOURCE_MISSING");
+    const ext = path.extname(row.file_name || row.original_name || "") || ".bin";
+    tempSource = path.join(assetRoot(), "preview-cache", `${id}${ext}`);
+    await downloadCosFileToLocal({ fileKey: row.storage_key, localPath: tempSource, expiresSeconds: 900 });
+    sourcePath = tempSource;
+  }
+
+  try {
+    await sharp(sourcePath).resize(640, 640, { fit: "inside", withoutEnlargement: true }).jpeg({ quality: 78, mozjpeg: true }).toFile(target);
+    const thumbnailUrl = publicThumbnailUrl(fileName);
+    await db.run("UPDATE assets SET thumbnail_path = ?, updated_at = ? WHERE id = ?", thumbnailUrl, now(), id);
+    return {
+      localPath: target,
+      contentType: "image/jpeg",
+      cacheSeconds: 60 * 60 * 24 * 30
+    };
+  } finally {
+    if (tempSource) fs.rmSync(tempSource, { force: true });
+  }
 }
 
 async function metadataFor(localPath: string) {

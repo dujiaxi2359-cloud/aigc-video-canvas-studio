@@ -13,6 +13,7 @@ type MediaLightboxProps = {
 
 export function MediaLightbox({ open, type, src, title, meta = [], onClose }: MediaLightboxProps) {
   const [scale, setScale] = useState(1);
+  const [fitToScreen, setFitToScreen] = useState(true);
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const dragRef = useRef<{ x: number; y: number; originX: number; originY: number } | null>(null);
   const visibleMeta = useMemo(() => meta.filter((item) => item.value !== undefined && item.value !== null && item.value !== ""), [meta]);
@@ -20,6 +21,7 @@ export function MediaLightbox({ open, type, src, title, meta = [], onClose }: Me
   useEffect(() => {
     if (!open) return;
     setScale(1);
+    setFitToScreen(true);
     setPosition({ x: 0, y: 0 });
     function onKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") onClose();
@@ -62,7 +64,7 @@ export function MediaLightbox({ open, type, src, title, meta = [], onClose }: Me
       <div className="media-lightbox-stage">
         {type === "image" && src ? (
           <img
-            className="media-lightbox-image"
+            className={`media-lightbox-image ${fitToScreen ? "is-fit" : "is-natural"}`}
             src={src}
             alt={title || "高清图片"}
             draggable={false}
@@ -71,6 +73,7 @@ export function MediaLightbox({ open, type, src, title, meta = [], onClose }: Me
             style={{ transform: `translate(${position.x}px, ${position.y}px) scale(${scale})` }}
             onWheel={(event) => {
               event.preventDefault();
+              setFitToScreen(true);
               setScale((value) => Math.min(5, Math.max(0.3, value + (event.deltaY > 0 ? -0.12 : 0.12))));
             }}
             onMouseDown={(event) => {
@@ -102,10 +105,10 @@ export function MediaLightbox({ open, type, src, title, meta = [], onClose }: Me
         {type === "image" && (
           <>
             <button className="media-lightbox-tool" type="button" onClick={() => setScale((value) => Math.max(0.3, value - 0.2))} title="缩小"><Minus size={15} /></button>
-            <button className="media-lightbox-tool" type="button" onClick={() => setScale((value) => Math.min(5, value + 0.2))} title="放大"><Plus size={15} /></button>
-            <button className="media-lightbox-tool" type="button" onClick={() => { setScale(1); setPosition({ x: 0, y: 0 }); }} title="适应屏幕"><Maximize2 size={15} /></button>
-            <button className="media-lightbox-tool min-w-[48px]" type="button" onClick={() => setScale(1)} title="100%">100%</button>
-            <button className="media-lightbox-tool" type="button" onClick={() => { setScale(1); setPosition({ x: 0, y: 0 }); }} title="重置"><RotateCcw size={15} /></button>
+            <button className="media-lightbox-tool" type="button" onClick={() => { setFitToScreen(true); setScale((value) => Math.min(5, value + 0.2)); }} title="放大"><Plus size={15} /></button>
+            <button className="media-lightbox-tool" type="button" onClick={() => { setFitToScreen(true); setScale(1); setPosition({ x: 0, y: 0 }); }} title="适应屏幕"><Maximize2 size={15} /></button>
+            <button className="media-lightbox-tool min-w-[48px]" type="button" onClick={() => { setFitToScreen(false); setScale(1); setPosition({ x: 0, y: 0 }); }} title="100%">100%</button>
+            <button className="media-lightbox-tool" type="button" onClick={() => { setFitToScreen(true); setScale(1); setPosition({ x: 0, y: 0 }); }} title="重置"><RotateCcw size={15} /></button>
           </>
         )}
         <button className="media-lightbox-tool" type="button" onClick={copyLink} disabled={!src} title="复制链接"><Copy size={15} /></button>
