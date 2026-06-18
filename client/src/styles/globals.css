@@ -1090,7 +1090,7 @@ select {
 .home-launch-copy {
   position: absolute;
   left: 50%;
-  bottom: 8vh;
+  bottom: clamp(58px, 8vh, 96px);
   z-index: 6;
   width: min(1180px, calc(100vw - 48px));
   isolation: isolate;
@@ -1115,19 +1115,34 @@ select {
 
 .home-launch-headline {
   font-family: "Avenir Next", "SF Pro Display", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", ui-sans-serif, system-ui, sans-serif;
-  font-size: 78px;
+  font-size: clamp(58px, 5.6vw, 78px);
   font-weight: 500;
   text-shadow: 0 22px 80px rgba(170, 215, 235, 0.18);
 }
 
 .home-launch-subbrand {
-  margin-top: 72px;
+  margin-top: clamp(44px, 5.2vh, 72px);
   color: rgba(178, 197, 207, 0.7);
-  font-size: 56px;
+  font-size: clamp(40px, 4.1vw, 56px);
   font-weight: 500;
   letter-spacing: 0;
   line-height: 1;
   text-shadow: 0 14px 58px rgba(175, 212, 230, 0.18);
+}
+
+@media (max-height: 780px) {
+  .home-launch-copy {
+    bottom: 56px;
+  }
+
+  .home-launch-headline {
+    font-size: clamp(48px, 5vw, 64px);
+  }
+
+  .home-launch-subbrand {
+    margin-top: 38px;
+    font-size: clamp(34px, 3.5vw, 44px);
+  }
 }
 
 .brand-identity {

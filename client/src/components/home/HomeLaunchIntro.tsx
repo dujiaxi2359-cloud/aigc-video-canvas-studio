@@ -35,6 +35,9 @@ function AnimatedWords({ text, className = "" }: { text: string; className?: str
 export function HomeLaunchIntro({ onFinish }: { onFinish?: () => void }) {
   const reduceMotion = useReducedMotion();
   const [visible, setVisible] = useState(true);
+  const [sceneReady, setSceneReady] = useState(false);
+  const [minimumShown, setMinimumShown] = useState(false);
+  const [canExit, setCanExit] = useState(false);
   const mountedRef = useRef(false);
   const completedRef = useRef(false);
 
@@ -50,25 +53,52 @@ export function HomeLaunchIntro({ onFinish }: { onFinish?: () => void }) {
   }, [reduceMotion]);
 
   useEffect(() => {
+    if (!visible || reduceMotion) return;
+    const minimumTimer = window.setTimeout(() => setMinimumShown(true), 4600);
+    return () => window.clearTimeout(minimumTimer);
+  }, [reduceMotion, visible]);
+
+  useEffect(() => {
+    if (!visible || reduceMotion || !sceneReady || !minimumShown) return;
+    setCanExit(true);
+  }, [minimumShown, reduceMotion, sceneReady, visible]);
+
+  useEffect(() => {
     if (!visible || reduceMotion || mountedRef.current) return;
     mountedRef.current = true;
 
-    const init = () => window.UnicornStudio?.init?.();
+    let readyTimer = 0;
+    const markReady = (delay = 650) => {
+      window.clearTimeout(readyTimer);
+      readyTimer = window.setTimeout(() => setSceneReady(true), delay);
+    };
+    const init = () => {
+      window.UnicornStudio?.init?.();
+      markReady();
+    };
     const runWhenReady = () => {
       if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init, { once: true });
       else init();
     };
+    const fallbackTimer = window.setTimeout(() => markReady(0), 2800);
 
     if (window.UnicornStudio?.init) {
       runWhenReady();
-      return;
+      return () => {
+        window.clearTimeout(readyTimer);
+        window.clearTimeout(fallbackTimer);
+      };
     }
 
     window.UnicornStudio = window.UnicornStudio || { isInitialized: false };
     const existing = document.getElementById(UNICORN_SCRIPT_ID) as HTMLScriptElement | null;
     if (existing) {
       existing.addEventListener("load", runWhenReady, { once: true });
-      return;
+      return () => {
+        existing.removeEventListener("load", runWhenReady);
+        window.clearTimeout(readyTimer);
+        window.clearTimeout(fallbackTimer);
+      };
     }
 
     const script = document.createElement("script");
@@ -77,6 +107,11 @@ export function HomeLaunchIntro({ onFinish }: { onFinish?: () => void }) {
     script.async = true;
     script.onload = runWhenReady;
     (document.head || document.body).appendChild(script);
+    return () => {
+      script.onload = null;
+      window.clearTimeout(readyTimer);
+      window.clearTimeout(fallbackTimer);
+    };
   }, [reduceMotion, visible]);
 
   if (!visible || reduceMotion) return null;
@@ -85,9 +120,11 @@ export function HomeLaunchIntro({ onFinish }: { onFinish?: () => void }) {
     <motion.div
       className="home-launch-intro"
       initial={{ y: 0 }}
-      animate={{ y: "-100%" }}
-      transition={{ delay: 1.9, duration: 0.55, ease: [0.76, 0, 0.24, 1] }}
-      onAnimationComplete={completeIntro}
+      animate={{ y: canExit ? "-100%" : 0 }}
+      transition={{ duration: canExit ? 0.72 : 0, ease: [0.76, 0, 0.24, 1] }}
+      onAnimationComplete={() => {
+        if (canExit) completeIntro();
+      }}
       aria-hidden="true"
     >
       <div className="home-launch-unicorn-stage">
