@@ -678,53 +678,27 @@ select {
   color: #fff;
 }
 
-.home-launch-noise {
+.home-launch-unicorn-stage {
   position: absolute;
-  inset: 0;
-  pointer-events: none;
-  opacity: 0.045;
-  background-image:
-    radial-gradient(circle at 18% 22%, rgba(255, 255, 255, 0.06) 0 1px, transparent 1px),
-    radial-gradient(circle at 72% 68%, rgba(255, 255, 255, 0.045) 0 1px, transparent 1px);
-  background-size: 37px 37px, 53px 53px;
+  left: 50%;
+  top: 50%;
+  width: max(100vw, calc(100vh * 1.6));
+  height: max(100vh, calc(100vw / 1.6));
+  overflow: hidden;
+  transform: translate(-50%, -50%);
 }
 
-.home-launch-glow {
-  position: absolute;
-  width: min(72vw, 760px);
-  height: min(72vw, 760px);
-  border-radius: 999px;
-  background: radial-gradient(circle, rgba(255, 255, 255, 0.052), rgba(255, 255, 255, 0.012) 42%, transparent 70%);
-  filter: blur(82px);
+.home-launch-unicorn-embed,
+.home-launch-unicorn-embed > *,
+.home-launch-unicorn-embed canvas,
+.home-launch-unicorn-embed iframe {
+  width: 100% !important;
+  height: 100% !important;
 }
 
-.home-launch-content {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-}
-
-.home-launch-brand {
-  display: flex;
-  align-items: center;
-  gap: 26px;
-}
-
-.home-launch-logo {
-  overflow: visible;
-  width: 88px;
-  height: 88px;
-  filter: drop-shadow(0 0 40px rgba(255, 255, 255, 0.1));
-}
-
-.home-launch-wordmark {
-  color: #fff;
-  font-family: "Avenir Next", "SF Pro Display", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", ui-sans-serif, system-ui, sans-serif;
-  font-size: clamp(34px, 5vw, 64px);
-  font-weight: 900;
-  letter-spacing: -0.06em;
-  line-height: 1;
+.home-launch-unicorn-embed {
+  min-width: 100%;
+  min-height: 100%;
 }
 
 .brand-identity {
@@ -762,35 +736,10 @@ select {
   fill: #fff;
 }
 
-.home-launch-status {
-  margin-top: 38px;
-  color: #fff;
-  font-size: 9px;
-  font-weight: 800;
-  letter-spacing: 1.2em;
-  line-height: 1;
-  text-transform: uppercase;
-}
-
 @media (max-width: 640px) {
-  .home-launch-brand {
-    flex-direction: column;
-    gap: 18px;
-  }
-
-  .home-launch-logo {
-    width: 76px;
-    height: 76px;
-  }
-
-  .home-launch-wordmark {
-    font-size: 34px;
-  }
-
-  .home-launch-status {
-    max-width: 86vw;
-    letter-spacing: 0.55em;
-    text-align: center;
+  .home-launch-unicorn-stage {
+    width: max(100vw, calc(100vh * 1.6));
+    height: max(100vh, calc(100vw / 1.6));
   }
 }
 

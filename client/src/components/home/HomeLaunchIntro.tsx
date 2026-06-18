@@ -1,10 +1,52 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
-import { MoonLogo } from "../common/BrandIdentity";
+
+declare global {
+  interface Window {
+    UnicornStudio?: {
+      isInitialized?: boolean;
+      init?: () => void;
+    };
+  }
+}
+
+const UNICORN_SCRIPT_ID = "unicorn-studio-runtime";
+const UNICORN_SCRIPT_SRC = "https://cdn.jsdelivr.net/gh/hiunicornstudio/unicornstudio.js@v2.2.5/dist/unicornStudio.umd.js";
 
 export function HomeLaunchIntro() {
   const reduceMotion = useReducedMotion();
   const [visible, setVisible] = useState(true);
+  const mountedRef = useRef(false);
+
+  useEffect(() => {
+    if (!visible || reduceMotion || mountedRef.current) return;
+    mountedRef.current = true;
+
+    const init = () => window.UnicornStudio?.init?.();
+    const runWhenReady = () => {
+      if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init, { once: true });
+      else init();
+    };
+
+    if (window.UnicornStudio?.init) {
+      runWhenReady();
+      return;
+    }
+
+    window.UnicornStudio = window.UnicornStudio || { isInitialized: false };
+    const existing = document.getElementById(UNICORN_SCRIPT_ID) as HTMLScriptElement | null;
+    if (existing) {
+      existing.addEventListener("load", runWhenReady, { once: true });
+      return;
+    }
+
+    const script = document.createElement("script");
+    script.id = UNICORN_SCRIPT_ID;
+    script.src = UNICORN_SCRIPT_SRC;
+    script.async = true;
+    script.onload = runWhenReady;
+    (document.head || document.body).appendChild(script);
+  }, [reduceMotion, visible]);
 
   if (!visible || reduceMotion) return null;
 
@@ -13,44 +55,12 @@ export function HomeLaunchIntro() {
       className="home-launch-intro"
       initial={{ y: 0 }}
       animate={{ y: "-100%" }}
-      transition={{ delay: 3.35, duration: 1.05, ease: [0.87, 0, 0.13, 1] }}
+      transition={{ delay: 4.65, duration: 0.95, ease: [0.87, 0, 0.13, 1] }}
       onAnimationComplete={() => setVisible(false)}
       aria-hidden="true"
     >
-      <div className="home-launch-noise" />
-      <motion.div
-        className="home-launch-glow"
-        initial={{ opacity: 0, scale: 0.86 }}
-        animate={{ opacity: 1, scale: 1.12 }}
-        transition={{ duration: 1.8, ease: [0.16, 1, 0.3, 1] }}
-      />
-      <div className="home-launch-content">
-        <div className="home-launch-brand">
-          <motion.span
-            className="home-launch-mark"
-            initial={{ opacity: 0, x: -18, scale: 0.92 }}
-            animate={{ opacity: 1, x: 0, scale: 1 }}
-            transition={{ delay: 0.58, duration: 1.05, ease: [0.16, 1, 0.3, 1] }}
-          >
-            <MoonLogo className="home-launch-logo" />
-          </motion.span>
-          <motion.span
-            className="home-launch-wordmark"
-            initial={{ opacity: 0, x: 16, filter: "blur(8px)" }}
-            animate={{ opacity: 1, x: 0, filter: "blur(0px)" }}
-            transition={{ delay: 1.28, duration: 0.95, ease: [0.22, 1, 0.36, 1] }}
-          >
-            Moon｜Tv
-          </motion.span>
-        </div>
-        <motion.div
-          className="home-launch-status"
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 0.46, y: 0 }}
-          transition={{ delay: 2.05, duration: 0.85, ease: [0.22, 1, 0.36, 1] }}
-        >
-          CREATIVE PRODUCTION OS
-        </motion.div>
+      <div className="home-launch-unicorn-stage">
+        <div className="home-launch-unicorn-embed" data-us-project="BH2HrNlrVEIa8nJ2cvvA" />
       </div>
     </motion.div>
   );
