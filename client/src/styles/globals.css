@@ -1951,7 +1951,7 @@ select {
 .studio-account-pill.is-open {
   border-color: rgba(255, 255, 255, 0.22);
   background:
-    radial-gradient(circle at 86% 50%, rgba(125, 211, 252, 0.13), transparent 36px),
+    radial-gradient(circle at 86% 50%, rgba(232, 216, 154, 0.12), transparent 36px),
     linear-gradient(180deg, rgba(45, 45, 49, 0.96), rgba(26, 26, 29, 0.96));
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.12),
@@ -2040,9 +2040,9 @@ select {
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 999px;
   background:
-    linear-gradient(145deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02)),
-    rgba(255, 255, 255, 0.08) !important;
-  color: rgba(255, 255, 255, 0.58) !important;
+    radial-gradient(circle at 32% 24%, rgba(255, 255, 255, 0.18), transparent 16px),
+    linear-gradient(145deg, rgba(66, 66, 70, 0.98), rgba(35, 35, 38, 0.98)) !important;
+  color: rgba(255, 255, 255, 0.86) !important;
   font-size: 18px;
   font-weight: 820;
 }
@@ -2075,7 +2075,9 @@ select {
 
 .studio-account-wallet {
   border-radius: 18px;
-  background: rgba(255, 255, 255, 0.055);
+  background:
+    radial-gradient(circle at 92% 88%, rgba(232, 216, 154, 0.1), transparent 42%),
+    rgba(255, 255, 255, 0.052);
   padding: 12px;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.055);
 }
@@ -2105,9 +2107,9 @@ select {
 
 .studio-account-wallet-top em {
   border-radius: 9px;
-  background: rgba(125, 211, 252, 0.13);
+  background: rgba(232, 216, 154, 0.13);
   padding: 4px 9px;
-  color: #38bdf8;
+  color: #eadb9f;
   font-size: 12px;
   font-style: normal;
   font-weight: 850;
@@ -2125,7 +2127,7 @@ select {
 }
 
 .studio-account-quota span {
-  color: #38bdf8;
+  color: #eadb9f;
   font-size: 15px;
   font-weight: 780;
 }
@@ -2139,7 +2141,7 @@ select {
 }
 
 .studio-account-quota svg {
-  color: #67e8f9;
+  color: #eadb9f;
 }
 
 .studio-account-quota-bar {
@@ -2148,8 +2150,8 @@ select {
   margin-top: 8px;
   border: 1px solid rgba(255, 255, 255, 0.18);
   border-radius: 999px;
-  background: linear-gradient(90deg, #67e8f9, #38bdf8);
-  box-shadow: 0 0 16px rgba(56, 189, 248, 0.25);
+  background: linear-gradient(90deg, #f5e7b1, #bfa46a);
+  box-shadow: 0 0 16px rgba(232, 216, 154, 0.18);
 }
 
 .studio-account-menu {
@@ -2169,7 +2171,8 @@ select {
   font-weight: 690 !important;
 }
 
-.studio-account-row:hover {
+.studio-account-row:hover,
+.studio-account-row.is-active {
   background: rgba(255, 255, 255, 0.07) !important;
   color: #fff !important;
 }
@@ -2192,6 +2195,46 @@ select {
 
 .studio-account-row-danger {
   color: rgba(255, 255, 255, 0.8) !important;
+}
+
+.studio-account-help-panel {
+  overflow: hidden;
+  padding: 2px 0 6px;
+}
+
+.studio-account-contact-row {
+  margin-top: 2px;
+  background: rgba(255, 255, 255, 0.045) !important;
+}
+
+.studio-account-qr-card {
+  margin-top: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.055);
+  padding: 10px;
+}
+
+.studio-account-qr-card img {
+  display: block;
+  width: 100%;
+  border-radius: 13px;
+  background: #fff;
+}
+
+.studio-account-qr-card strong {
+  display: block;
+  margin-top: 10px;
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 13px;
+  font-weight: 760;
+}
+
+.studio-account-qr-card p {
+  margin-top: 4px;
+  color: rgba(255, 255, 255, 0.48);
+  font-size: 12px;
+  line-height: 1.55;
 }
 
 @media (max-width: 1180px) {
@@ -5635,8 +5678,7 @@ select optgroup {
     0 16px 42px rgba(8, 47, 73, 0.18) !important;
 }
 
-.studio-avatar-mark,
-.studio-account-avatar {
+.studio-avatar-mark {
   background:
     radial-gradient(circle at 44% 26%, rgba(255, 255, 255, 0.96), transparent 12px),
     linear-gradient(145deg, #eff6ff 0%, #93c5fd 48%, #22d3ee 100%) !important;

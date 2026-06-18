@@ -10,6 +10,7 @@ import {
   Infinity,
   LogIn,
   LogOut,
+  MessageCircle,
   Settings,
   UserRound,
   WalletCards
@@ -33,19 +34,20 @@ function accountName(email?: string, name?: string) {
 }
 
 function accountInitial(value?: string) {
-  const clean = value?.trim();
+  const clean = value?.trim().match(/[a-zA-Z0-9]/)?.[0];
   if (!clean) return "M";
-  return clean.slice(0, 1).toUpperCase();
+  return clean.toUpperCase();
 }
 
 export function HomeTopNav({ page, onNavigate }: { page: Page; onNavigate: (page: Page, projectId?: string) => void }) {
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
   const auth = useAuthStore();
   const activeWorkspace = auth.workspaces.find((workspace) => workspace.id === auth.activeWorkspaceId) || auth.workspaces[0];
   const displayName = accountName(auth.user?.email, auth.user?.name);
   const workspaceName = activeWorkspace?.name || `${displayName} 的个人空间`;
-  const avatarInitial = accountInitial(activeWorkspace?.name || displayName || auth.user?.email);
+  const avatarInitial = accountInitial(auth.user?.email || displayName);
   const planLabel = activeWorkspace?.planId?.trim() ? activeWorkspace.planId.toUpperCase() : "FREE";
   const credits = activeWorkspace?.credits ?? 0;
 
@@ -105,7 +107,10 @@ export function HomeTopNav({ page, onNavigate }: { page: Page; onNavigate: (page
                 type="button"
                 onClick={() => {
                   setNotificationsOpen(false);
-                  setAccountOpen((value) => !value);
+                  setAccountOpen((value) => {
+                    if (value) setHelpOpen(false);
+                    return !value;
+                  });
                 }}
                 className={`studio-account-pill ${accountOpen ? "is-open" : ""}`}
                 title="账号菜单"
@@ -141,8 +146,8 @@ export function HomeTopNav({ page, onNavigate }: { page: Page; onNavigate: (page
                       </div>
                       <div className="studio-account-quota">
                         <div>
-                          <span>无额度限制</span>
-                          <small>面向创作测试空间开放</small>
+                          <span>创作额度可用</span>
+                          <small>用于图片、视频与素材节点生成</small>
                         </div>
                         <Infinity size={22} />
                       </div>
@@ -168,11 +173,39 @@ export function HomeTopNav({ page, onNavigate }: { page: Page; onNavigate: (page
 
                     <div className="studio-account-divider" />
                     <div className="studio-account-menu">
-                      <button type="button" className="studio-account-row" onClick={() => { setAccountOpen(false); onNavigate("settings"); }}>
+                      <button
+                        type="button"
+                        className={`studio-account-row ${helpOpen ? "is-active" : ""}`}
+                        onClick={() => setHelpOpen((value) => !value)}
+                      >
                         <span className="studio-account-row-icon"><HelpCircle size={18} /></span>
                         <span>帮助中心</span>
-                        <ChevronRight size={18} className="studio-account-row-arrow" />
+                        <ChevronDown size={18} className="studio-account-row-arrow" />
                       </button>
+                      <AnimatePresence initial={false}>
+                        {helpOpen && (
+                          <motion.div
+                            className="studio-account-help-panel"
+                            initial={{ opacity: 0, height: 0, y: -4 }}
+                            animate={{ opacity: 1, height: "auto", y: 0 }}
+                            exit={{ opacity: 0, height: 0, y: -4 }}
+                            transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
+                          >
+                            <button type="button" className="studio-account-row studio-account-contact-row">
+                              <span className="studio-account-row-icon"><MessageCircle size={18} /></span>
+                              <span>联系我们</span>
+                              <ChevronRight size={18} className="studio-account-row-arrow" />
+                            </button>
+                            <div className="studio-account-qr-card">
+                              <img src="/account-assets/wechat-support-qr.png" alt="Moon Tv 微信联系二维码" loading="lazy" decoding="async" />
+                              <div>
+                                <strong>微信联系 Moon | Tv</strong>
+                                <p>扫码添加微信，反馈账号、额度、生成或素材加载问题。</p>
+                              </div>
+                            </div>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
                       <button type="button" className="studio-account-row studio-account-row-danger" onClick={() => void auth.logout()}>
                         <span className="studio-account-row-icon"><LogOut size={18} /></span>
                         <span>登出账号</span>
