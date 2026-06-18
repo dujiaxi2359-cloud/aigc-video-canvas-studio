@@ -10,10 +10,10 @@ import { readGeneratedFileMetadata } from "../utils/mediaMetadata.js";
 import type { Asset, AssetFolder } from "../types/asset.js";
 import { requireRequestContext } from "./requestContext.js";
 import {
+  cachedSignedCosUrl,
   deleteCosFile,
   isCosConfigured,
   isCosLocalPath,
-  signedCosUrl,
   storageAccessPath,
   uploadLocalFileToCos
 } from "./storage/cosStorage.service.js";
@@ -125,6 +125,28 @@ function toAsset(row: AssetRow): Asset {
     createdAt: row.created_at,
     updatedAt: row.updated_at
   };
+}
+
+async function hydrateCosAsset(asset: Asset): Promise<Asset> {
+  if (!asset.storageKey || !isCosConfigured()) return asset;
+  try {
+    const [url, downloadUrl] = await Promise.all([
+      cachedSignedCosUrl({ fileKey: asset.storageKey, expiresSeconds: 1800 }),
+      cachedSignedCosUrl({
+        fileKey: asset.storageKey,
+        expiresSeconds: 1800,
+        responseContentDisposition: `attachment; filename*=UTF-8''${encodeURIComponent(asset.fileName || asset.originalName || "asset")}`
+      })
+    ]);
+    return {
+      ...asset,
+      url,
+      downloadUrl,
+      thumbnailUrl: asset.type === "image" && asset.thumbnailUrl === asset.url ? url : asset.thumbnailUrl
+    };
+  } catch {
+    return asset;
+  }
 }
 
 function toFolder(row: AssetRow): AssetFolder {
@@ -285,7 +307,7 @@ export async function createAsset(input: CreateAssetInput & { id?: string }) {
     timestamp
   );
   const row = await db.get("SELECT * FROM assets WHERE id = ?", id);
-  return toAsset(row as AssetRow);
+  return hydrateCosAsset(toAsset(row as AssetRow));
 }
 
 export async function listAssets(query: AssetQuery = {}) {
@@ -323,13 +345,13 @@ export async function listAssets(query: AssetQuery = {}) {
   const sort = allowedSorts[query.sortBy || ""] ?? "created_at";
   const order = query.sortOrder?.toLowerCase() === "asc" ? "ASC" : "DESC";
   const rows = await db.all(`SELECT * FROM assets WHERE ${where.join(" AND ")} ORDER BY ${sort} ${order}`, ...params);
-  return (rows as AssetRow[]).map(toAsset);
+  return Promise.all((rows as AssetRow[]).map((row) => hydrateCosAsset(toAsset(row))));
 }
 
 export async function getAsset(id: string) {
   const db = await getDb();
   const row = await db.get("SELECT * FROM assets WHERE id = ? AND workspace_id = ? AND deleted_at IS NULL", id, requireRequestContext().workspace.id);
-  return row ? toAsset(row as AssetRow) : undefined;
+  return row ? hydrateCosAsset(toAsset(row as AssetRow)) : undefined;
 }
 
 export async function updateAsset(id: string, input: { name?: string; folderId?: string | null }) {
@@ -442,7 +464,7 @@ export async function getAssetDownloadInfo(id: string) {
   const filename = `${safeBaseName || "asset"}${ext}`;
   if (asset.storageKey) {
     return {
-      redirectUrl: await signedCosUrl({
+      redirectUrl: await cachedSignedCosUrl({
         fileKey: asset.storageKey,
         responseContentDisposition: `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`
       }),

@@ -32,6 +32,11 @@ type CosConfig = {
   domain: string;
 };
 
+type SignedUrlCacheEntry = {
+  url: string;
+  expiresAt: number;
+};
+
 const STORAGE_DIRS: Record<StorageFileType, string> = {
   image: "uploads/images",
   video: "uploads/videos",
@@ -168,6 +173,39 @@ export async function signedCosUrl(input: {
     Protocol: "https:",
     Query: input.responseContentDisposition ? { "response-content-disposition": input.responseContentDisposition } : undefined
   });
+}
+
+const signedUrlCache = new Map<string, SignedUrlCacheEntry>();
+
+export async function cachedSignedCosUrl(input: {
+  fileKey: string;
+  method?: "GET" | "PUT";
+  expiresSeconds?: number;
+  responseContentDisposition?: string;
+}) {
+  const key = normalizeCosKey(input.fileKey);
+  const expiresSeconds = input.expiresSeconds ?? 1800;
+  const cacheKey = [
+    key,
+    input.method ?? "GET",
+    expiresSeconds,
+    input.responseContentDisposition ?? ""
+  ].join("|");
+  const now = Date.now();
+  const cached = signedUrlCache.get(cacheKey);
+  if (cached && cached.expiresAt - now > 60_000) return cached.url;
+  const url = await signedCosUrl({ ...input, fileKey: key, expiresSeconds });
+  signedUrlCache.set(cacheKey, { url, expiresAt: now + expiresSeconds * 1000 });
+  if (signedUrlCache.size > 2000) {
+    const overflow = signedUrlCache.size - 2000;
+    let removed = 0;
+    for (const staleKey of signedUrlCache.keys()) {
+      signedUrlCache.delete(staleKey);
+      removed += 1;
+      if (removed >= overflow) break;
+    }
+  }
+  return url;
 }
 
 export async function uploadLocalFileToCos(input: {
