@@ -101,7 +101,7 @@ export function MediaPreview({ type, title, previewUrl, originalUrl, outputUrl, 
           </div>
         )}
       </div>
-      <MediaLightbox open={lightboxOpen} type={type} src={highResSrc} title={title} meta={meta} onClose={() => setLightboxOpen(false)} />
+      <MediaLightbox open={lightboxOpen} type={type} src={highResSrc} previewSrc={previewSrc} title={title} meta={meta} onClose={() => setLightboxOpen(false)} />
     </>
   );
 }

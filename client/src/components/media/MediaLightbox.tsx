@@ -6,15 +6,17 @@ type MediaLightboxProps = {
   open: boolean;
   type: "image" | "video";
   src?: string;
+  previewSrc?: string;
   title?: string;
   meta?: Array<{ label: string; value?: string | number | null }>;
   onClose: () => void;
 };
 
-export function MediaLightbox({ open, type, src, title, meta = [], onClose }: MediaLightboxProps) {
+export function MediaLightbox({ open, type, src, previewSrc, title, meta = [], onClose }: MediaLightboxProps) {
   const [scale, setScale] = useState(1);
   const [fitToScreen, setFitToScreen] = useState(true);
   const [position, setPosition] = useState({ x: 0, y: 0 });
+  const [displaySrc, setDisplaySrc] = useState("");
   const dragRef = useRef<{ x: number; y: number; originX: number; originY: number } | null>(null);
   const visibleMeta = useMemo(() => meta.filter((item) => item.value !== undefined && item.value !== null && item.value !== ""), [meta]);
 
@@ -23,12 +25,27 @@ export function MediaLightbox({ open, type, src, title, meta = [], onClose }: Me
     setScale(1);
     setFitToScreen(true);
     setPosition({ x: 0, y: 0 });
+    setDisplaySrc(previewSrc || src || "");
     function onKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") onClose();
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [open, onClose]);
+  }, [open, onClose, previewSrc, src]);
+
+  useEffect(() => {
+    if (!open || type !== "image" || !src || src === displaySrc) return;
+    let cancelled = false;
+    const image = new Image();
+    image.decoding = "async";
+    image.onload = () => {
+      if (!cancelled) setDisplaySrc(src);
+    };
+    image.src = src;
+    return () => {
+      cancelled = true;
+    };
+  }, [displaySrc, open, src, type]);
 
   if (!open) return null;
 
@@ -62,10 +79,10 @@ export function MediaLightbox({ open, type, src, title, meta = [], onClose }: Me
       </div>
 
       <div className="media-lightbox-stage">
-        {type === "image" && src ? (
+        {type === "image" && displaySrc ? (
           <img
             className={`media-lightbox-image ${fitToScreen ? "is-fit" : "is-natural"}`}
-            src={src}
+            src={displaySrc}
             alt={title || "高清图片"}
             draggable={false}
             loading="eager"
