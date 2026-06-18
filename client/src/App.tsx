@@ -49,6 +49,18 @@ export default function App() {
   const auth = useAuthStore();
   const canAdmin = isLocalMode || Boolean(auth.user && ["admin", "super_admin"].includes(auth.user.role));
 
+  useEffect(() => {
+    const nav = navigator as Navigator & { deviceMemory?: number };
+    const isWindows = /Windows/i.test(navigator.userAgent);
+    const lowPower = (navigator.hardwareConcurrency || 8) <= 6 || (nav.deviceMemory || 8) <= 4;
+    const root = document.documentElement;
+    root.classList.toggle("is-windows", isWindows);
+    root.classList.toggle("is-performance-safe", isWindows || lowPower);
+    return () => {
+      root.classList.remove("is-windows", "is-performance-safe");
+    };
+  }, []);
+
   function navigate(pageName: Page, projectId?: string, replace = false) {
     const nextProjectId = pageName === "canvas" ? projectId || useProjectStore.getState().currentProject?.id || "new" : undefined;
     const nextPath = pagePath(pageName, nextProjectId);
@@ -153,10 +165,10 @@ export default function App() {
           <motion.div
             key="canvas"
             className="h-full"
-            initial={{ opacity: 0, y: 6 }}
-            animate={{ opacity: 1, y: 0 }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
+            transition={{ duration: 0.16, ease: "easeOut" }}
           >
             <ErrorBoundary>
               <CanvasPage onNavigate={navigate} />

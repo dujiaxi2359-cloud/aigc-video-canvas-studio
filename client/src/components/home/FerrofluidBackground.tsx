@@ -14,6 +14,23 @@ type FerrofluidBackgroundProps = {
 const MAX_COLORS = 8;
 const DEFAULT_COLORS = ["#f4f0e8", "#f0b75d", "#7c5cff", "#20b8d7"];
 
+function getPerformanceProfile() {
+  const nav = navigator as Navigator & { deviceMemory?: number };
+  const isWindows = /Windows/i.test(navigator.userAgent);
+  const isMobile = window.matchMedia("(max-width: 900px), (max-height: 720px)").matches;
+  const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const cores = navigator.hardwareConcurrency || 8;
+  const memory = nav.deviceMemory || 8;
+  const lowPower = reducedMotion || isMobile || isWindows || cores <= 6 || memory <= 4;
+  const veryLarge = window.innerWidth >= 1800 || window.innerHeight >= 1000;
+
+  return {
+    frameInterval: reducedMotion ? 1000 : lowPower ? 1000 / 24 : 1000 / 30,
+    renderScale: reducedMotion ? 0.4 : lowPower ? 0.56 : veryLarge ? 0.64 : 0.72,
+    pointerEveryFrame: !lowPower
+  };
+}
+
 const vertex = `
 attribute vec2 position;
 attribute vec2 uv;
@@ -93,13 +110,19 @@ export function FerrofluidBackground({
     const program = new Program(gl, { vertex, fragment, uniforms });
     const geometry = new Triangle(gl);
     const mesh = new Mesh(gl, { geometry, program });
+    let profile = getPerformanceProfile();
 
     let resizeFrame = 0;
     const resize = () => {
       cancelAnimationFrame(resizeFrame);
       resizeFrame = requestAnimationFrame(() => {
+        profile = getPerformanceProfile();
         const rect = container.getBoundingClientRect();
-        renderer.setSize(Math.max(1, rect.width), Math.max(1, rect.height));
+        const width = Math.max(1, Math.floor(rect.width * profile.renderScale));
+        const height = Math.max(1, Math.floor(rect.height * profile.renderScale));
+        renderer.setSize(width, height);
+        canvas.style.width = `${Math.max(1, Math.floor(rect.width))}px`;
+        canvas.style.height = `${Math.max(1, Math.floor(rect.height))}px`;
         uniforms.iResolution.value = [gl.drawingBufferWidth, gl.drawingBufferHeight, 1];
       });
     };
@@ -117,21 +140,29 @@ export function FerrofluidBackground({
 
     let raf = 0;
     let last = performance.now();
-    let active = document.visibilityState === "visible";
-    const visibility = () => { active = document.visibilityState === "visible"; };
+    let visible = document.visibilityState === "visible";
+    let inView = true;
+    const visibility = () => { visible = document.visibilityState === "visible"; };
     document.addEventListener("visibilitychange", visibility);
+    const intersectionObserver = new IntersectionObserver((entries) => {
+      inView = entries[0]?.isIntersecting ?? true;
+    }, { threshold: 0.01 });
+    intersectionObserver.observe(container);
+
     const render = (now: number) => {
       raf = requestAnimationFrame(render);
-      if (!active || now - last < 16) return;
-      last = now;
+      if (!visible || !inView || now - last < profile.frameInterval) return;
+      last = now - ((now - last) % profile.frameInterval);
       uniforms.iTime.value = now * 0.001;
-      const mouse = uniforms.iMouse.value as number[];
-      mouse[0] += (target[0] - mouse[0]) * 0.08;
-      mouse[1] += (target[1] - mouse[1]) * 0.08;
+      if (profile.pointerEveryFrame) {
+        const mouse = uniforms.iMouse.value as number[];
+        mouse[0] += (target[0] - mouse[0]) * 0.08;
+        mouse[1] += (target[1] - mouse[1]) * 0.08;
+      }
       try {
         renderer.render({ scene: mesh });
       } catch (error) {
-        active = false;
+        visible = false;
         console.error("Ferrofluid renderer stopped", error);
       }
     };
@@ -141,6 +172,7 @@ export function FerrofluidBackground({
       cancelAnimationFrame(raf);
       cancelAnimationFrame(resizeFrame);
       observer.disconnect();
+      intersectionObserver.disconnect();
       window.removeEventListener("pointermove", pointerMove);
       document.removeEventListener("visibilitychange", visibility);
       if (canvas.parentElement === container) container.removeChild(canvas);

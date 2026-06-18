@@ -5567,3 +5567,91 @@ select optgroup {
   color: rgba(255, 255, 255, 0.82);
   font-weight: 700;
 }
+
+/* Adaptive smoothness pass: keep the visual language, but remove the heaviest GPU work on Windows/low-power browsers. */
+.is-performance-safe .home-page-ferrofluid {
+  opacity: 0.82;
+}
+
+.is-performance-safe .ferrofluid-canvas {
+  image-rendering: auto;
+}
+
+.is-performance-safe .home-flagship-shell::before,
+.is-performance-safe .home-flagship-shell::after {
+  opacity: 0.42 !important;
+  filter: none !important;
+}
+
+.is-performance-safe .home-unicorn-copy::before,
+.is-performance-safe .home-unicorn-title-shield {
+  filter: none !important;
+}
+
+.is-performance-safe .studio-page,
+.is-performance-safe .canvas-space,
+.is-performance-safe .studio-flow {
+  scroll-behavior: auto !important;
+}
+
+.is-performance-safe .canvas-drawer,
+.is-performance-safe .creation-dock,
+.is-performance-safe .node-tool-panel,
+.is-performance-safe .creation-detail-panel,
+.is-performance-safe .node-parameter-popover,
+.is-performance-safe .node-parameter-popover-floating,
+.is-performance-safe .workspace-dialog,
+.is-performance-safe .workspace-context-menu,
+.is-performance-safe .share-modal,
+.is-performance-safe .studio-notification-popover,
+.is-performance-safe .canvas-quick-action,
+.is-performance-safe .canvas-view-controls {
+  backdrop-filter: none !important;
+}
+
+.is-performance-safe .creation-node {
+  filter: none !important;
+}
+
+.is-performance-safe .creation-preview-card,
+.is-performance-safe .creation-dock,
+.is-performance-safe .creation-detail-panel,
+.is-performance-safe .node-tool-panel,
+.is-performance-safe .node-parameter-popover-floating,
+.is-performance-safe .canvas-drawer,
+.is-performance-safe .workspace-dialog,
+.is-performance-safe .share-modal {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.032), 0 12px 34px rgba(0, 0, 0, 0.32) !important;
+}
+
+.is-performance-safe .creation-preview-card:hover,
+.is-performance-safe .creation-node.is-selected .creation-preview-card,
+.is-performance-safe .react-flow__node.dragging .creation-preview-card {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.034), 0 14px 38px rgba(0, 0, 0, 0.36) !important;
+}
+
+.is-performance-safe .studio-edge-glow,
+.is-performance-safe .studio-edge-flow {
+  filter: none !important;
+}
+
+.is-performance-safe .studio-edge:not(.is-hovered):not(.is-selected) .studio-edge-glow,
+.is-performance-safe .studio-edge:not(.is-hovered):not(.is-selected) .studio-edge-flow {
+  opacity: 0 !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home-page-ferrofluid {
+    opacity: 0.7;
+  }
+
+  .home-launch-intro *,
+  .home-gateway *,
+  .studio-page *,
+  .canvas-space * {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}

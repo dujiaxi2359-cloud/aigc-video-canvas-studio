@@ -13,6 +13,7 @@ const STUDIO_NAME = "Moon｜Tv";
 export function BrandGatewayPage({ onNavigate }: { onNavigate: (page: Page, projectId?: string) => void }) {
   const promptSectionRef = useRef<HTMLElement>(null);
   const heroCopyRef = useRef<HTMLDivElement>(null);
+  const spotlightFrameRef = useRef(0);
   const [launchComplete, setLaunchComplete] = useState(false);
 
   useEffect(() => {
@@ -20,7 +21,10 @@ export function BrandGatewayPage({ onNavigate }: { onNavigate: (page: Page, proj
       promptSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     };
     window.addEventListener("home:focusPrompt", focusPrompt);
-    return () => window.removeEventListener("home:focusPrompt", focusPrompt);
+    return () => {
+      window.removeEventListener("home:focusPrompt", focusPrompt);
+      if (spotlightFrameRef.current) cancelAnimationFrame(spotlightFrameRef.current);
+    };
   }, []);
 
   useEffect(() => {
@@ -33,16 +37,23 @@ export function BrandGatewayPage({ onNavigate }: { onNavigate: (page: Page, proj
         gsap.set("[data-hero-reveal]", { autoAlpha: 1, y: 0 });
         return;
       }
-      gsap.timeline({ defaults: { ease: "power3.out", duration: 0.52 } })
-        .fromTo("[data-hero-reveal]", { autoAlpha: 0, y: 20 }, { autoAlpha: 1, y: 0, stagger: 0.075, clearProps: "transform,visibility" });
+      gsap.timeline({ defaults: { ease: "power3.out", duration: 0.42 } })
+        .fromTo("[data-hero-reveal]", { autoAlpha: 0, y: 14 }, { autoAlpha: 1, y: 0, stagger: 0.055, clearProps: "transform,visibility" });
     }, root);
     return () => context.revert();
   }, [launchComplete]);
 
   function updateSpotlight(event: MouseEvent<HTMLDivElement>) {
-    const rect = event.currentTarget.getBoundingClientRect();
-    event.currentTarget.style.setProperty("--spotlight-x", `${event.clientX - rect.left}px`);
-    event.currentTarget.style.setProperty("--spotlight-y", `${event.clientY - rect.top}px`);
+    const target = event.currentTarget;
+    const x = event.clientX;
+    const y = event.clientY;
+    if (spotlightFrameRef.current) return;
+    spotlightFrameRef.current = requestAnimationFrame(() => {
+      spotlightFrameRef.current = 0;
+      const rect = target.getBoundingClientRect();
+      target.style.setProperty("--spotlight-x", `${x - rect.left}px`);
+      target.style.setProperty("--spotlight-y", `${y - rect.top}px`);
+    });
   }
 
   return (
