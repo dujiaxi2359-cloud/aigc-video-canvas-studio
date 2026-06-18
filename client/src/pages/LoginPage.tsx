@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { ArrowRight, Check, Mail } from "lucide-react";
 import { MoonLogo } from "../components/common/BrandIdentity";
+import { useI18nStore } from "../i18n";
 import { useAuthStore } from "../store/authStore";
 
 const emailOptions = [
-  { id: "qq", label: "QQ 邮箱", suffix: "@qq.com" },
+  { id: "qq", labelKey: "login.qqEmail", suffix: "@qq.com" },
   { id: "gmail", label: "Gmail", suffix: "@gmail.com" }
 ] as const;
 
@@ -23,18 +24,19 @@ export function LoginPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const store = useAuthStore();
+  const t = useI18nStore((state) => state.t);
 
   async function send() {
     setBusy(true); setError("");
     try { await store.requestCode(email); setSent(true); }
-    catch (err) { setError(err instanceof Error ? err.message : "验证码发送失败"); }
+    catch (err) { setError(err instanceof Error ? err.message : t("login.sendingFailed")); }
     finally { setBusy(false); }
   }
 
   async function verify() {
     setBusy(true); setError("");
     try { await store.verifyCode(email, code); }
-    catch (err) { setError(err instanceof Error ? err.message : "登录失败"); }
+    catch (err) { setError(err instanceof Error ? err.message : t("login.failed")); }
     finally { setBusy(false); }
   }
 
@@ -56,7 +58,7 @@ export function LoginPage() {
       <div className="login-brand-mark mb-6">
         <MoonLogo className="login-brand-logo" />
       </div>
-      <h1 className="text-[28px] font-semibold tracking-[-0.02em]">登录 Moon｜Tv</h1>
+      <h1 className="text-[28px] font-semibold tracking-[-0.02em]">{t("login.title")}</h1>
       <div className="mt-6 grid grid-cols-2 gap-3">
         {emailOptions.map((option) => (
           <button
@@ -67,17 +69,17 @@ export function LoginPage() {
             className={`rounded-[12px] border px-3 py-3 text-left transition disabled:cursor-not-allowed disabled:opacity-70 ${detectedType === option.id ? "border-cyan-300/55 bg-cyan-300/[0.1] text-white" : "border-white/[0.08] bg-white/[0.035] text-white/62 hover:border-white/[0.18] hover:bg-white/[0.06] hover:text-white"}`}
           >
             <span className="flex items-center justify-between text-[13px] font-semibold">
-              {option.label}
+              {"labelKey" in option ? t(option.labelKey) : option.label}
               {detectedType === option.id && <Check size={14} className="text-cyan-200" />}
             </span>
           </button>
         ))}
       </div>
-      <label className="mt-7 block text-[12px] text-white/55">邮箱地址</label>
-      <div className="relative mt-2"><Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-white/28" size={16}/><input autoFocus className="studio-input h-12 w-full pl-10 pr-3" type="email" value={email} onChange={(e)=>{setEmail(e.target.value);setEmailType(detectEmailType(e.target.value));}} placeholder="输入邮箱地址" disabled={sent}/></div>
-      {sent && <><label className="mt-5 block text-[12px] text-white/55">6 位验证码</label><input className="studio-input mt-2 h-12 w-full px-4 text-[18px] tracking-[0.3em]" inputMode="numeric" maxLength={6} value={code} onChange={(e)=>setCode(e.target.value.replace(/\D/g,""))} placeholder="000000"/></>}
+      <label className="mt-7 block text-[12px] text-white/55">{t("login.email")}</label>
+      <div className="relative mt-2"><Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-white/28" size={16}/><input autoFocus className="studio-input h-12 w-full pl-10 pr-3" type="email" value={email} onChange={(e)=>{setEmail(e.target.value);setEmailType(detectEmailType(e.target.value));}} placeholder={t("login.emailPlaceholder")} disabled={sent}/></div>
+      {sent && <><label className="mt-5 block text-[12px] text-white/55">{t("login.code")}</label><input className="studio-input mt-2 h-12 w-full px-4 text-[18px] tracking-[0.3em]" inputMode="numeric" maxLength={6} value={code} onChange={(e)=>setCode(e.target.value.replace(/\D/g,""))} placeholder="000000"/></>}
       {error && <p className="mt-3 text-[12px] text-red-300">{error}</p>}
-      <button type="button" disabled={busy || !email || (sent && code.length !== 6)} onClick={() => void (sent ? verify() : send())} className="studio-primary-button mt-6 h-12 w-full justify-center disabled:opacity-40">{busy ? "处理中..." : sent ? "验证并登录" : "发送验证码"}<ArrowRight size={16}/></button>
+      <button type="button" disabled={busy || !email || (sent && code.length !== 6)} onClick={() => void (sent ? verify() : send())} className="studio-primary-button mt-6 h-12 w-full justify-center disabled:opacity-40">{busy ? t("login.processing") : sent ? t("login.verify") : t("login.send")}<ArrowRight size={16}/></button>
     </section>
   </div>;
 }

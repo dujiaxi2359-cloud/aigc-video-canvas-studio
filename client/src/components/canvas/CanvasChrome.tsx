@@ -6,6 +6,7 @@ import {
   Settings, Share2, Star, Trash2, Upload, UsersRound, Video, X
 } from "lucide-react";
 import type { Page } from "../../App";
+import { useI18nStore } from "../../i18n";
 import { useAssetStore } from "../../store/assetStore";
 import { useCanvasStore } from "../../store/canvasStore";
 import { useHistoryStore } from "../../store/historyStore";
@@ -21,8 +22,8 @@ import { MoonLogo } from "../common/BrandIdentity";
 export type DrawerName = "assets" | "templates" | "history" | null;
 
 const toolbarItems: Array<{ id: Exclude<DrawerName, null> | "agent"; label: string; icon: ElementType }> = [
-  { id: "assets", label: "素材库", icon: Folder },
-  { id: "templates", label: "模板", icon: Blocks },
+  { id: "assets", label: "assets.title", icon: Folder },
+  { id: "templates", label: "Templates", icon: Blocks },
   { id: "agent", label: "Agent 对话", icon: MessageCircle },
   { id: "history", label: "历史记录", icon: History }
 ];
@@ -49,9 +50,10 @@ export function CanvasTopBar({ onNavigate, onShare }: { onNavigate: (page: Page,
   const { currentProject, deleteProject } = useProjectStore();
   const clearCanvas = useCanvasStore((state) => state.clearCanvas);
   const [projectMenuOpen, setProjectMenuOpen] = useState(false);
+  const t = useI18nStore((state) => state.t);
 
   async function removeCurrentProject() {
-    if (!currentProject || !window.confirm(`确定永久删除“${currentProject.name || "未命名项目"}”吗？此操作无法撤销。`)) return;
+    if (!currentProject || !window.confirm(t("canvas.deleteConfirm", { name: currentProject.name || t("common.untitledProject") }))) return;
     await deleteProject(currentProject.id);
     clearCanvas();
     setProjectMenuOpen(false);
@@ -66,19 +68,19 @@ export function CanvasTopBar({ onNavigate, onShare }: { onNavigate: (page: Page,
         </span>
         <span className="min-w-0">
           <span className="canvas-project-brand block">Moon｜Tv</span>
-          <span className="canvas-project-title block max-w-[260px] truncate">{currentProject?.name || "未命名项目"}</span>
-          <span className="canvas-project-status mt-0.5 block">刚刚保存</span>
+          <span className="canvas-project-title block max-w-[260px] truncate">{currentProject?.name || t("common.untitledProject")}</span>
+          <span className="canvas-project-status mt-0.5 block">{t("common.justSaved")}</span>
         </span>
       </button>
       <div className="pointer-events-auto flex items-center gap-2">
-        <button type="button" onClick={() => onNavigate("settings")} className="canvas-top-icon" title="设置中心"><Settings size={16} /></button>
+        <button type="button" onClick={() => onNavigate("settings")} className="canvas-top-icon" title={t("canvas.settings")}><Settings size={16} /></button>
         <button type="button" onClick={onShare} className="canvas-top-icon" title="分享"><Share2 size={16} /></button>
         {currentProject && (
           <div className="relative">
-            <button type="button" onClick={() => setProjectMenuOpen((value) => !value)} className="canvas-top-icon" title="项目操作"><MoreHorizontal size={17} /></button>
+            <button type="button" onClick={() => setProjectMenuOpen((value) => !value)} className="canvas-top-icon" title={t("canvas.projectActions")}><MoreHorizontal size={17} /></button>
             {projectMenuOpen && (
               <div className="workspace-context-menu right-0 top-12" onClick={(event) => event.stopPropagation()}>
-                <button type="button" className="is-danger" onClick={() => void removeCurrentProject()}><Trash2 size={14} /> 删除项目</button>
+                <button type="button" className="is-danger" onClick={() => void removeCurrentProject()}><Trash2 size={14} /> {t("canvas.deleteProject")}</button>
               </div>
             )}
           </div>
@@ -97,13 +99,14 @@ export function CanvasFloatingToolbar({
   onDrawer: (name: Exclude<DrawerName, null>) => void;
   onAgent: () => void;
 }) {
+  const t = useI18nStore((state) => state.t);
   return (
     <aside className="canvas-floating-toolbar">
       <button data-sidebar-add-button="true" type="button" title="添加节点" onClick={onAdd} className={`canvas-toolbar-main ${addOpen ? "is-active" : ""}`}><Plus size={21} /></button>
       {toolbarItems.map((item) => {
         const Icon = item.icon;
         const active = item.id !== "agent" && drawer === item.id;
-        return <button key={item.id} type="button" title={item.label} onClick={() => item.id === "agent" ? onAgent() : onDrawer(item.id)} className={active ? "is-active" : ""}><Icon size={18} /></button>;
+        return <button key={item.id} type="button" title={item.label.includes(".") ? t(item.label) : item.label} onClick={() => item.id === "agent" ? onAgent() : onDrawer(item.id)} className={active ? "is-active" : ""}><Icon size={18} /></button>;
       })}
     </aside>
   );
@@ -137,6 +140,7 @@ function DrawerFrame({ title, children, onClose, actions }: { title: string; chi
 function AssetDrawer({ onClose }: { onClose: () => void }) {
   const { assets, folders, fetchAssets, fetchFolders, uploadAsset, createFolder, renameFolder, deleteFolder, moveAsset, deleteAsset } = useAssetStore();
   const addAssetNode = useCanvasStore((state) => state.addAssetNode);
+  const t = useI18nStore((state) => state.t);
   const [team, setTeam] = useState<"personal" | "team">("personal");
   const [keyword, setKeyword] = useState("");
   const [folderId, setFolderId] = useState<string | null | undefined>(undefined);
@@ -158,7 +162,7 @@ function AssetDrawer({ onClose }: { onClose: () => void }) {
       await moveAsset(assetId, nextFolderId);
       await fetchAssets(folderId === undefined ? {} : { folderId: folderId ?? "root" });
     } catch (error) {
-      window.alert(error instanceof Error ? error.message : "移动素材失败");
+      window.alert(error instanceof Error ? error.message : t("canvas.moveAssetFailed"));
     }
   }
 
@@ -168,7 +172,7 @@ function AssetDrawer({ onClose }: { onClose: () => void }) {
       await fetchFolders();
       await fetchAssets(folderId === undefined ? {} : { folderId: folderId ?? "root" });
     } catch (error) {
-      window.alert(error instanceof Error ? error.message : "导入素材失败");
+      window.alert(error instanceof Error ? error.message : t("canvas.importAssetFailed"));
     }
   }
 
@@ -178,7 +182,7 @@ function AssetDrawer({ onClose }: { onClose: () => void }) {
       await uploadAsset(file, { folderId: folderId ?? null });
       await fetchAssets(folderId === undefined ? {} : { folderId: folderId ?? "root" });
     } catch (error) {
-      window.alert(error instanceof Error ? error.message : "上传素材失败，请检查文件或网络。");
+      window.alert(error instanceof Error ? error.message : t("canvas.uploadAssetFailed"));
     }
   }
 
@@ -188,18 +192,18 @@ function AssetDrawer({ onClose }: { onClose: () => void }) {
       if (folderId === id) setFolderId(undefined);
       await fetchFolders();
     } catch (error) {
-      window.alert(error instanceof Error ? error.message : "文件夹内还有素材或子分组，请先移动后再删除。");
+      window.alert(error instanceof Error ? error.message : t("canvas.folderNotEmpty"));
     }
   }
 
   return (
     <>
     <DrawerFrame
-      title="素材库"
+      title={t("assets.title")}
       onClose={onClose}
       actions={
         <>
-          <label className="drawer-icon cursor-pointer" title="上传素材">
+          <label className="drawer-icon cursor-pointer" title={t("assets.upload")}>
             <Upload size={15} />
             <input hidden type="file" accept="image/*,video/*,audio/*" onChange={(event) => { void uploadFromPicker(event.target.files?.[0]); event.currentTarget.value = ""; }} />
           </label>
@@ -234,7 +238,7 @@ function AssetDrawer({ onClose }: { onClose: () => void }) {
         </div>
         {visibleAssets.length > 0 && (
           <>
-            <div className="mt-5 px-2 text-[11px] font-medium text-white/30">{folderId === undefined ? "最近素材" : "当前文件夹素材"}</div>
+            <div className="mt-5 px-2 text-[11px] font-medium text-white/30">{folderId === undefined ? t("canvas.recentAssets") : t("canvas.currentFolderAssets")}</div>
             <div className="mt-2 grid grid-cols-3 gap-2">
               {visibleAssets.slice(0, 12).map((asset) => {
                 const src = absoluteUploadUrl(asset.thumbnailUrl || asset.url);
@@ -249,7 +253,7 @@ function AssetDrawer({ onClose }: { onClose: () => void }) {
                     {asset.type === "image" && src ? <img src={src} alt="" /> : asset.type === "video" && src ? <video src={src} muted /> : <FileAudio size={20} />}
                     <span className="drawer-resource-actions">
                       {(asset.type === "image" || asset.type === "video") && <button type="button" title="预览" onClick={() => setPreview(asset)}><Eye size={12} /></button>}
-                      <button type="button" title="加入画布" onClick={() => addAssetNode({ assetId: asset.id, type: asset.type, url: asset.url, filePath: asset.localPath, thumbnailUrl: asset.thumbnailUrl, width: asset.width, height: asset.height, duration: asset.duration })}><Plus size={12} /></button>
+                      <button type="button" title={t("canvas.addToCanvas")} onClick={() => addAssetNode({ assetId: asset.id, type: asset.type, url: asset.url, filePath: asset.localPath, thumbnailUrl: asset.thumbnailUrl, width: asset.width, height: asset.height, duration: asset.duration })}><Plus size={12} /></button>
                       <button type="button" title="下载" onClick={() => { const link = document.createElement("a"); link.href = absoluteUploadUrl(asset.downloadUrl || asset.url) || ""; link.download = asset.name; link.click(); }}><Download size={12} /></button>
                       <button type="button" title="删除" onClick={() => void deleteAsset(asset.id)}><Trash2 size={12} /></button>
                     </span>
@@ -375,11 +379,12 @@ export function CanvasDrawer({ drawer, onClose }: { drawer: DrawerName; onClose:
 }
 
 export function CanvasEmptyGuide({ onAdd, onTemplates }: { onAdd: (type: WorkflowNodeType, position?: { x: number; y: number }) => void; onTemplates: () => void }) {
+  const t = useI18nStore((state) => state.t);
   return (
     <div className="pointer-events-none fixed inset-0 z-10 grid place-items-center">
       <motion.div layout className="canvas-empty-guide pointer-events-auto -translate-y-8 text-center" transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}>
-        <div className="canvas-empty-title"><span>双击画布</span>自由生成，或选择一个起点</div>
-        <p className="canvas-empty-copy">添加素材与生成节点后，可以拖动连接，组合成完整视频工作流。</p>
+        <div className="canvas-empty-title"><span>{t("canvas.emptyTitlePrefix")}</span>{t("canvas.emptyTitleSuffix")}</div>
+        <p className="canvas-empty-copy">{t("canvas.emptyCopy")}</p>
         <div className="canvas-empty-actions mt-5 flex flex-wrap justify-center gap-2.5">
           <button onClick={() => onAdd("video")} className="canvas-quick-action">文生视频</button>
           <button onClick={() => onAdd("image")} className="canvas-quick-action">上传参考图</button>
@@ -395,13 +400,14 @@ export function CanvasEmptyGuide({ onAdd, onTemplates }: { onAdd: (type: Workflo
 export function ShareProjectModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const project = useProjectStore((state) => state.currentProject);
   const inputRef = useRef<HTMLInputElement>(null);
+  const t = useI18nStore((state) => state.t);
   const shareUrl = `${window.location.origin}/canvas/${project?.id || "new"}`;
   return (
     <AnimatePresence>
       {open && (
         <motion.div className="fixed inset-0 z-[10000] grid place-items-center bg-black/62 p-5 backdrop-blur-sm" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onMouseDown={onClose}>
           <motion.div className="share-modal" initial={{ opacity: 0, y: 12, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} onMouseDown={(event) => event.stopPropagation()}>
-            <div className="flex items-start justify-between"><div><h2 className="text-[18px] font-semibold">分享项目</h2><p className="mt-1 text-[12px] text-white/38">生成一个可访问当前画布的链接。</p></div><button type="button" aria-label="关闭分享" title="关闭分享" className="drawer-icon" onClick={onClose}><X size={16} /></button></div>
+            <div className="flex items-start justify-between"><div><h2 className="text-[18px] font-semibold">{t("canvas.shareTitle")}</h2><p className="mt-1 text-[12px] text-white/38">{t("canvas.shareDesc")}</p></div><button type="button" aria-label={t("canvas.shareClose")} title={t("canvas.shareClose")} className="drawer-icon" onClick={onClose}><X size={16} /></button></div>
             <div className="mt-5 flex gap-2"><input ref={inputRef} readOnly value={shareUrl} className="studio-input h-10 min-w-0 flex-1" /><button className="studio-primary-button" onClick={() => navigator.clipboard.writeText(shareUrl)}><Copy size={14} /> 复制</button></div>
             <div className="mt-4 flex gap-2"><button className="studio-secondary-button"><UsersRound size={14} /> 团队可查看</button><button className="studio-secondary-button"><Link2 size={14} /> 链接访问</button></div>
           </motion.div>

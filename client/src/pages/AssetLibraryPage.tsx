@@ -11,6 +11,7 @@ import { absoluteUploadUrl } from "../utils/file";
 import { formatTime } from "../utils/time";
 import { AssetFolderTree } from "../components/assets/AssetFolderTree";
 import { HomeTopNav } from "../components/home/HomeTopNav";
+import { useI18nStore } from "../i18n";
 import type { Page } from "../App";
 
 const assetTypeLabels: Record<string, string> = {
@@ -53,6 +54,7 @@ export function AssetLibraryPage({ onNavigate }: { onNavigate: (page: Page, proj
   const [sortOrder, setSortOrder] = useState("desc");
   const [status, setStatus] = useState("");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
+  const t = useI18nStore((state) => state.t);
 
   const query = useMemo(() => {
     const next: Record<string, string | null | undefined> = { keyword, sortBy, sortOrder };
@@ -153,14 +155,14 @@ export function AssetLibraryPage({ onNavigate }: { onNavigate: (page: Page, proj
   }
 
   const sidebarItems = [
-    ["all", "全部素材"],
+    ["all", t("assets.all")],
     ["image", "图片"],
     ["video", "视频"],
     ["audio", "音频"],
     ["text", "文本"],
     ["script", "脚本"],
     ["generated", "生成结果"],
-    ["uploaded", "上传素材"]
+    ["uploaded", t("assets.uploaded")]
   ];
 
   return (
@@ -170,8 +172,8 @@ export function AssetLibraryPage({ onNavigate }: { onNavigate: (page: Page, proj
         <aside className="overflow-auto rounded-[10px] border border-white/[0.1] bg-[#151516] p-3">
           <div className="mb-3 flex items-center justify-between">
             <div>
-              <div className="text-[15px] font-semibold text-white">素材库</div>
-              <div className="text-[12px] text-white/38">项目素材文件夹</div>
+              <div className="text-[15px] font-semibold text-white">{t("assets.title")}</div>
+              <div className="text-[12px] text-white/38">{t("assets.subtitle")}</div>
             </div>
             <button
               type="button"
@@ -221,7 +223,7 @@ export function AssetLibraryPage({ onNavigate }: { onNavigate: (page: Page, proj
           <div className="flex flex-wrap items-center gap-2 border-b border-white/[0.06] p-4">
             <div className="relative min-w-[260px] flex-1">
               <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-white/30" size={15} />
-              <Input className="pl-9" placeholder="搜索素材名称、原文件名或提示词" value={keyword} onChange={(event) => setKeyword(event.target.value)} />
+              <Input className="pl-9" placeholder={t("assets.search")} value={keyword} onChange={(event) => setKeyword(event.target.value)} />
             </div>
             <div className="w-36 shrink-0">
               <Select value={sortBy} onChange={(event) => setSortBy(event.target.value)}>
@@ -237,7 +239,7 @@ export function AssetLibraryPage({ onNavigate }: { onNavigate: (page: Page, proj
                 <option value="asc">正序</option>
               </Select>
             </div>
-            <Button variant="secondary" onClick={() => fileInputRef.current?.click()}><Upload size={14} /> 上传素材</Button>
+            <Button variant="secondary" onClick={() => fileInputRef.current?.click()}><Upload size={14} /> {t("assets.upload")}</Button>
             {assets.length > 0 && (
               <>
                 <button type="button" className="h-9 rounded-[8px] border border-white/[0.1] px-3 text-[12px] text-white/65 hover:bg-white/[0.06] hover:text-white" onClick={() => setSelectedIds(selectedIds.size === assets.length ? new Set() : new Set(assets.map((asset) => asset.id)))}>
@@ -259,11 +261,11 @@ export function AssetLibraryPage({ onNavigate }: { onNavigate: (page: Page, proj
             {assets.length === 0 ? (
               <Card>
                 <div className="py-12 text-center">
-                  <div className="text-[15px] font-semibold text-white">还没有素材。</div>
-                  <div className="mt-2 text-[13px] text-white/42">你可以上传图片 / 视频，或在画布中生成内容后自动入库。</div>
+                  <div className="text-[15px] font-semibold text-white">{t("assets.emptyTitle")}</div>
+                  <div className="mt-2 text-[13px] text-white/42">{t("assets.emptyDesc")}</div>
                   <div className="mt-4 flex justify-center gap-2">
-                    <Button variant="secondary" onClick={() => fileInputRef.current?.click()}>上传素材</Button>
-                    <Button variant="primary" onClick={() => window.dispatchEvent(new CustomEvent("navigate", { detail: "canvas" }))}>返回画布生成</Button>
+                    <Button variant="secondary" onClick={() => fileInputRef.current?.click()}>{t("assets.upload")}</Button>
+                    <Button variant="primary" onClick={() => window.dispatchEvent(new CustomEvent("navigate", { detail: "canvas" }))}>{t("assets.backCanvas")}</Button>
                   </div>
                 </div>
               </Card>
@@ -284,7 +286,7 @@ export function AssetLibraryPage({ onNavigate }: { onNavigate: (page: Page, proj
                       >
                         <button
                           type="button"
-                          title={selectedIds.has(asset.id) ? "取消选择" : "选择素材"}
+                          title={selectedIds.has(asset.id) ? t("assets.unselect") : t("assets.select")}
                           className={`absolute left-0 top-0 z-10 grid h-7 w-7 place-items-center rounded-[7px] border ${selectedIds.has(asset.id) ? "border-cyan-200/60 bg-cyan-300 text-black" : "border-white/[0.16] bg-black/60 text-transparent hover:text-white/65"}`}
                           onClick={(event) => { event.stopPropagation(); toggleSelected(asset.id); }}
                         >
@@ -316,7 +318,7 @@ export function AssetLibraryPage({ onNavigate }: { onNavigate: (page: Page, proj
 
                         <div className="mt-3 flex items-center gap-1.5 border-t border-white/[0.07] pt-3">
                           <button title="下载" type="button" onClick={() => downloadAsset(asset)} className="grid h-8 w-8 shrink-0 place-items-center rounded-[7px] bg-white/[0.05] text-white/52 hover:bg-white/[0.1] hover:text-white"><Download size={13} /></button>
-                          <button title="重命名" type="button" onClick={() => { const name = window.prompt("素材名称", asset.name); if (name) run("素材已重命名", () => renameAsset(asset.id, name)); }} className="grid h-8 w-8 shrink-0 place-items-center rounded-[7px] bg-white/[0.05] text-white/52 hover:bg-white/[0.1] hover:text-white"><Edit3 size={13} /></button>
+                          <button title={t("assets.rename")} type="button" onClick={() => { const name = window.prompt("素材名称", asset.name); if (name) run("素材已重命名", () => renameAsset(asset.id, name)); }} className="grid h-8 w-8 shrink-0 place-items-center rounded-[7px] bg-white/[0.05] text-white/52 hover:bg-white/[0.1] hover:text-white"><Edit3 size={13} /></button>
                           <button title="复制路径" type="button" onClick={() => navigator.clipboard.writeText(asset.localPath || asset.url)} className="grid h-8 w-8 shrink-0 place-items-center rounded-[7px] bg-white/[0.05] text-white/52 hover:bg-white/[0.1] hover:text-white"><Copy size={13} /></button>
                           <button title="复制 URL" type="button" onClick={() => navigator.clipboard.writeText(asset.publicUrl || absoluteUploadUrl(asset.url))} className="grid h-8 w-8 shrink-0 place-items-center rounded-[7px] bg-white/[0.05] text-white/52 hover:bg-white/[0.1] hover:text-white"><Link2 size={13} /></button>
                           <Select className="min-w-0 flex-1" value={asset.folderId ?? ""} onChange={(event) => void moveToFolder(asset.id, event.target.value || null)}>
@@ -326,7 +328,7 @@ export function AssetLibraryPage({ onNavigate }: { onNavigate: (page: Page, proj
                               return <option key={folder.id} value={folder.id}>{parent ? `${parent.name} / ${folder.name}` : folder.name}</option>;
                             })}
                           </Select>
-                          <button title="删除" type="button" onClick={() => { if (window.confirm("确定删除该素材吗？此操作会从素材库移除。")) run("素材已删除", () => deleteAsset(asset.id)); }} className="grid h-8 w-8 shrink-0 place-items-center rounded-[7px] bg-red-400/[0.08] text-red-200/60 hover:bg-red-400/[0.14] hover:text-red-100"><Trash2 size={13} /></button>
+                          <button title={t("assets.delete")} type="button" onClick={() => { if (window.confirm("确定删除该素材吗？此操作会从素材库移除。")) run("素材已删除", () => deleteAsset(asset.id)); }} className="grid h-8 w-8 shrink-0 place-items-center rounded-[7px] bg-red-400/[0.08] text-red-200/60 hover:bg-red-400/[0.14] hover:text-red-100"><Trash2 size={13} /></button>
                         </div>
                       </div>
                     </Card>

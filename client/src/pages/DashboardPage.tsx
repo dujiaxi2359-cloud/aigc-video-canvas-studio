@@ -3,6 +3,7 @@ import { motion } from "framer-motion";
 import { ArrowRight, Clapperboard, Image, Layers3, Mic, Play, Plus, WandSparkles, Workflow } from "lucide-react";
 import type { Page } from "../App";
 import { HomeTopNav } from "../components/home/HomeTopNav";
+import { useI18nStore } from "../i18n";
 import { useCanvasStore } from "../store/canvasStore";
 import { useProjectStore } from "../store/projectStore";
 import { formatTime } from "../utils/time";
@@ -12,12 +13,6 @@ const featured = [
   { title: "智能眼镜短视频", subtitle: "时尚街拍与 UGC 镜头", tone: "from-[#133c45] via-[#34757c] to-[#a1c0b6]" },
   { title: "3D 产品广告", subtitle: "材质、灯光与镜头运动", tone: "from-[#2f3348] via-[#58688c] to-[#b1bdd1]" },
   { title: "电商主图工作流", subtitle: "一组素材生成完整视觉", tone: "from-[#4a302e] via-[#936d5e] to-[#d8b693]" }
-];
-
-const quickWorkflows = [
-  { title: "商品图转视频", desc: "主图、运镜、卖点字幕", icon: Clapperboard, prompt: "把商品主图制作成 15 秒竖屏电商短视频" },
-  { title: "批量素材变体", desc: "多比例、多场景输出", icon: Layers3, prompt: "基于现有素材生成多组适合投放的视频变体" },
-  { title: "首帧视觉设计", desc: "构图、灯光、产品焦点", icon: Image, prompt: "先设计一个具有商业质感的视频首帧" }
 ];
 
 function SpotlightPanel({ children, className = "" }: { children: ReactNode; className?: string }) {
@@ -34,6 +29,7 @@ function SpotlightPanel({ children, className = "" }: { children: ReactNode; cla
 export function DashboardPage({ onNavigate, navPage = "video" }: { onNavigate: (page: Page, projectId?: string) => void; navPage?: Page }) {
   const [prompt, setPrompt] = useState("");
   const [invalid, setInvalid] = useState(false);
+  const t = useI18nStore((state) => state.t);
   const { projects, fetchProjects, createProject, loadProject } = useProjectStore();
   const clearCanvas = useCanvasStore((state) => state.clearCanvas);
   const loadCanvasProject = useCanvasStore((state) => state.loadProject);
@@ -45,6 +41,11 @@ export function DashboardPage({ onNavigate, navPage = "video" }: { onNavigate: (
   }, [fetchProjects]);
 
   const recent = useMemo(() => projects.slice(0, 4), [projects]);
+  const localizedQuickWorkflows = useMemo(() => ([
+    { title: t("dashboard.templateProduct"), desc: t("dashboard.templateProductSub"), icon: Clapperboard, prompt: t("dashboard.templateProduct") },
+    { title: t("dashboard.templateVariants"), desc: t("dashboard.templateVariantsSub"), icon: Layers3, prompt: t("dashboard.templateVariants") },
+    { title: t("dashboard.templateFirstFrame"), desc: t("dashboard.templateFirstFrameSub"), icon: Image, prompt: t("dashboard.templateFirstFrame") }
+  ]), [t]);
 
   async function begin(input = "", templateTitle?: string) {
     const clean = input.trim();
@@ -60,11 +61,11 @@ export function DashboardPage({ onNavigate, navPage = "video" }: { onNavigate: (
       const nodes = useCanvasStore.getState().nodes;
       const imageNode = nodes.find((node) => node.type === "image");
       const videoNode = [...nodes].reverse().find((node) => node.type === "video");
-      if (videoNode) updateNodeData(videoNode.id, { prompt: clean || `使用 ${templateTitle} 模板创建一条商品视频` });
+      if (videoNode) updateNodeData(videoNode.id, { prompt: clean || `${templateTitle}` });
       if (imageNode && videoNode) useCanvasStore.getState().connectNodes({ source: imageNode.id, sourceHandle: "out", target: videoNode.id, targetHandle: "in-0" });
     }
     try {
-      const project = await createProject(templateTitle || (clean ? clean.slice(0, 24) : "未命名项目"));
+      const project = await createProject(templateTitle || (clean ? clean.slice(0, 24) : t("common.untitledProject")));
       await useProjectStore.getState().saveProject(useCanvasStore.getState().nodes, useCanvasStore.getState().edges);
       onNavigate("canvas", project.id);
     } catch {
@@ -88,9 +89,9 @@ export function DashboardPage({ onNavigate, navPage = "video" }: { onNavigate: (
       <main className="video-dashboard-main mx-auto max-w-[1440px] px-5 pb-16 pt-28 md:px-10">
         <section className="video-dashboard-hero">
           <SpotlightPanel className="video-command-panel">
-            <div className="video-command-kicker"><WandSparkles size={14} /> AI 视频工作台</div>
-            <h1>从一句话开始<br />搭建视频工作流</h1>
-            <p>描述商品、受众与风格，我们会在无限画布中生成图片、视频和素材节点。</p>
+            <div className="video-command-kicker"><WandSparkles size={14} /> {t("dashboard.kicker")}</div>
+            <h1>{t("dashboard.title")}</h1>
+            <p>{t("dashboard.subtitle")}</p>
             <div className={`studio-prompt-bar video-prompt-bar ${invalid ? "is-invalid" : ""}`}>
             <textarea
               value={prompt}
@@ -98,18 +99,18 @@ export function DashboardPage({ onNavigate, navPage = "video" }: { onNavigate: (
               onKeyDown={(event) => {
                 if ((event.metaKey || event.ctrlKey) && event.key === "Enter") void begin(prompt);
               }}
-              placeholder="例如：为这款智能眼镜制作一条 15 秒小红书竖屏广告…"
+              placeholder={t("dashboard.placeholder")}
             />
-            <button type="button" title="语音输入" className="studio-prompt-icon"><Mic size={17} /></button>
-            <button type="button" title="开始创作" className="studio-prompt-submit" onClick={() => void begin(prompt)}><ArrowRight size={18} /></button>
+            <button type="button" title={t("dashboard.voiceInput")} className="studio-prompt-icon"><Mic size={17} /></button>
+            <button type="button" title={t("dashboard.start")} className="studio-prompt-submit" onClick={() => void begin(prompt)}><ArrowRight size={18} /></button>
             </div>
-            <div className="video-command-meta"><span>⌘ Enter 创建</span><span>自动连接节点</span><span>可随时继续编辑</span></div>
+            <div className="video-command-meta"><span>{t("dashboard.metaCreate")}</span><span>{t("dashboard.metaConnect")}</span><span>{t("dashboard.metaEditable")}</span></div>
           </SpotlightPanel>
 
-          <aside className="video-quick-panel" aria-label="快捷工作流">
-            <div className="video-panel-heading"><div><span>快捷开始</span><strong>常用工作流</strong></div><Play size={16} /></div>
+          <aside className="video-quick-panel" aria-label={t("dashboard.quickAria")}>
+            <div className="video-panel-heading"><div><span>{t("dashboard.quickStart")}</span><strong>{t("dashboard.workflows")}</strong></div><Play size={16} /></div>
             <div className="video-quick-list">
-              {quickWorkflows.map((item, index) => {
+              {localizedQuickWorkflows.map((item, index) => {
                 const Icon = item.icon;
                 return (
                   <button
@@ -131,13 +132,13 @@ export function DashboardPage({ onNavigate, navPage = "video" }: { onNavigate: (
 
         <section className="video-recent-section">
           <div className="video-section-heading">
-            <div><div className="text-[18px] font-semibold">最近项目</div><div className="mt-1 text-[12px] text-white/38">继续编辑，或从空白无限画布开始。</div></div>
-            <button type="button" onClick={() => onNavigate("workspace")}>查看全部 <ArrowRight size={13} /></button>
+            <div><div className="text-[18px] font-semibold">{t("dashboard.recent")}</div><div className="mt-1 text-[12px] text-white/38">{t("dashboard.recentDesc")}</div></div>
+            <button type="button" onClick={() => onNavigate("workspace")}>{t("dashboard.allProjects")} <ArrowRight size={13} /></button>
           </div>
           <div className="video-project-grid">
             <button type="button" onClick={() => void begin()} className="video-project-card video-project-new group">
               <div className="video-project-preview"><span><Plus size={20} /></span></div>
-              <div className="video-project-copy"><div><strong>新建项目</strong><small>空白无限画布</small></div><ArrowRight size={14} /></div>
+              <div className="video-project-copy"><div><strong>{t("dashboard.newProject")}</strong><small>{t("dashboard.blankCanvas")}</small></div><ArrowRight size={14} /></div>
             </button>
             {recent.map((project, index) => (
               <button key={project.id} type="button" onClick={() => void openProject(project.id)} className="video-project-card group">

@@ -6,6 +6,7 @@ import type { Page } from "../App";
 import { HomeLaunchIntro } from "../components/home/HomeLaunchIntro";
 import { HomeTopNav } from "../components/home/HomeTopNav";
 import { FerrofluidBackground } from "../components/home/FerrofluidBackground";
+import { useI18nStore } from "../i18n";
 
 const ICP_RECORD = "粤ICP备2026074382号";
 const STUDIO_NAME = "Moon｜Tv";
@@ -14,6 +15,7 @@ export function BrandGatewayPage({ onNavigate }: { onNavigate: (page: Page, proj
   const promptSectionRef = useRef<HTMLElement>(null);
   const heroCopyRef = useRef<HTMLDivElement>(null);
   const spotlightFrameRef = useRef(0);
+  const t = useI18nStore((state) => state.t);
   const [launchComplete, setLaunchComplete] = useState(() => {
     if (typeof window === "undefined") return false;
     const shouldSkipLaunch = window.sessionStorage.getItem("moon.home.skipLaunch") === "1";
@@ -74,23 +76,23 @@ export function BrandGatewayPage({ onNavigate }: { onNavigate: (page: Page, proj
       <HomeTopNav page="home" onNavigate={onNavigate} />
 
       <main className="home-flagship-content">
-        <section ref={promptSectionRef} className="home-unicorn-hero" aria-label="描述你的创意">
+        <section ref={promptSectionRef} className="home-unicorn-hero" aria-label={t("home.heroAria")}>
           <div className="home-unicorn-hero-stage">
             <div className="home-unicorn-title-shield" />
             <div ref={heroCopyRef} className="home-unicorn-copy">
               <p className="home-unicorn-eyebrow" data-hero-reveal>
-                AIGC
+                {t("home.heroEyebrow")}
               </p>
-              <div className="home-unicorn-brand-title" data-hero-reveal>Moon | Tv</div>
-              <div className="home-unicorn-cn-title" data-hero-reveal>让灵感成片</div>
-              <div className="home-unicorn-en-title" data-hero-reveal>Your AI Creative Channel.</div>
+              <div className="home-unicorn-brand-title" data-hero-reveal>{t("home.heroBrand")}</div>
+              <div className="home-unicorn-cn-title" data-hero-reveal>{t("home.heroCn")}</div>
+              <div className="home-unicorn-en-title" data-hero-reveal>{t("home.heroEn")}</div>
               <button
                 type="button"
                 className="home-unicorn-start-button"
                 onClick={() => onNavigate("canvas", "new")}
                 data-hero-reveal
               >
-                开始体验
+                {t("home.start")}
               </button>
             </div>
           </div>
@@ -103,33 +105,33 @@ export function BrandGatewayPage({ onNavigate }: { onNavigate: (page: Page, proj
             <div>
               <div className="text-[24px] font-black text-white">Moon｜Tv</div>
               <p className="mt-5 max-w-[380px] text-[14px] leading-7 text-white/34">
-                AI 驱动的商业内容生产平台。编辑文本、图像、视频与素材流程，让团队把创意稳定变成可交付资产。
+                {t("home.footerDesc")}
               </p>
             </div>
             <div>
-              <div className="text-[14px] font-semibold text-white/78">支持</div>
+              <div className="text-[14px] font-semibold text-white/78">{t("home.support")}</div>
               <div className="mt-5 grid gap-4 text-[14px] text-white/32">
-                <button type="button" onClick={() => onNavigate("settings")} className="w-fit transition hover:text-white/70">帮助中心</button>
-                <button type="button" onClick={() => onNavigate("settings")} className="w-fit transition hover:text-white/70">联系我们</button>
+                <button type="button" onClick={() => onNavigate("settings")} className="w-fit transition hover:text-white/70">{t("account.helpCenter")}</button>
+                <button type="button" onClick={() => onNavigate("settings")} className="w-fit transition hover:text-white/70">{t("account.contact")}</button>
               </div>
             </div>
             <div>
-              <div className="text-[14px] font-semibold text-white/78">关于</div>
+              <div className="text-[14px] font-semibold text-white/78">{t("home.about")}</div>
               <div className="mt-5 grid gap-4 text-[14px] text-white/32">
-                <a href="/terms" className="w-fit transition hover:text-white/70">服务条款</a>
-                <a href="/privacy" className="w-fit transition hover:text-white/70">隐私政策</a>
+                <a href="/terms" className="w-fit transition hover:text-white/70">{t("home.terms")}</a>
+                <a href="/privacy" className="w-fit transition hover:text-white/70">{t("home.privacy")}</a>
               </div>
             </div>
           </div>
 
           <div className="py-10 text-center">
             <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-[16px] font-semibold text-white/80">
-              <a href="/privacy" className="transition hover:text-white">隐私政策</a>
+              <a href="/privacy" className="transition hover:text-white">{t("home.privacy")}</a>
               <span className="text-white/28">·</span>
-              <a href="/terms" className="transition hover:text-white">服务条款</a>
+              <a href="/terms" className="transition hover:text-white">{t("home.terms")}</a>
             </div>
             <div className="mt-7 text-[15px] font-semibold text-white/46">
-              版权所有—{STUDIO_NAME} 保留所有权利
+              {t("home.rights", { name: STUDIO_NAME })}
             </div>
             <a
               href="https://beian.miit.gov.cn/"

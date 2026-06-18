@@ -16,21 +16,22 @@ import {
   WalletCards
 } from "lucide-react";
 import type { Page } from "../../App";
+import { localeOptions, useI18nStore } from "../../i18n";
 import { useAuthStore } from "../../store/authStore";
 import { BrandIdentity } from "../common/BrandIdentity";
 
 const links: Array<[Page, string]> = [
-  ["home", "首页"],
-  ["photos", "图文创作"],
-  ["video", "视频画布"],
-  ["workspace", "工作空间"],
-  ["assets", "素材库"],
-  ["settings", "设置中心"]
+  ["home", "nav.home"],
+  ["photos", "nav.photos"],
+  ["video", "nav.video"],
+  ["workspace", "nav.workspace"],
+  ["assets", "nav.assets"],
+  ["settings", "nav.settings"]
 ];
 
-function accountName(email?: string, name?: string) {
+function accountName(email: string | undefined, name: string | undefined, fallback: string) {
   const value = name?.trim() || email?.split("@")[0]?.trim();
-  return value || "Moon 用户";
+  return value || fallback;
 }
 
 function accountInitial(value?: string) {
@@ -45,9 +46,12 @@ export function HomeTopNav({ page, onNavigate }: { page: Page; onNavigate: (page
   const [helpOpen, setHelpOpen] = useState(false);
   const [languageOpen, setLanguageOpen] = useState(false);
   const auth = useAuthStore();
+  const locale = useI18nStore((state) => state.locale);
+  const setLocale = useI18nStore((state) => state.setLocale);
+  const t = useI18nStore((state) => state.t);
   const activeWorkspace = auth.workspaces.find((workspace) => workspace.id === auth.activeWorkspaceId) || auth.workspaces[0];
-  const displayName = accountName(auth.user?.email, auth.user?.name);
-  const workspaceName = activeWorkspace?.name || `${displayName} 的个人空间`;
+  const displayName = accountName(auth.user?.email, auth.user?.name, t("account.defaultName"));
+  const workspaceName = activeWorkspace?.name || t("account.personalSpace", { name: displayName });
   const avatarInitial = accountInitial(auth.user?.email || displayName);
   const planLabel = activeWorkspace?.planId?.trim() ? activeWorkspace.planId.toUpperCase() : "FREE";
   const credits = activeWorkspace?.credits ?? 0;
@@ -70,23 +74,23 @@ export function HomeTopNav({ page, onNavigate }: { page: Page; onNavigate: (page
         <BrandIdentity />
       </button>
       <nav className="absolute left-1/2 hidden -translate-x-1/2 items-center gap-1 rounded-full border border-white/[0.07] bg-white/[0.035] p-1 md:flex">
-        {links.map(([target, label]) => (
-          <button key={target} type="button" onClick={() => handleNav(target)} className={`h-10 rounded-full px-4 text-[14px] transition ${page === target ? "bg-white/[0.12] font-medium text-white" : "text-white/58 hover:bg-white/[0.06] hover:text-white"}`}>{label}</button>
+        {links.map(([target, labelKey]) => (
+          <button key={target} type="button" onClick={() => handleNav(target)} className={`h-10 rounded-full px-4 text-[14px] transition ${page === target ? "bg-white/[0.12] font-medium text-white" : "text-white/58 hover:bg-white/[0.06] hover:text-white"}`}>{t(labelKey)}</button>
         ))}
       </nav>
       <div className="ml-auto flex items-center gap-1.5">
         {!auth.user && (
           <button type="button" onClick={() => onNavigate("login")} className="studio-login-button">
-            <LogIn size={17} /> 登录 / 注册
+            <LogIn size={17} /> {t("account.loginRegister")}
           </button>
         )}
         {auth.user && (
           <>
-            <button type="button" title="帮助中心" onClick={() => onNavigate("settings")} className="studio-nav-icon"><Headphones size={16} /></button>
+            <button type="button" title={t("account.helpIconTitle")} onClick={() => onNavigate("settings")} className="studio-nav-icon"><Headphones size={16} /></button>
             <div className="relative">
               <button
                 type="button"
-                title="通知"
+                title={t("account.notificationTitle")}
                 className={`studio-nav-icon ${notificationsOpen ? "is-active" : ""}`}
                 onClick={() => {
                   setAccountOpen(false);
@@ -97,9 +101,9 @@ export function HomeTopNav({ page, onNavigate }: { page: Page; onNavigate: (page
               </button>
               {notificationsOpen && (
                 <div className="studio-notification-popover">
-                  <strong>通知中心</strong>
-                  <p>暂无新的协作通知。生成任务、分享请求和项目变更会显示在这里。</p>
-                  <button type="button" onClick={() => setNotificationsOpen(false)}>知道了</button>
+                  <strong>{t("account.notificationTitle")}</strong>
+                  <p>{t("account.notificationBody")}</p>
+                  <button type="button" onClick={() => setNotificationsOpen(false)}>{t("account.dismiss")}</button>
                 </div>
               )}
             </div>
@@ -117,7 +121,7 @@ export function HomeTopNav({ page, onNavigate }: { page: Page; onNavigate: (page
                   });
                 }}
                 className={`studio-account-pill ${accountOpen ? "is-open" : ""}`}
-                title="账号菜单"
+                title={t("account.menuTitle")}
                 whileTap={{ scale: 0.985 }}
               >
                 <span className="studio-account-pill-tile">{avatarInitial}</span>
@@ -150,8 +154,8 @@ export function HomeTopNav({ page, onNavigate }: { page: Page; onNavigate: (page
                       </div>
                       <div className="studio-account-quota">
                         <div>
-                          <span>创作额度可用</span>
-                          <small>用于图片、视频与素材节点生成</small>
+                          <span>{t("account.quotaTitle")}</span>
+                          <small>{t("account.quotaDesc")}</small>
                         </div>
                         <Infinity size={22} />
                       </div>
@@ -162,7 +166,7 @@ export function HomeTopNav({ page, onNavigate }: { page: Page; onNavigate: (page
                     <div className="studio-account-menu">
                       <button type="button" className="studio-account-row" onClick={() => { setAccountOpen(false); onNavigate("account"); }}>
                         <span className="studio-account-row-icon"><UserRound size={18} /></span>
-                        <span>个人主页</span>
+                        <span>{t("account.profile")}</span>
                       </button>
                       <button
                         type="button"
@@ -173,12 +177,12 @@ export function HomeTopNav({ page, onNavigate }: { page: Page; onNavigate: (page
                         }}
                       >
                         <span className="studio-account-row-icon"><Globe2 size={18} /></span>
-                        <span>简体中文</span>
+                        <span>{localeOptions.find((option) => option.id === locale)?.label || "简体中文"}</span>
                         <ChevronDown size={18} className="studio-account-row-arrow" />
                       </button>
                       <button type="button" className="studio-account-row" onClick={() => { setAccountOpen(false); onNavigate("settings"); }}>
                         <span className="studio-account-row-icon"><Settings size={18} /></span>
-                        <span>账户管理</span>
+                        <span>{t("account.accountSettings")}</span>
                       </button>
                     </div>
 
@@ -193,12 +197,12 @@ export function HomeTopNav({ page, onNavigate }: { page: Page; onNavigate: (page
                         }}
                       >
                         <span className="studio-account-row-icon"><HelpCircle size={18} /></span>
-                        <span>帮助中心</span>
+                        <span>{t("account.helpCenter")}</span>
                         <ChevronDown size={18} className="studio-account-row-arrow" />
                       </button>
                       <button type="button" className="studio-account-row studio-account-row-danger" onClick={() => void auth.logout()}>
                         <span className="studio-account-row-icon"><LogOut size={18} /></span>
-                        <span>登出账号</span>
+                        <span>{t("account.logout")}</span>
                       </button>
                     </div>
                     <AnimatePresence>
@@ -210,16 +214,20 @@ export function HomeTopNav({ page, onNavigate }: { page: Page; onNavigate: (page
                           exit={{ opacity: 0, x: 8, scale: 0.985 }}
                           transition={{ duration: 0.16, ease: [0.22, 1, 0.36, 1] }}
                         >
-                          <button type="button" className="studio-account-language-row">
-                            <span>English</span>
-                          </button>
-                          <button type="button" className="studio-account-language-row">
-                            <span>中文繁體</span>
-                          </button>
-                          <button type="button" className="studio-account-language-row is-active">
-                            <span>简体中文</span>
-                            <small>当前</small>
-                          </button>
+                          {localeOptions.map((option) => (
+                            <button
+                              key={option.id}
+                              type="button"
+                              className={`studio-account-language-row ${locale === option.id ? "is-active" : ""}`}
+                              onClick={() => {
+                                setLocale(option.id);
+                                setLanguageOpen(false);
+                              }}
+                            >
+                              <span>{option.label}</span>
+                              {locale === option.id && <small>{t("common.current")}</small>}
+                            </button>
+                          ))}
                         </motion.div>
                       )}
                       {helpOpen && (
@@ -233,26 +241,26 @@ export function HomeTopNav({ page, onNavigate }: { page: Page; onNavigate: (page
                           <div className="studio-account-support-menu">
                             <button type="button" className="studio-account-support-row is-active">
                               <MessageCircle size={15} />
-                              <span>联系我们</span>
+                              <span>{t("account.contact")}</span>
                               <ChevronRight size={15} />
                             </button>
                             <button type="button" className="studio-account-support-row">
                               <HelpCircle size={15} />
-                              <span>使用教程</span>
+                              <span>{t("account.tutorial")}</span>
                             </button>
                             <button type="button" className="studio-account-support-row">
                               <Settings size={15} />
-                              <span>快捷设置</span>
+                              <span>{t("account.quickSettings")}</span>
                             </button>
                           </div>
                           <div className="studio-account-qr-card">
                             <div className="studio-account-qr-brand">
                               <img src="/account-assets/moon-tv-brand-strip.png" alt="Moon Tv" loading="lazy" decoding="async" />
                             </div>
-                            <img src="/account-assets/wechat-support-qr-moon.png" alt="Moon Tv 微信联系二维码" loading="lazy" decoding="async" />
+                            <img src="/account-assets/wechat-support-qr-moon.png" alt={t("account.wechatAlt")} loading="lazy" decoding="async" />
                             <div className="studio-account-qr-copy">
-                              <strong>微信联系 Moon | Tv</strong>
-                              <p>扫码添加微信，反馈账号、额度、生成或素材加载问题。</p>
+                              <strong>{t("account.wechatTitle")}</strong>
+                              <p>{t("account.wechatCopy")}</p>
                             </div>
                           </div>
                         </motion.div>

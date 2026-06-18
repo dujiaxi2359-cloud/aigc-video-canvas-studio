@@ -19,6 +19,7 @@ import { useAuthStore } from "./store/authStore";
 import { LoginPage } from "./pages/LoginPage";
 import { InvitePage } from "./pages/InvitePage";
 import { LegalPage } from "./pages/LegalPage";
+import { useI18nStore } from "./i18n";
 import { isLocalAdminHost } from "./utils/localAdmin";
 
 export type Page = "login" | "invite" | "home" | "photos" | "video" | "workspace" | "canvas" | "templates" | "community" | "arena" | "pricing" | "account" | "settings" | "assets" | "history" | "privacy" | "terms";
@@ -47,6 +48,7 @@ export default function App() {
   const loadCanvasProject = useCanvasStore((state) => state.loadProject);
   const loadProject = useProjectStore((state) => state.loadProject);
   const auth = useAuthStore();
+  const t = useI18nStore((state) => state.t);
   const canAdmin = isLocalMode || Boolean(auth.user && ["admin", "super_admin"].includes(auth.user.role));
 
   useEffect(() => {
@@ -132,7 +134,7 @@ export default function App() {
       .catch(() => undefined);
   }, [loadCanvasProject, loadProject, page, routeProjectId]);
 
-  if (auth.loading && !isLocalMode) return <div className="grid h-screen place-items-center bg-[#070708] text-[13px] text-white/45">正在验证会话...</div>;
+  if (auth.loading && !isLocalMode) return <div className="grid h-screen place-items-center bg-[#070708] text-[13px] text-white/45">{t("common.loadingSession")}</div>;
   if (page === "login") return <LoginPage />;
   if (!auth.user && !isLocalMode) {
     if (page === "home") {
