@@ -68,11 +68,12 @@ export function MediaPreview({ type, title, previewUrl, originalUrl, outputUrl, 
         >
           {previewSrc ? (
             type === "image" ? (
-              <img src={previewSrc} alt={title || "图片预览"} draggable={false} />
+              <img src={previewSrc} alt={title || "图片预览"} draggable={false} loading="lazy" decoding="async" />
             ) : (
               <video
                 src={previewSrc}
                 controls
+                preload="metadata"
                 draggable={false}
                 onLoadedMetadata={(event) => {
                   const video = event.currentTarget;

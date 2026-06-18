@@ -103,6 +103,7 @@ export function WorkflowCanvas({ showGrid = true, onToggleGrid = () => undefined
   const [connectionMenuOpen, setConnectionMenuOpen] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
   const [isCanvasInteracting, setIsCanvasInteracting] = useState(false);
+  const isCanvasInteractingRef = useRef(false);
   const interactionTimeoutRef = useRef<number | null>(null);
   const stableNodeTypes = useRef(nodeTypes).current;
   const stableEdgeTypes = useRef(edgeTypes).current;
@@ -123,15 +124,18 @@ export function WorkflowCanvas({ showGrid = true, onToggleGrid = () => undefined
       window.clearTimeout(interactionTimeoutRef.current);
       interactionTimeoutRef.current = null;
     }
+    if (isCanvasInteractingRef.current) return;
+    isCanvasInteractingRef.current = true;
     setIsCanvasInteracting(true);
   }, []);
 
   const endCanvasInteraction = useCallback(() => {
     if (interactionTimeoutRef.current) window.clearTimeout(interactionTimeoutRef.current);
     interactionTimeoutRef.current = window.setTimeout(() => {
+      isCanvasInteractingRef.current = false;
       setIsCanvasInteracting(false);
       interactionTimeoutRef.current = null;
-    }, 120);
+    }, 180);
   }, []);
 
   useEffect(() => () => {
@@ -322,7 +326,7 @@ export function WorkflowCanvas({ showGrid = true, onToggleGrid = () => undefined
         }
       }}
     >
-      {showGrid && <DotGridBackground />}
+      {showGrid && !isCanvasInteracting && <DotGridBackground />}
       <ReactFlowWithExtras
         className="studio-flow"
         nodes={displayNodes}
@@ -358,6 +362,7 @@ export function WorkflowCanvas({ showGrid = true, onToggleGrid = () => undefined
         onNodeDragStart={beginCanvasInteraction}
         onNodeDragStop={endCanvasInteraction}
         onMoveStart={beginCanvasInteraction}
+        onMove={beginCanvasInteraction}
         onMoveEnd={endCanvasInteraction}
         panOnDrag={[0, 1]}
         panOnScroll
