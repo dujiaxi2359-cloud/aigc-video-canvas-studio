@@ -1,17 +1,19 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 
-declare global {
-  interface Window {
-    UnicornStudio?: {
-      isInitialized?: boolean;
-      init?: () => void;
-    };
-  }
-}
+const launchBlocks = Array.from({ length: 18 }, (_, index) => ({
+  id: index,
+  x: [5, 16, 29, 42, 55, 68, 82, 91, 11, 24, 37, 52, 64, 76, 88, 18, 47, 71][index],
+  y: [19, 32, 24, 18, 35, 25, 20, 42, 50, 62, 55, 58, 48, 64, 58, 73, 78, 74][index],
+  w: [12, 18, 14, 20, 16, 18, 13, 9, 16, 12, 18, 15, 13, 18, 12, 20, 14, 16][index],
+  h: [5, 7, 6, 8, 6, 7, 5, 6, 7, 5, 8, 6, 5, 7, 5, 8, 6, 7][index]
+}));
 
-const UNICORN_SCRIPT_ID = "unicorn-studio-runtime";
-const UNICORN_SCRIPT_SRC = "https://cdn.jsdelivr.net/gh/hiunicornstudio/unicornstudio.js@v2.2.5/dist/unicornStudio.umd.js";
+const launchDataPoints = [
+  { left: "50.8%", top: "41.4%", value: "0.1647" },
+  { left: "39.6%", top: "45.6%", value: "0.3686" },
+  { left: "66.4%", top: "52.8%", value: "0.2745" }
+];
 
 function AnimatedWords({ text, className = "" }: { text: string; className?: string }) {
   return (
@@ -38,12 +40,11 @@ export function HomeLaunchIntro({ onFinish }: { onFinish?: () => void }) {
   const [sceneReady, setSceneReady] = useState(false);
   const [minimumShown, setMinimumShown] = useState(false);
   const [canExit, setCanExit] = useState(false);
-  const mountedRef = useRef(false);
-  const completedRef = useRef(false);
+  const [completed, setCompleted] = useState(false);
 
   const completeIntro = () => {
-    if (completedRef.current) return;
-    completedRef.current = true;
+    if (completed) return;
+    setCompleted(true);
     setVisible(false);
     onFinish?.();
   };
@@ -64,53 +65,10 @@ export function HomeLaunchIntro({ onFinish }: { onFinish?: () => void }) {
   }, [minimumShown, reduceMotion, sceneReady, visible]);
 
   useEffect(() => {
-    if (!visible || reduceMotion || mountedRef.current) return;
-    mountedRef.current = true;
-
-    let readyTimer = 0;
-    const markReady = (delay = 650) => {
-      window.clearTimeout(readyTimer);
-      readyTimer = window.setTimeout(() => setSceneReady(true), delay);
-    };
-    const init = () => {
-      window.UnicornStudio?.init?.();
-      markReady();
-    };
-    const runWhenReady = () => {
-      if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init, { once: true });
-      else init();
-    };
-    const fallbackTimer = window.setTimeout(() => markReady(0), 2800);
-
-    if (window.UnicornStudio?.init) {
-      runWhenReady();
-      return () => {
-        window.clearTimeout(readyTimer);
-        window.clearTimeout(fallbackTimer);
-      };
-    }
-
-    window.UnicornStudio = window.UnicornStudio || { isInitialized: false };
-    const existing = document.getElementById(UNICORN_SCRIPT_ID) as HTMLScriptElement | null;
-    if (existing) {
-      existing.addEventListener("load", runWhenReady, { once: true });
-      return () => {
-        existing.removeEventListener("load", runWhenReady);
-        window.clearTimeout(readyTimer);
-        window.clearTimeout(fallbackTimer);
-      };
-    }
-
-    const script = document.createElement("script");
-    script.id = UNICORN_SCRIPT_ID;
-    script.src = UNICORN_SCRIPT_SRC;
-    script.async = true;
-    script.onload = runWhenReady;
-    (document.head || document.body).appendChild(script);
+    if (!visible || reduceMotion) return;
+    const frame = window.requestAnimationFrame(() => setSceneReady(true));
     return () => {
-      script.onload = null;
-      window.clearTimeout(readyTimer);
-      window.clearTimeout(fallbackTimer);
+      window.cancelAnimationFrame(frame);
     };
   }, [reduceMotion, visible]);
 
@@ -127,8 +85,42 @@ export function HomeLaunchIntro({ onFinish }: { onFinish?: () => void }) {
       }}
       aria-hidden="true"
     >
-      <div className="home-launch-unicorn-stage">
-        <div className="home-launch-unicorn-embed" data-us-project="BH2HrNlrVEIa8nJ2cvvA" />
+      <div className="home-launch-motion-stage">
+        <div className="home-launch-dot-grid" />
+        <div className="home-launch-noise" />
+        <div className="home-launch-energy-core" />
+        <div className="home-launch-scan-line" />
+        <div className="home-launch-data-line">
+          <span />
+        </div>
+        {launchBlocks.map((block) => (
+          <motion.span
+            key={block.id}
+            className="home-launch-pixel-block"
+            style={{
+              left: `${block.x}%`,
+              top: `${block.y}%`,
+              width: `${block.w}%`,
+              height: `${block.h}%`
+            }}
+            initial={{ opacity: 0, y: 14, scaleX: 0.7 }}
+            animate={{ opacity: [0, 0.42, 0.18, 0.34], y: [14, 0, 3, 0], scaleX: 1 }}
+            transition={{ delay: 0.18 + block.id * 0.045, duration: 2.9, repeat: Infinity, repeatDelay: 1.2, ease: "easeOut" }}
+          />
+        ))}
+        {launchDataPoints.map((point) => (
+          <motion.span
+            key={point.value}
+            className="home-launch-data-point"
+            style={{ left: point.left, top: point.top }}
+            initial={{ opacity: 0, scale: 0.7 }}
+            animate={{ opacity: [0, 1, 0.65, 1], scale: [0.7, 1, 0.92, 1] }}
+            transition={{ delay: 0.8, duration: 1.6, repeat: Infinity, repeatDelay: 1.8 }}
+          >
+            <i />
+            <b>{point.value}</b>
+          </motion.span>
+        ))}
       </div>
       <div className="home-launch-title-shield" />
       <div className="home-launch-copy">
