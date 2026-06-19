@@ -68,9 +68,21 @@ export function configuredMailProfiles() {
 }
 
 function profilesForRecipient(email: string) {
-  const profiles = configuredMailProfiles();
+  const profiles = configuredMailProfiles().filter((profile, index, list) =>
+    list.findIndex((candidate) =>
+      candidate.host === profile.host
+      && candidate.port === profile.port
+      && candidate.user === profile.user
+      && candidate.from === profile.from
+    ) === index
+  );
   const domain = email.split("@")[1] || "";
-  const preferredProfile = domain === "gmail.com" || domain === "googlemail.com"
+  const isGmailRecipient = domain === "gmail.com" || domain === "googlemail.com";
+  // Mainland cloud hosts commonly cannot establish a stable outbound SMTP
+  // connection to smtp.gmail.com. The primary relay is allowed to deliver to
+  // Gmail recipients and avoids making users wait through several timeouts.
+  // Set SMTP_GMAIL_DIRECT=true only on hosts where Gmail SMTP is verified.
+  const preferredProfile = isGmailRecipient && process.env.SMTP_GMAIL_DIRECT === "true"
     ? "gmail"
     : domain === "qq.com"
       ? "qq"
