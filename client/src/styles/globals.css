@@ -5528,6 +5528,38 @@ select optgroup {
 .studio-handle-in.is-connected { left: -8px !important; }
 .studio-handle-out.is-connected { right: -8px !important; }
 
+/* Canvas ports are connection anchors; creation still happens on click, but the port itself must not read as a floating plus button. */
+.creation-node .studio-handle,
+.studio-node-card .studio-handle {
+  width: 18px !important;
+  height: 18px !important;
+  border-color: rgba(226, 232, 240, 0.54) !important;
+  background: rgba(8, 9, 11, 0.94) !important;
+  box-shadow: 0 0 0 5px rgba(255, 255, 255, 0.025), 0 10px 24px rgba(0, 0, 0, 0.44) !important;
+}
+
+.creation-node .studio-handle::before,
+.creation-node .studio-handle::after,
+.studio-node-card .studio-handle::before,
+.studio-node-card .studio-handle::after {
+  width: 5px !important;
+  height: 5px !important;
+  border-radius: 999px !important;
+  background: rgba(240, 244, 248, 0.86) !important;
+  transform: translate(-50%, -50%) !important;
+}
+
+.creation-node .studio-handle::after,
+.studio-node-card .studio-handle::after {
+  display: none !important;
+}
+
+.creation-node .studio-handle-in,
+.studio-node-card .studio-handle-in { left: -9px !important; }
+
+.creation-node .studio-handle-out,
+.studio-node-card .studio-handle-out { right: -9px !important; }
+
 .studio-handle-in {
   left: -11px !important;
 }
