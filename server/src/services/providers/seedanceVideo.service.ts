@@ -841,7 +841,14 @@ export function buildProxyBody(params: SeedanceProviderParams, refs: {
     resolution: refs.resolution,
     width: dimensions.width,
     height: dimensions.height,
-    size: `${dimensions.width}*${dimensions.height}`
+    size: `${dimensions.width}*${dimensions.height}`,
+    watermark: false,
+    generate_audio: true,
+    metadata: {
+      watermark: false,
+      generate_audio: true,
+      audio_generation: "Enabled"
+    }
   });
   const imageField = params.videoRequestConfig?.imageField ?? "images";
   const videoField = params.videoRequestConfig?.videoField ?? "video";

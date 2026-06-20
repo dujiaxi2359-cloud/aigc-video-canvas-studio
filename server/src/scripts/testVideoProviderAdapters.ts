@@ -393,6 +393,9 @@ assert(configurableOpenAiVideosBody.width === 854, "Configured /v1/videos body s
 assert(configurableOpenAiVideosBody.height === 480, "Configured /v1/videos body should include mapped height for relays that require dimensions");
 assert(configurableOpenAiVideosBody.size === "854*480", "Configured /v1/videos body should include width*height size");
 assert(configurableOpenAiVideosBody.duration === 4, "Configured /v1/videos body should include numeric duration");
+assert(configurableOpenAiVideosBody.watermark === false, "Configured /v1/videos body should disable watermark at top level");
+assert((configurableOpenAiVideosBody.metadata as any).watermark === false, "Configured /v1/videos body should disable watermark in metadata");
+assert((configurableOpenAiVideosBody.metadata as any).generate_audio === true, "Configured /v1/videos body should request native audio in metadata");
 const omniV2vConfig = resolveVideoRequestConfig({
   providerId: "openai-video",
   modelName: "omni-fast-v2v",
