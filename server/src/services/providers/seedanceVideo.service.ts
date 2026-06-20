@@ -825,12 +825,18 @@ export function buildProxyBody(params: SeedanceProviderParams, refs: {
     });
   }
 
+  const dimensions = mapVideoDimensions(refs.aspectRatio, refs.resolution);
+  const duration = refs.seconds === "auto" ? undefined : Number(refs.seconds);
   const body: Record<string, unknown> = compactObject({
     ...base,
     prompt: params.prompt,
     seconds: refs.seconds === "auto" ? undefined : refs.seconds,
+    duration,
     aspect_ratio: refs.aspectRatio,
-    resolution: refs.resolution
+    resolution: refs.resolution,
+    width: dimensions.width,
+    height: dimensions.height,
+    size: `${dimensions.width}*${dimensions.height}`
   });
   const imageField = params.videoRequestConfig?.imageField ?? "images";
   const videoField = params.videoRequestConfig?.videoField ?? "video";

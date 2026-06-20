@@ -361,6 +361,35 @@ const configurableOpenAiVideos = resolveVideoRequestConfig({
 });
 assert(configurableOpenAiVideos.supportedInputs.includes("image"), "Configured /v1/videos channels must retain image support");
 assert(configurableOpenAiVideos.imageTransport === "base64_json", "Configured image transport must win over endpoint inference");
+const configurableOpenAiVideosBody = buildProxyBody({
+  providerId: "grok",
+  modelName: "grok-video-proxy",
+  apiBaseUrl: "https://relay.example/v1/videos",
+  apiKey: "sk-test-key",
+  prompt: "test",
+  nodeId: "node",
+  modelConfigId: "model",
+  inputMode: "image-to-video",
+  imageAssetIds: ["asset"],
+  duration: 4,
+  aspectRatio: "16:9",
+  resolution: "480P",
+  generateCount: 1,
+  videoRequestConfig: configurableOpenAiVideos
+}, {
+  apiFamily: "openai_videos",
+  mode: "reference_images_to_video",
+  images: ["data:image/png;base64,abc"],
+  videos: [],
+  audios: [],
+  aspectRatio: "16:9",
+  resolution: "480P",
+  seconds: "4"
+}) as Record<string, any>;
+assert(configurableOpenAiVideosBody.width === 854, "Configured /v1/videos body should include mapped width for relays that require dimensions");
+assert(configurableOpenAiVideosBody.height === 480, "Configured /v1/videos body should include mapped height for relays that require dimensions");
+assert(configurableOpenAiVideosBody.size === "854*480", "Configured /v1/videos body should include width*height size");
+assert(configurableOpenAiVideosBody.duration === 4, "Configured /v1/videos body should include numeric duration");
 const omniV2vConfig = resolveVideoRequestConfig({
   providerId: "openai-video",
   modelName: "omni-fast-v2v",
