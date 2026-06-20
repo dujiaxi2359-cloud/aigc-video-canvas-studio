@@ -347,8 +347,10 @@ function ImageGenerateNodeComponent(props: NodeProps<ImageGenerateNodeData>) {
           <button type="button" className={`creation-footer-tool ${activeTool === "camera" ? "is-active" : ""}`} onClick={() => { setParametersOpen(false); setActiveTool(activeTool === "camera" ? null : "camera"); }}><Camera size={13} />摄影机控制</button>
         </div>
         <div className="creation-dock-actions">
-          <button type="button" title="生成数量" onClick={() => update(props.id, { generateCount: (props.data.generateCount % 4) + 1 })}>{props.data.generateCount || 1}x</button>
-          <button type="button" title={props.data.status === "idle" ? "生成" : generateButtonText(props.data.status)} aria-label={props.data.status === "idle" ? "生成" : generateButtonText(props.data.status)} className="creation-generate-button" disabled={!selectedModel || props.data.status === "generating"} onClick={() => void generate()}><ArrowUp size={16} /></button>
+          <div className="creation-video-generate-cluster">
+            <button type="button" className="creation-video-count-button" title="生成数量" onClick={() => update(props.id, { generateCount: (props.data.generateCount % 4) + 1 })}>{props.data.generateCount || 1}x</button>
+            <button type="button" title={props.data.status === "idle" ? "生成" : generateButtonText(props.data.status)} aria-label={props.data.status === "idle" ? "生成" : generateButtonText(props.data.status)} className="creation-generate-button creation-video-generate-button" disabled={!selectedModel || props.data.status === "generating"} onClick={() => void generate()}><ArrowUp size={19} strokeWidth={2.3} /></button>
+          </div>
         </div>
       </div>
       <NodeToolPanel tool={activeTool} onClose={() => setActiveTool(null)} onInsert={insertPromptContext} />

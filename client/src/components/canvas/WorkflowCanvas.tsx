@@ -358,7 +358,6 @@ export function WorkflowCanvas({ showGrid = true, onToggleGrid = () => undefined
           openAddNodeMenuAt({ x: event.clientX, y: event.clientY });
         }}
         nodesDraggable
-        nodeDragHandle={nodeDragHandleSelector}
         onNodeDragStart={beginCanvasInteraction}
         onNodeDragStop={endCanvasInteraction}
         onMoveStart={beginCanvasInteraction}

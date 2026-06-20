@@ -94,6 +94,28 @@ function createFlowEdge(sourceId: string, targetId: string): Edge {
   return { id: createClientId("edge"), source: sourceId, target: targetId, sourceHandle: "out", type: "studioEdge", animated: false, style: edgeStyle() };
 }
 
+function applyConnectionDefaults(nodes: Node[], sourceId?: string | null, targetId?: string | null) {
+  if (!sourceId || !targetId) return nodes;
+  const source = nodes.find((node) => node.id === sourceId);
+  const target = nodes.find((node) => node.id === targetId);
+  const isImageSource = source?.type === "image" || source?.type === "imageAsset" || source?.type === "imageGenerate";
+  if (!isImageSource || target?.type !== "video") return nodes;
+  const data = (target.data ?? {}) as Record<string, unknown>;
+  const currentMode = String(data.videoMode ?? "text_to_video");
+  if (currentMode !== "text_to_video") return nodes;
+  return nodes.map((node) => node.id === targetId ? {
+    ...node,
+    data: {
+      ...data,
+      inputMode: "reference-to-video",
+      videoMode: "reference_images_to_video",
+      errorCode: undefined,
+      errorMessage: undefined,
+      debugMessage: undefined
+    }
+  } : node);
+}
+
 function ratioFromAsset(asset: { width?: number; height?: number; aspectRatio?: string }) {
   if (asset.aspectRatio) return asset.aspectRatio;
   if (!asset.width || !asset.height) return undefined;
@@ -149,7 +171,8 @@ export const useCanvasStore = create<State>((set, get) => ({
           referencedFrom: { sourceNodeId: sourceId, sourceNodeType: source.type }
         }
       };
-      return { nodes: [...state.nodes, targetNode], edges: addEdge(createFlowEdge(sourceId, targetId), state.edges) };
+      const nextNodes = [...state.nodes, targetNode];
+      return { nodes: applyConnectionDefaults(nextNodes, sourceId, targetId), edges: addEdge(createFlowEdge(sourceId, targetId), state.edges) };
     }),
   updateNodeData: (id, data) =>
     set((state) => ({
@@ -217,7 +240,10 @@ export const useCanvasStore = create<State>((set, get) => ({
     return { nodes, selectedNodeId };
   }),
   onEdgesChange: (changes) => set((state) => ({ edges: applyEdgeChanges(changes, state.edges) })),
-  connectNodes: (connection) => set((state) => ({ edges: addEdge({ ...connection, type: "studioEdge", animated: true, style: edgeStyle() }, state.edges) })),
+  connectNodes: (connection) => set((state) => ({
+    nodes: applyConnectionDefaults(state.nodes, connection.source, connection.target),
+    edges: addEdge({ ...connection, type: "studioEdge", animated: true, style: edgeStyle() }, state.edges)
+  })),
   loadProject: (nodes, edges) => set({ nodes, edges, selectedNodeId: nodes.find((node) => node.selected)?.id }),
   getCanvasState: () => {
     const state = get();

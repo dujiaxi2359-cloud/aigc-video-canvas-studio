@@ -1,6 +1,6 @@
 import { memo, useEffect, useMemo, useRef, useState, type ChangeEvent, type CompositionEvent } from "react";
 import type { NodeProps } from "reactflow";
-import { Activity, AlertCircle, ArrowUp, BoxSelect, Film, Image as ImageIcon, Library, Loader2, Maximize2, Mic, Play, Plus, Sparkles } from "lucide-react";
+import { Activity, AlertCircle, ArrowUp, BoxSelect, Film, Image as ImageIcon, Library, Loader2, Maximize2, Mic, Play, Plus, Sparkles, X } from "lucide-react";
 import { Button } from "../common/Button";
 import { Select } from "../common/Select";
 import { Textarea } from "../common/Textarea";
@@ -356,6 +356,7 @@ function stringList(value: unknown) {
 
 function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
   const update = useCanvasStore((state) => state.updateNodeData);
+  const deleteEdges = useCanvasStore((state) => state.deleteEdges);
   const edges = useCanvasStore((state) => state.edges);
   const nodes = useCanvasStore((state) => state.nodes);
   const allModels = useModelConfigStore((state) => state.modelConfigs);
@@ -527,9 +528,31 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
   const availableRatios = useMemo(() => dynamicOptions?.availableAspectRatios ?? selectedAspectRatios ?? emptyStrings, [dynamicOptions?.availableAspectRatios, selectedAspectRatios]);
   const availableResolutions = useMemo(() => dynamicOptions?.availableResolutions ?? selectedResolutions ?? emptyStrings, [dynamicOptions?.availableResolutions, selectedResolutions]);
   const availableDurations = useMemo(() => dynamicOptions?.availableDurations ?? durationOptions(selectedModel) ?? emptyNumbers, [dynamicOptions?.availableDurations, selectedModel]);
+
+  useEffect(() => {
+    if (!resolvedInputs.hasImageInput || !selectedModel) return;
+    const currentMode = props.data.videoMode ?? legacyInputModeToOfficialMode(props.data.inputMode);
+    if (currentMode !== "text_to_video" && availableVideoModes.includes(currentMode)) return;
+    const nextMode = availableVideoModes.includes("reference_images_to_video")
+      ? "reference_images_to_video"
+      : availableVideoModes.includes("image_to_video_first_frame")
+        ? "image_to_video_first_frame"
+        : undefined;
+    if (!nextMode || nextMode === currentMode) return;
+    setVideoCategory(categoryForOfficialVideoMode(nextMode));
+    update(props.id, {
+      videoMode: nextMode,
+      inputMode: officialModeToLegacyInputMode(nextMode),
+      errorCode: undefined,
+      errorMessage: undefined,
+      debugMessage: undefined
+    });
+  }, [availableVideoModes, props.data.inputMode, props.data.videoMode, props.id, resolvedInputs.hasImageInput, selectedModel, update]);
   const selectedAspectRatio = parameterValue(props.data.aspectRatio, availableRatios);
   const selectedResolution = parameterValue(props.data.resolution, availableResolutions);
   const selectedDuration = parameterValue(props.data.duration, availableDurations);
+  const selectedVideoMode = props.data.videoMode ?? legacyInputModeToOfficialMode(props.data.inputMode);
+  const selectedVideoModeLabel = videoModeLabelForModel(selectedModel, selectedVideoMode, dynamicOptions?.videoModeLabels?.[selectedVideoMode]);
   const outputUrl = absoluteUploadUrl(props.data.outputUrl);
   const outputIsVideo = isVideoOutput(props.data.outputUrl);
   const displayRatio = displayAspectRatio(props.data.aspectRatio, selectedAspectRatio);
@@ -730,6 +753,11 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
     });
   }
 
+  function disconnectReference(sourceNodeId: string) {
+    const edgeIds = edges.filter((edge) => edge.source === sourceNodeId && edge.target === props.id).map((edge) => edge.id);
+    if (edgeIds.length) deleteEdges(edgeIds);
+  }
+
   const preview = models.length === 0 ? (
     <div className="creation-preview-empty"><Film size={29} /><span>请先配置视频模型</span></div>
   ) : (
@@ -755,22 +783,6 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
     name: compactName(item.input.title, `${item.kind}${item.kindIndex}`),
     previewUrl: item.input.url && referencedImageNodeIds.has(item.input.sourceNodeId) ? absoluteUploadUrl(item.input.url) : undefined
   }));
-  const mentionedReferences = useMemo(() => {
-    const byGeneric = new Map(referenceVisualItems.map((item) => [item.genericToken, item]));
-    const byTyped = new Map(referenceVisualItems.map((item) => [item.typedToken, item]));
-    const picked: typeof referenceVisualItems = [];
-    const seen = new Set<string>();
-    const add = (item: typeof referenceVisualItems[number] | undefined) => {
-      if (!item || seen.has(item.genericToken)) return;
-      seen.add(item.genericToken);
-      picked.push(item);
-    };
-    for (const match of localPrompt.matchAll(/@(?:素材|参考素材)\s*(\d+)/gi)) add(byGeneric.get(`@素材${Number(match[1])}`));
-    for (const match of localPrompt.matchAll(/@(?:图像|图片|参考图|image)\s*(\d+)/gi)) add(byTyped.get(`@图像${Number(match[1])}`));
-    for (const match of localPrompt.matchAll(/@(?:视频|video)\s*(\d+)/gi)) add(byTyped.get(`@视频${Number(match[1])}`));
-    for (const match of localPrompt.matchAll(/@(?:音频|audio)\s*(\d+)/gi)) add(byTyped.get(`@音频${Number(match[1])}`));
-    return picked;
-  }, [localPrompt, referenceVisualItems]);
   const referenceMenuItems: ReferenceMenuItem[] = referenceVisualItems.map((item) => ({
     token: item.genericToken,
     typedToken: item.typedToken,
@@ -781,35 +793,32 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
   }));
   const dock = (
     <div className="creation-dock-content relative">
-      <div className="creation-dock-header">
-        <div className="creation-dock-tools">
-          <button type="button" title="智能辅助" className={activeTool === "tags" ? "is-active" : ""} onClick={() => { setParametersOpen(false); setActiveTool(activeTool === "tags" ? null : "tags"); }}><Sparkles size={15} /></button>
-          <button type="button" title="引用图片" className={activeTool === "assets" ? "is-active" : ""} onClick={() => { setParametersOpen(false); setActiveTool(activeTool === "assets" ? null : "assets"); }}><ImageIcon size={15} /></button>
-          <span className="creation-tool-swap">⇄</span>
-          <button type="button" title="添加素材或能力" className={activeTool === "quick" ? "is-active" : ""} onClick={() => { setParametersOpen(false); setActiveTool(activeTool === "quick" ? null : "quick"); }}><Plus size={17} /></button>
+      <div className="creation-video-reference-bar">
+        <button type="button" title="智能辅助" className={`creation-video-reference-tool ${activeTool === "tags" ? "is-active" : ""}`} onClick={() => { setParametersOpen(false); setActiveTool(activeTool === "tags" ? null : "tags"); }}><Sparkles size={17} /></button>
+        <span className="creation-video-reference-divider" />
+        <div className="creation-video-reference-thumbnails">
+          {referenceVisualItems.map((item) => (
+            <button type="button" className="creation-video-reference-thumbnail" key={item.genericToken} title={`${item.genericToken} · ${item.name}`} onClick={() => insertReferenceToken(item.genericToken)}>
+              {item.previewUrl ? <img src={item.previewUrl} alt="" /> : item.kind === "视频" ? <Film size={17} /> : <Library size={17} />}
+            </button>
+          ))}
+          <button type="button" title="添加参考素材" className={`creation-video-reference-add ${activeTool === "assets" ? "is-active" : ""}`} onClick={() => { setParametersOpen(false); setActiveTool(activeTool === "assets" ? null : "assets"); }}><Plus size={20} /></button>
         </div>
         <button type="button" title={expanded ? "收起详情" : "展开详情"} className="creation-detail-toggle" onClick={() => setExpanded((value) => !value)}><Maximize2 size={14} /></button>
       </div>
+      {referenceVisualItems.length > 0 && (
+        <div className="creation-video-reference-chips">
+          {referenceVisualItems.map((item) => (
+            <span key={item.genericToken} className="creation-video-reference-chip">
+              <button type="button" className="creation-video-reference-remove" title="移除连接" onClick={() => disconnectReference(item.input.sourceNodeId)}><X size={13} /></button>
+              {item.previewUrl ? <img src={item.previewUrl} alt="" /> : <Library size={14} />}
+              <button type="button" className="creation-video-reference-token" onClick={() => insertReferenceToken(item.genericToken)}><span>{item.kind}</span><strong>{item.name}</strong></button>
+            </span>
+          ))}
+        </div>
+      )}
       <div className="creation-dock-composer">
         <div className="creation-prompt-stack">
-          {mentionedReferences.length > 0 && (
-            <div className="creation-mentioned-references">
-              {mentionedReferences.map((item) => (
-                <button
-                  type="button"
-                  key={item.genericToken}
-                  title={`${item.genericToken} · ${item.name}`}
-                  onMouseDown={(event) => event.preventDefault()}
-                  onClick={() => insertReferenceToken(item.genericToken)}
-                >
-                  {item.previewUrl ? <img src={item.previewUrl} alt="" /> : <Library size={13} />}
-                  <span>{item.kind}</span>
-                  <strong>{item.name}</strong>
-                  <small>{item.genericToken}</small>
-                </button>
-              ))}
-            </div>
-          )}
           <Textarea
             ref={promptTextareaRef}
             className="creation-prompt-input nodrag nopan nowheel"
@@ -828,7 +837,7 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
         <div className="creation-dock-identity">
           <div className="creation-model-field" title={selectedChannelHost ? `当前线路：${selectedChannelHost}` : undefined}><Activity size={14} /><Select className="creation-model-select" value={props.data.modelConfigId ?? ""} onChange={(event) => update(props.id, { modelConfigId: event.target.value, errorCode: undefined, errorMessage: undefined, debugMessage: undefined })}><option value="">选择模型</option>{models.map((model) => <option key={model.id} value={model.id}>{modelOptionLabel(model, models)}</option>)}</Select>{selectedChannelHost && <span className="creation-model-channel">{selectedChannelHost}</span>}</div>
           <div ref={parameterAnchorRef} className={`creation-parameter-wrap nodrag nopan ${parametersOpen ? "is-open" : ""}`}>
-          <button type="button" className="creation-parameter-pill" onClick={() => { setActiveTool(null); setParametersOpen((value) => !value); }}>{parameterSummary({ aspectRatio: selectedAspectRatio, resolution: selectedResolution, duration: selectedDuration, ratios: availableRatios, resolutions: availableResolutions, durations: availableDurations })}</button>
+          <button type="button" className="creation-parameter-pill" onClick={() => { setActiveTool(null); setParametersOpen((value) => !value); }}>{selectedVideoModeLabel} · {parameterSummary({ aspectRatio: selectedAspectRatio, resolution: selectedResolution, duration: selectedDuration, ratios: availableRatios, resolutions: availableResolutions, durations: availableDurations })}</button>
           <NodeParameterPopover open={parametersOpen} anchorRef={parameterAnchorRef} onClose={() => setParametersOpen(false)} sections={[
             { label: "生成方式", description: (props.data.videoMode ?? legacyInputModeToOfficialMode(props.data.inputMode)) === "reference_images_to_video" ? universalReferenceDescription(selectedModel) : undefined, value: props.data.videoMode ?? legacyInputModeToOfficialMode(props.data.inputMode), options: availableVideoModes, format: (value) => videoModeLabelForModel(selectedModel, value as OfficialVideoMode, dynamicOptions?.videoModeLabels?.[value as OfficialVideoMode]), onChange: (value) => update(props.id, { videoMode: value, inputMode: officialModeToLegacyInputMode(value as OfficialVideoMode) }) },
             { label: "比例", value: selectedAspectRatio, options: availableRatios, onChange: (value) => update(props.id, { aspectRatio: value }) },
