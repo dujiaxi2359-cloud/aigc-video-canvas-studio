@@ -14,6 +14,17 @@ function generateInviteCode(prefix = "AIGCNONG") {
   return `${prefix}-${part()}-${part()}`;
 }
 
+const DEFAULT_INVITE_TTL_DAYS = Math.max(1, Number(process.env.DEFAULT_INVITE_TTL_DAYS || 15));
+const DEFAULT_INVITE_TTL_MS = DEFAULT_INVITE_TTL_DAYS * 24 * 60 * 60 * 1000;
+
+function inviteExpiresAt(input: unknown) {
+  if (input === null) return null;
+  const value = typeof input === "string" && input.trim() === "" ? undefined : input;
+  if (value === undefined) return now() + DEFAULT_INVITE_TTL_MS;
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : now() + DEFAULT_INVITE_TTL_MS;
+}
+
 adminRouter.get("/overview", async (_req, res) => {
   const db = await getDb();
   const users = await db.all("SELECT id, email, name, role, status, invite_status, last_login_at, created_at FROM users ORDER BY created_at DESC");
@@ -55,7 +66,7 @@ adminRouter.post("/invite-codes", async (req, res) => {
   const code = String(req.body?.code || generateInviteCode()).trim().toUpperCase();
   const id = createId("invite");
   await db.run(`INSERT INTO invite_codes (id, code, name, description, type, target_workspace_id, member_role, max_uses, used_count, expires_at, status, created_by, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, 'active', ?, ?, ?)`, id, code, req.body?.name || code, req.body?.description, req.body?.type || "personal", req.body?.targetWorkspaceId, req.body?.memberRole || "member", Number(req.body?.maxUses || 1), req.body?.expiresAt, req.auth!.user.id, now(), now());
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, 'active', ?, ?, ?)`, id, code, req.body?.name || code, req.body?.description, req.body?.type || "personal", req.body?.targetWorkspaceId, req.body?.memberRole || "member", Number(req.body?.maxUses || 1), inviteExpiresAt(req.body?.expiresAt), req.auth!.user.id, now(), now());
   res.status(201).json(await db.get("SELECT * FROM invite_codes WHERE id = ?", id));
 });
 
@@ -71,7 +82,7 @@ adminRouter.post("/invite-codes/batch", async (req, res) => {
     while (await db.get("SELECT id FROM invite_codes WHERE code = ?", code)) code = generateInviteCode(prefix);
     const id = createId("invite");
     await db.run(`INSERT INTO invite_codes (id, code, name, description, type, target_workspace_id, member_role, max_uses, used_count, expires_at, status, created_by, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, 'active', ?, ?, ?)`, id, code, `客户邀请码 ${index + 1}`, req.body?.description, type, req.body?.targetWorkspaceId, req.body?.memberRole || "member", maxUses, req.body?.expiresAt, req.auth!.user.id, now(), now());
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, 'active', ?, ?, ?)`, id, code, `客户邀请码 ${index + 1}`, req.body?.description, type, req.body?.targetWorkspaceId, req.body?.memberRole || "member", maxUses, inviteExpiresAt(req.body?.expiresAt), req.auth!.user.id, now(), now());
     created.push(await db.get("SELECT * FROM invite_codes WHERE id = ?", id));
   }
   res.status(201).json({ invites: created });
