@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import {
+  AlertTriangle,
   BadgeCheck,
   Building2,
   Copy,
@@ -74,15 +75,30 @@ type AdminPlan = {
   status: string;
 };
 
+type AdminFailureLog = {
+  id: string;
+  generationType?: string;
+  workspaceName: string;
+  userEmail: string;
+  modelConfigId?: string;
+  modelDisplayName: string;
+  provider?: string;
+  inputMode?: string;
+  prompt?: string;
+  errorMessage?: string;
+  createdAt?: number;
+};
+
 type Overview = {
   users: AdminUser[];
   workspaces: AdminWorkspace[];
   invites: AdminInvite[];
   plans: AdminPlan[];
   models: AdminModel[];
+  failureLogs: AdminFailureLog[];
 };
 
-const emptyOverview: Overview = { users: [], workspaces: [], invites: [], plans: [], models: [] };
+const emptyOverview: Overview = { users: [], workspaces: [], invites: [], plans: [], models: [], failureLogs: [] };
 
 const numberFormatter = new Intl.NumberFormat("zh-CN");
 
@@ -90,7 +106,7 @@ function metric(value: number) {
   return numberFormatter.format(Number.isFinite(value) ? value : 0);
 }
 
-function shortDate(value?: string) {
+function shortDate(value?: string | number) {
   if (!value) return "暂无记录";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "暂无记录";
@@ -137,11 +153,13 @@ export function CommercialAdminPanel() {
     const totalCredits = data.workspaces.reduce((sum, workspace) => sum + Number(workspace.credits || 0), 0);
     const activeUsers = data.users.filter((user) => user.status === "active").length;
     const totalUsage = data.models.reduce((sum, model) => sum + Number(model.usageCount || 0), 0);
-    return { activeInvites, enabledModels, failedModels, totalCredits, activeUsers, totalUsage };
+    const failureCount = data.failureLogs.length;
+    return { activeInvites, enabledModels, failedModels, totalCredits, activeUsers, totalUsage, failureCount };
   }, [data]);
 
   const recentUsers = data.users.slice(0, 8);
   const recentModels = data.models.slice(0, 10);
+  const recentFailures = data.failureLogs.slice(0, 8);
 
   async function createInvite() {
     try {
@@ -226,7 +244,7 @@ export function CommercialAdminPanel() {
             { label: "活跃用户", value: stats.activeUsers, detail: `共 ${data.users.length} 个账号`, icon: UserRound, tone: "green" as const },
             { label: "工作空间额度", value: stats.totalCredits, detail: `${data.workspaces.length} 个空间`, icon: WalletCards, tone: "violet" as const },
             { label: "可用邀请码", value: stats.activeInvites, detail: `总计 ${data.invites.length} 条`, icon: Ticket, tone: "amber" as const },
-            { label: "已启用模型", value: stats.enabledModels, detail: `${stats.failedModels} 个有失败记录`, icon: Database, tone: stats.failedModels ? "red" as const : "green" as const }
+            { label: "失败日志", value: stats.failureCount, detail: `${stats.failedModels} 个模型有失败`, icon: AlertTriangle, tone: stats.failureCount ? "red" as const : "green" as const }
           ].map((item) => {
             const Icon = item.icon;
             return (
@@ -340,6 +358,34 @@ export function CommercialAdminPanel() {
           </div>
         </div>
 
+        <div className="rounded-[20px] border border-white/[0.08] bg-black/20 p-4">
+          <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+            <div>
+              <div className="flex items-center gap-2 text-[15px] font-semibold text-white"><AlertTriangle size={16} /> 失败日志</div>
+              <p className="mt-1 text-[12px] text-white/35">最近 80 条生成失败记录，优先看这里判断客户是额度、素材、审核还是通道问题。</p>
+            </div>
+            <span className={`rounded-full border px-2 py-1 text-[11px] ${badgeClass(stats.failureCount ? "red" : "green")}`}>{stats.failureCount ? `${stats.failureCount} 条` : "暂无失败"}</span>
+          </div>
+          <div className="mt-4 max-h-[320px] space-y-2 overflow-auto pr-1">
+            {recentFailures.map((item) => (
+              <div key={item.id} className="rounded-[14px] border border-red-200/[0.08] bg-red-300/[0.035] px-3 py-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="rounded-full border border-red-200/15 bg-red-300/[0.08] px-2 py-0.5 text-[10px] font-medium text-red-100">{item.generationType || "generation"}</span>
+                  <span className="text-[11px] text-white/34">{shortDate(item.createdAt)}</span>
+                  <span className="text-[11px] text-white/34">{item.workspaceName}</span>
+                </div>
+                <div className="mt-2 min-w-0 text-[12px] font-medium text-white/82">{item.modelDisplayName}</div>
+                <div className="mt-1 text-[11px] text-white/38">{item.userEmail} · {item.provider || "provider"} · {item.inputMode || "mode"}</div>
+                <div className="mt-2 line-clamp-2 text-[12px] leading-5 text-red-100/85">{item.errorMessage || "未知失败原因"}</div>
+                {item.prompt && <div className="mt-2 line-clamp-1 text-[11px] text-white/28">Prompt：{item.prompt}</div>}
+              </div>
+            ))}
+            {!recentFailures.length && <div className="rounded-[14px] border border-dashed border-white/[0.08] p-6 text-center text-[12px] text-white/35">暂无失败日志。</div>}
+          </div>
+        </div>
+      </div>
+
+      <div className="px-5 pb-5">
         <div className="rounded-[20px] border border-white/[0.08] bg-black/20 p-4">
           <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
             <div>

@@ -33,6 +33,14 @@ adminRouter.get("/overview", async (_req, res) => {
     LEFT JOIN credit_balances cb ON cb.workspace_id = w.id GROUP BY w.id ORDER BY w.created_at DESC`);
   const invites = await db.all("SELECT * FROM invite_codes ORDER BY created_at DESC");
   const plans = await db.all("SELECT * FROM plans ORDER BY created_at DESC");
+  const failureRows = await db.all<any[]>(`SELECT gh.*, w.name AS workspace_name, u.email AS user_email, mc.provider AS model_provider, mc.model_name AS configured_model_name
+    FROM generation_history gh
+    LEFT JOIN workspaces w ON w.id = gh.workspace_id
+    LEFT JOIN users u ON u.id = gh.user_id
+    LEFT JOIN model_configs mc ON mc.id = gh.model_config_id
+    WHERE gh.status = 'error'
+    ORDER BY gh.created_at DESC
+    LIMIT 80`);
   const modelRows = await db.all<any[]>(`SELECT mc.*, w.name AS workspace_name,
     (SELECT COUNT(*) FROM usage_records ur WHERE ur.model_id = mc.id) AS usage_count,
     (SELECT COUNT(*) FROM generation_history gh WHERE gh.model_config_id = mc.id AND gh.status = 'success') AS success_count,
@@ -58,7 +66,20 @@ adminRouter.get("/overview", async (_req, res) => {
     errorCount: Number(row.error_count || 0),
     updatedAt: row.updated_at
   }));
-  res.json({ users, workspaces, invites, plans, models });
+  const failureLogs = failureRows.map((row) => ({
+    id: row.id,
+    generationType: row.generation_type,
+    workspaceName: row.workspace_name || "Legacy / Unassigned",
+    userEmail: row.user_email || "未知用户",
+    modelConfigId: row.model_config_id,
+    modelDisplayName: row.model_display_name || row.configured_model_name || "未知模型",
+    provider: row.model_provider,
+    inputMode: row.input_mode,
+    prompt: row.prompt,
+    errorMessage: row.error_message,
+    createdAt: row.created_at
+  }));
+  res.json({ users, workspaces, invites, plans, models, failureLogs });
 });
 
 adminRouter.post("/invite-codes", async (req, res) => {
