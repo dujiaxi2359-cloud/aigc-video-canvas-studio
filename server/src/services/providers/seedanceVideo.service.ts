@@ -317,12 +317,17 @@ function seedanceAssetEndpointUnavailable(error: unknown) {
   return [404, 405].includes(upstreamStatus) || /not found|not support|unsupported|method not allowed/i.test(`${error.message}\n${error.debugMessage ?? ""}`);
 }
 
-function seedanceAssetUploadShouldFallback(error: unknown) {
+export function seedanceAssetUploadShouldFallback(error: unknown) {
   if (seedanceAssetEndpointUnavailable(error)) return true;
+  if (error instanceof ProviderError) {
+    const details = record(error.details);
+    const upstreamStatus = Number(details.upstreamStatus ?? 0);
+    if (upstreamStatus >= 500) return true;
+  }
   const text = error instanceof ProviderError
     ? `${error.message}\n${error.debugMessage ?? ""}\n${preview(error.details)}`
     : rawErrorMessage(error);
-  return /fetch failed|network|econn|dns|timeout|socket|reset|tls|terminated|task_id is required/i.test(text);
+  return /fetch failed|network|econn|dns|timeout|socket|reset|tls|terminated|task_id is required|asset provider error|素材库没有返回|素材上传没有返回/i.test(text);
 }
 
 async function uploadSeedanceAssetsIfAvailable(params: SeedanceProviderParams, urls: string[], type: "Image" | "Video" | "Audio") {

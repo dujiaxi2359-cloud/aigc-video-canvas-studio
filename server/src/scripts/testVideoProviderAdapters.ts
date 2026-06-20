@@ -1,10 +1,11 @@
 import { grokCreateEndpoint, grokPollEndpoint, grokRequestModelName, isOfficialGrokEndpoint } from "../services/providers/grokVideo.service.js";
 import { klingBearerToken, klingCreateEndpoint, klingPollEndpoint, normalizeKlingPrompt } from "../services/providers/klingVideo.service.js";
-import { buildProxyBody, buildSeedance15Multipart, seedanceCreateEndpoint, seedancePollEndpoint } from "../services/providers/seedanceVideo.service.js";
+import { buildProxyBody, buildSeedance15Multipart, seedanceAssetUploadShouldFallback, seedanceCreateEndpoint, seedancePollEndpoint } from "../services/providers/seedanceVideo.service.js";
 import { configuredRelayModelName, veoProxyCreateEndpoint } from "../services/providers/veoProxyVideo.service.js";
 import { joinUrl, resolveVideoRequestConfig } from "../services/providers/videoRequestAdapter.js";
 import { getVideoModelCapability } from "../config/videoModelCapabilities.js";
 import { modelCatalog } from "../services/modelCatalog.js";
+import { ProviderError } from "../utils/providerErrors.js";
 import { mapVideoDimensions } from "../utils/videoParams.js";
 
 function assert(condition: unknown, message: string): asserts condition {
@@ -595,6 +596,10 @@ assert(seedanceReference?.supportedModes.some((mode) => mode.mode === "video_edi
 assert(seedanceReference?.supportedModes.some((mode) => mode.mode === "video_extension"), "Seedance 2.0 should expose video extension");
 assert(seedanceReference?.maxReferenceImages === 9 && seedanceReference.maxReferenceVideos === 3 && seedanceReference.maxReferenceAudios === 3, "Seedance 2.0 should expose official multimodal reference limits");
 assert(seedanceReference?.maxReferenceFiles === 12, "Seedance 2.0 should limit mixed references to 12 files");
+assert(
+  seedanceAssetUploadShouldFallback(new ProviderError("SEEDANCE_ASSET_UPLOAD_FAILED", "Seedance 素材库接口调用失败：Asset provider error", "{\"message\":\"Asset provider error\"}", { upstreamStatus: 502 })),
+  "Seedance asset upload should fall back to public URLs when the relay asset provider returns 5xx"
+);
 
 const klingLegacy = getVideoModelCapability("kling", "kling-1-6", "kling-v1-6", "image_to_video_first_frame");
 assert(klingLegacy?.supportedDurations.join(",") === "5,10", "Kling 1.6 should be available with official durations");
