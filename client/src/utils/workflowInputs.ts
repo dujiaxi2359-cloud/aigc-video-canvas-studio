@@ -8,6 +8,7 @@ export type AssetInput = {
   title?: string;
   assetId?: string;
   url?: string;
+  thumbnailUrl?: string;
   localPath?: string;
   publicUrl?: string;
   mimeType?: string;
@@ -23,6 +24,7 @@ function toAssetInput(node: Node): AssetInput {
     title: (data.title ?? data.name ?? data.fileName) as string | undefined,
     assetId: (data.assetId ?? data.outputAssetId) as string | undefined,
     url: (data.url ?? data.imageUrl ?? data.outputUrl) as string | undefined,
+    thumbnailUrl: data.thumbnailUrl as string | undefined,
     localPath: data.localPath as string | undefined,
     publicUrl: data.publicUrl as string | undefined,
     mimeType: data.mimeType as string | undefined

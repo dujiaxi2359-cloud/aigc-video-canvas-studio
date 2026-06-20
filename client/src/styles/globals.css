@@ -5504,6 +5504,30 @@ select optgroup {
   box-shadow: 0 0 0 7px rgba(255, 255, 255, 0.055), 0 12px 30px rgba(0, 0, 0, 0.42) !important;
 }
 
+/* Connected ports read as existing links, not as another add action. */
+.studio-handle.is-connected {
+  width: 16px !important;
+  height: 16px !important;
+  border-color: rgba(226, 232, 240, 0.66) !important;
+  background: rgba(16, 18, 21, 0.96) !important;
+  box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.035), 0 8px 20px rgba(0, 0, 0, 0.42) !important;
+}
+
+.studio-handle.is-connected::before,
+.studio-handle.is-connected::after {
+  width: 4px;
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(236, 239, 244, 0.9);
+}
+
+.studio-handle.is-connected::after {
+  display: none;
+}
+
+.studio-handle-in.is-connected { left: -8px !important; }
+.studio-handle-out.is-connected { right: -8px !important; }
+
 .studio-handle-in {
   left: -11px !important;
 }

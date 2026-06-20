@@ -781,7 +781,10 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
   const referenceVisualItems = referencedInputs.map((item) => ({
     ...item,
     name: compactName(item.input.title, `${item.kind}${item.kindIndex}`),
-    previewUrl: item.input.url && referencedImageNodeIds.has(item.input.sourceNodeId) ? absoluteUploadUrl(item.input.url) : undefined
+    previewUrl: referencedImageNodeIds.has(item.input.sourceNodeId)
+      ? absoluteUploadUrl(item.input.thumbnailUrl || item.input.url)
+      : undefined,
+    fallbackUrl: referencedImageNodeIds.has(item.input.sourceNodeId) ? absoluteUploadUrl(item.input.url) : undefined
   }));
   const referenceMenuItems: ReferenceMenuItem[] = referenceVisualItems.map((item) => ({
     token: item.genericToken,
@@ -799,7 +802,7 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
         <div className="creation-video-reference-thumbnails">
           {referenceVisualItems.map((item) => (
             <button type="button" className="creation-video-reference-thumbnail" key={item.genericToken} title={`${item.genericToken} · ${item.name}`} onClick={() => insertReferenceToken(item.genericToken)}>
-              {item.previewUrl ? <img src={item.previewUrl} alt="" /> : item.kind === "视频" ? <Film size={17} /> : <Library size={17} />}
+              {item.previewUrl ? <img src={item.previewUrl} alt="" onError={(event) => { const image = event.currentTarget; if (item.fallbackUrl && image.src !== item.fallbackUrl) image.src = item.fallbackUrl; else image.style.display = "none"; }} /> : item.kind === "视频" ? <Film size={17} /> : <Library size={17} />}
             </button>
           ))}
           <button type="button" title="添加参考素材" className={`creation-video-reference-add ${activeTool === "assets" ? "is-active" : ""}`} onClick={() => { setParametersOpen(false); setActiveTool(activeTool === "assets" ? null : "assets"); }}><Plus size={20} /></button>
@@ -811,7 +814,7 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
           {referenceVisualItems.map((item) => (
             <span key={item.genericToken} className="creation-video-reference-chip">
               <button type="button" className="creation-video-reference-remove" title="移除连接" onClick={() => disconnectReference(item.input.sourceNodeId)}><X size={13} /></button>
-              {item.previewUrl ? <img src={item.previewUrl} alt="" /> : <Library size={14} />}
+              {item.previewUrl ? <img src={item.previewUrl} alt="" onError={(event) => { const image = event.currentTarget; if (item.fallbackUrl && image.src !== item.fallbackUrl) image.src = item.fallbackUrl; else image.style.display = "none"; }} /> : <Library size={14} />}
               <button type="button" className="creation-video-reference-token" onClick={() => insertReferenceToken(item.genericToken)}><span>{item.kind}</span><strong>{item.name}</strong></button>
             </span>
           ))}

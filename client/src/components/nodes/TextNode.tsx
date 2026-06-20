@@ -49,6 +49,7 @@ export function TextNode(props: NodeProps<TextNodeData>) {
       title={props.data.title}
       badge="Prompt"
       width={300}
+      inputHandles={0}
       footer={
         <div className="flex h-8 justify-between">
           <Button className="h-8" variant="ghost" onClick={() => navigator.clipboard.writeText(localContent)}>

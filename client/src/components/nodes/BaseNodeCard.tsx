@@ -54,8 +54,11 @@ export function BaseNodeCard({
   outputHandle = true
 }: BaseNodeCardProps) {
   const deleteNode = useCanvasStore((state) => state.deleteNode);
+  const edges = useCanvasStore((state) => state.edges);
   const inputPositions = Array.from({ length: inputHandles }, (_, index) => `${((index + 1) / (inputHandles + 1)) * 100}%`);
   const tone = statusTone(status);
+  const hasIncomingConnection = edges.some((edge) => edge.target === id);
+  const hasOutgoingConnection = edges.some((edge) => edge.source === id);
 
   return (
     <div
@@ -76,7 +79,7 @@ export function BaseNodeCard({
           type="target"
           position={Position.Left}
           style={{ top }}
-          className="studio-handle studio-handle-in"
+          className={`studio-handle studio-handle-in ${hasIncomingConnection ? "is-connected" : ""}`}
         />
       ))}
 
@@ -85,7 +88,7 @@ export function BaseNodeCard({
           id="out"
           type="source"
           position={Position.Right}
-          className="studio-handle studio-handle-out"
+          className={`studio-handle studio-handle-out ${hasOutgoingConnection ? "is-connected" : ""}`}
           onClick={(event) => openCreateMenu(event, id, type)}
         />
       )}

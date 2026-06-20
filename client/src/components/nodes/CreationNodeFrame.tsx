@@ -36,9 +36,12 @@ function CreationNodeFrameComponent({ id, type, selected, title, ratio, status, 
   dock?: ReactNode;
 }) {
   const deleteNode = useCanvasStore((state) => state.deleteNode);
+  const edges = useCanvasStore((state) => state.edges);
   const width = previewWidth(ratio);
   const containerWidth = frameWidth(type, width, Boolean(dock));
   const acceptsInput = !["image", "imageAsset", "audio", "text"].includes(type ?? "");
+  const hasIncomingConnection = edges.some((edge) => edge.target === id);
+  const hasOutgoingConnection = edges.some((edge) => edge.source === id);
   return (
     <div className={`creation-node ${selected ? "is-selected" : ""}`} data-node-type={type} style={{ width: containerWidth }}>
       <div className="creation-node-preview-wrap">
@@ -51,8 +54,8 @@ function CreationNodeFrameComponent({ id, type, selected, title, ratio, status, 
             if ((event.target as HTMLElement).closest("button, input, textarea, select, .nodrag")) event.stopPropagation();
           }}
         >
-          {acceptsInput && <Handle id="in-0" type="target" position={Position.Left} className="studio-handle studio-handle-in" />}
-          <Handle id="out" type="source" position={Position.Right} className="studio-handle studio-handle-out" onClick={(event) => openCreateMenu(event, id, type)} />
+          {acceptsInput && <Handle id="in-0" type="target" position={Position.Left} className={`studio-handle studio-handle-in ${hasIncomingConnection ? "is-connected" : ""}`} />}
+          <Handle id="out" type="source" position={Position.Right} className={`studio-handle studio-handle-out ${hasOutgoingConnection ? "is-connected" : ""}`} onClick={(event) => openCreateMenu(event, id, type)} />
           <button type="button" title="删除节点" className="creation-node-delete nodrag nopan" onClick={() => deleteNode(id)}><Trash2 size={13} /></button>
           {preview}
           {status && <span className={`creation-preview-status is-${status}`}>{status === "generating" ? "生成中" : status === "success" ? "已完成" : status === "error" ? "失败" : "未生成"}</span>}
