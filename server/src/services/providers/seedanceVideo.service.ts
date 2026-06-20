@@ -225,10 +225,10 @@ function seedanceAssetEndpoint(params: SeedanceProviderParams, path: string) {
   return joinUrl(seedanceAssetBaseUrl(params), path);
 }
 
-function seedanceAuthorizationValues(apiKey: string) {
+export function seedanceAuthorizationValues(apiKey: string) {
   const trimmed = apiKey.trim();
   if (/^bearer\s+/i.test(trimmed)) return [trimmed, trimmed.replace(/^bearer\s+/i, "")];
-  return [`Bearer ${trimmed}`, trimmed];
+  return [trimmed, `Bearer ${trimmed}`];
 }
 
 async function seedanceAssetRequest(params: SeedanceProviderParams, endpoint: string, body: Record<string, unknown>) {
@@ -247,9 +247,6 @@ async function seedanceAssetRequest(params: SeedanceProviderParams, endpoint: st
     lastStatus = response.status;
     lastPayload = await responsePayload(response);
     if (response.ok) return lastPayload;
-    if (![401, 403].includes(response.status) && !/invalid token|unauthorized|forbidden/i.test(JSON.stringify(lastPayload))) {
-      break;
-    }
   }
   throw new ProviderError(
     "SEEDANCE_ASSET_UPLOAD_FAILED",
@@ -966,7 +963,10 @@ export async function generateVideoWithSeedance(params: SeedanceProviderParams):
       inputType: imageCount ? "image" : videos.length ? "video" : "text",
       duration: seconds,
       aspectRatio: normalizedRatio,
-      resolution: normalizedResolution
+      resolution: normalizedResolution,
+      metadataWatermark: record(body.metadata).watermark,
+      metadataGenerateAudio: record(body.metadata).generate_audio,
+      metadataKeys: Object.keys(record(body.metadata))
     });
 
     let endpoint = "";

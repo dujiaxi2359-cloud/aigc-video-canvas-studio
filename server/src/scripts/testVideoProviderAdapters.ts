@@ -1,6 +1,6 @@
 import { grokCreateEndpoint, grokPollEndpoint, grokRequestModelName, isOfficialGrokEndpoint } from "../services/providers/grokVideo.service.js";
 import { klingBearerToken, klingCreateEndpoint, klingPollEndpoint, normalizeKlingPrompt } from "../services/providers/klingVideo.service.js";
-import { buildProxyBody, buildSeedance15Multipart, seedanceAssetUploadShouldFallback, seedanceCreateEndpoint, seedancePollEndpoint } from "../services/providers/seedanceVideo.service.js";
+import { buildProxyBody, buildSeedance15Multipart, seedanceAssetUploadShouldFallback, seedanceAuthorizationValues, seedanceCreateEndpoint, seedancePollEndpoint } from "../services/providers/seedanceVideo.service.js";
 import { configuredRelayModelName, veoProxyCreateEndpoint } from "../services/providers/veoProxyVideo.service.js";
 import { joinUrl, resolveVideoRequestConfig } from "../services/providers/videoRequestAdapter.js";
 import { getVideoModelCapability } from "../config/videoModelCapabilities.js";
@@ -70,6 +70,8 @@ assert(
   seedanceCreateEndpoint("https://relay.example/v1/video/generations") === "https://relay.example/v1/video/generations",
   "Seedance full relay endpoint should be used as-is"
 );
+assert(seedanceAuthorizationValues("sk-test")[0] === "sk-test", "Seedance asset APIs should try the documented raw sk token before Bearer");
+assert(seedanceAuthorizationValues("sk-test")[1] === "Bearer sk-test", "Seedance asset APIs should keep Bearer as fallback");
 assert(
   seedanceCreateEndpoint("https://relay.example/v1/videos") === "https://relay.example/v1/videos",
   "Seedance unified relay videos endpoint should be used as-is"
