@@ -480,6 +480,9 @@ function decodedErrorText(value: unknown, depth = 0): string {
 function upstreamFriendlyErrorMessage(label: string, payload: Record<string, unknown>) {
   const fallback = errorMessage(payload);
   const decoded = `${fallback}\n${decodedErrorText(payload)}`;
+  if (/orchestration-service|name or service not known|cannot connect to host|ssl:|getaddrinfo|service unavailable/i.test(decoded)) {
+    return `${label} 中转商内部服务暂时不可达，请稍后重试或切换其他视频通道。`;
+  }
   if (/InputImageSensitiveContentDetected|PrivacyInformation|may contain real person/i.test(decoded)) {
     return `${label} 上游内容审核拒绝：参考图可能包含真人或隐私信息（upstream_InputImageSensitiveContentDetected.PrivacyInformation）。请换用非真人/虚拟角色/背影远景素材，或减少人脸特写后重试；也可以切换到允许真人参考的中转通道。`;
   }

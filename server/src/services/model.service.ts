@@ -172,6 +172,28 @@ function catalogFor(model: NonNullable<InternalModelConfig>) {
   return modelCatalog.find((item) => item.providerId === model.provider_id && item.name === model.model_name);
 }
 
+function isOfficialProviderBaseUrl(model: NonNullable<InternalModelConfig>) {
+  const providerId = model.provider_id ?? "";
+  const rawBaseUrl = model.api_base_url?.trim();
+  if (!rawBaseUrl) return true;
+  try {
+    const hostname = new URL(rawBaseUrl).hostname.toLowerCase();
+    if (providerId === "openai") return hostname === "api.openai.com";
+    if (providerId === "google") return hostname === "generativelanguage.googleapis.com";
+    if (providerId === "azure-openai") return true;
+    if (providerId === "alibaba") return hostname.endsWith("dashscope.aliyuncs.com");
+    if (providerId === "grok") return hostname === "api.x.ai";
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+function shouldUseCatalogCapabilities(model: NonNullable<InternalModelConfig>, catalogItem?: ModelCatalogItem) {
+  if (!catalogItem) return false;
+  return isOfficialProviderBaseUrl(model);
+}
+
 async function getGenerationContext(modelConfigId: string, type: "text" | "image" | "video") {
   const model = await getInternalModelConfig(modelConfigId);
   if (!model) throw new Error("模型配置不存在");
@@ -321,9 +343,15 @@ function validateImageRequest(capabilities: ModelCapabilities, input: GenerateIm
   if (input.inputMode !== "text-to-image" && !input.imageAssetIds?.length) {
     throw new Error(input.inputMode === "image-edit" ? "图片编辑需要连接一张图片素材" : "图生图需要连接一张图片素材");
   }
-  if (input.imageSize && !options.availableImageSizes.includes(input.imageSize)) throw new Error("当前模型不支持该图片尺寸");
-  if (!options.availableImageQualities.includes(input.imageQuality)) throw new Error("当前模型不支持该图片质量");
-  if (!options.availableImageFormats.includes(input.imageFormat)) throw new Error("当前模型不支持该图片格式");
+  if (input.imageSize && !options.availableImageSizes.includes(input.imageSize)) {
+    input.imageSize = options.normalizedSelection.imageSize;
+  }
+  if (!options.availableImageQualities.includes(input.imageQuality)) {
+    input.imageQuality = options.normalizedSelection.imageQuality ?? options.availableImageQualities[0] ?? "auto";
+  }
+  if (!options.availableImageFormats.includes(input.imageFormat)) {
+    input.imageFormat = options.normalizedSelection.imageFormat ?? options.availableImageFormats[0] ?? "png";
+  }
 }
 
 async function writeMockAsset(input: { nodeId: string; kind: "image" | "video"; payload: Record<string, unknown> }) {
@@ -655,32 +683,35 @@ export async function generateVideo(input: GenerateVideoRequest) {
 export async function generateImage(input: GenerateImageRequest) {
   const { model, apiKey, catalogItem, forceMock } = await getGenerationContext(input.modelConfigId, "image");
   logGenerate({ type: "image", model, catalogItem, apiKey, inputMode: input.inputMode });
-  const capabilities = catalogItem?.capabilities ?? JSON.parse(model.capabilities_json) as ModelCapabilities;
+  const configuredCapabilities = JSON.parse(model.capabilities_json) as ModelCapabilities;
+  const useCatalogCapabilities = shouldUseCatalogCapabilities(model, catalogItem);
+  const capabilities = useCatalogCapabilities ? catalogItem!.capabilities : configuredCapabilities;
+  const inputForGeneration: GenerateImageRequest = { ...input };
   try {
-    validateImageRequest(capabilities, input);
+    validateImageRequest(capabilities, inputForGeneration);
     if (forceMock) {
       const asset = await writeMockAsset({
-        nodeId: input.nodeId,
+        nodeId: inputForGeneration.nodeId,
         kind: "image",
         payload: {
         message: "Mock image generation result. Set ALLOW_MOCK_GENERATION=false to use provider adapters.",
-          prompt: input.prompt,
-          aspectRatio: input.aspectRatio,
-          imageSize: input.imageSize,
-          imageQuality: input.imageQuality,
-          imageFormat: input.imageFormat
+          prompt: inputForGeneration.prompt,
+          aspectRatio: inputForGeneration.aspectRatio,
+          imageSize: inputForGeneration.imageSize,
+          imageQuality: inputForGeneration.imageQuality,
+          imageFormat: inputForGeneration.imageFormat
         }
       });
       await addHistory({
         generationType: "image",
-        projectId: input.projectId,
-        nodeId: input.nodeId,
-        modelConfigId: input.modelConfigId,
+        projectId: inputForGeneration.projectId,
+        nodeId: inputForGeneration.nodeId,
+        modelConfigId: inputForGeneration.modelConfigId,
         modelDisplayName: model.display_name,
-        inputMode: input.inputMode,
-        prompt: input.prompt,
-        resolution: input.aspectRatio ?? input.imageSize,
-        aspectRatio: input.aspectRatio,
+        inputMode: inputForGeneration.inputMode,
+        prompt: inputForGeneration.prompt,
+        resolution: inputForGeneration.aspectRatio ?? inputForGeneration.imageSize,
+        aspectRatio: inputForGeneration.aspectRatio,
         status: "success",
         outputPath: asset.localPath,
         outputUrl: asset.url
@@ -691,44 +722,46 @@ export async function generateImage(input: GenerateImageRequest) {
     if (!apiKey) throw new Error("请先在设置中心配置该模型 API Key");
     const providerId = model.provider_id ?? "";
     const modelName = model.model_name ?? "";
-    assertFullQualityModel({ qualityMode: input.qualityMode, providerId, catalogModelId: catalogItem?.id, modelName });
-    validateAgainstOfficial({
-      providerId,
-      catalogModelId: catalogItem?.id,
-      modelName,
-      inputMode: input.inputMode,
-      aspectRatio: input.aspectRatio
-    });
+    if (useCatalogCapabilities) {
+      assertFullQualityModel({ qualityMode: inputForGeneration.qualityMode, providerId, catalogModelId: catalogItem?.id, modelName });
+      validateAgainstOfficial({
+        providerId,
+        catalogModelId: catalogItem?.id,
+        modelName,
+        inputMode: inputForGeneration.inputMode,
+        aspectRatio: inputForGeneration.aspectRatio
+      });
+    }
     const providerParams = {
-      ...input,
+      ...inputForGeneration,
       apiKey,
       apiBaseUrl: apiBaseUrlFor(model),
       modelName,
       providerId,
-      catalogModelId: catalogItem?.id,
-      qualityMode: input.qualityMode ?? "full_quality"
+      catalogModelId: useCatalogCapabilities ? catalogItem?.id : undefined,
+      qualityMode: inputForGeneration.qualityMode ?? "full_quality"
     };
 
     const preflightSummary = buildPayloadSummary({
       providerId,
-      selectedModelId: catalogItem?.id,
+      selectedModelId: useCatalogCapabilities ? catalogItem?.id : model.id,
       actualModelName: modelName,
-      inputMode: input.inputMode,
-      aspectRatio: input.aspectRatio,
-      quality: input.imageQuality,
-      qualityMode: input.qualityMode ?? "full_quality",
-      hasImageInput: Boolean(input.imageAssetIds?.length),
-      imageInputCount: input.imageAssetIds?.length ?? 0,
-      prompt: input.prompt,
-      negativePrompt: input.negativePrompt,
+      inputMode: inputForGeneration.inputMode,
+      aspectRatio: inputForGeneration.aspectRatio,
+      quality: inputForGeneration.imageQuality,
+      qualityMode: inputForGeneration.qualityMode ?? "full_quality",
+      hasImageInput: Boolean(inputForGeneration.imageAssetIds?.length),
+      imageInputCount: inputForGeneration.imageAssetIds?.length ?? 0,
+      prompt: inputForGeneration.prompt,
+      negativePrompt: inputForGeneration.negativePrompt,
       isMock: false,
       qualityAudit: {
-        qualityMode: input.qualityMode ?? "full_quality",
-        promptExtend: input.promptExtend,
-        seed: input.seed,
+        qualityMode: inputForGeneration.qualityMode ?? "full_quality",
+        promptExtend: inputForGeneration.promptExtend,
+        seed: inputForGeneration.seed,
         isFallback: false
       },
-      payloadSummary: { stage: "preflight" }
+      payloadSummary: { stage: "preflight", officialCatalogValidation: useCatalogCapabilities }
     });
     logOfficialPayload(preflightSummary);
 
@@ -749,27 +782,27 @@ export async function generateImage(input: GenerateImageRequest) {
       default:
         throw new Error("该图片模型暂未支持真实调用");
     }
-    result = await enforceImageAspectRatio(result, input.aspectRatio);
+    result = await enforceImageAspectRatio(result, inputForGeneration.aspectRatio);
 
-    const asset = await createGeneratedAssetFromProvider(result, `image_${input.nodeId}.png`, {
+    const asset = await createGeneratedAssetFromProvider(result, `image_${inputForGeneration.nodeId}.png`, {
       providerId,
-      modelId: catalogItem?.id,
-      nodeId: input.nodeId,
-      projectId: input.projectId,
-      prompt: input.prompt,
-      negativePrompt: input.negativePrompt
+      modelId: useCatalogCapabilities ? catalogItem?.id : model.id,
+      nodeId: inputForGeneration.nodeId,
+      projectId: inputForGeneration.projectId,
+      prompt: inputForGeneration.prompt,
+      negativePrompt: inputForGeneration.negativePrompt
     });
     const payloadSummary = await enrichPayloadSummaryWithOutput(preflightSummary, result);
     await addHistory({
       generationType: "image",
-      projectId: input.projectId,
-      nodeId: input.nodeId,
-      modelConfigId: input.modelConfigId,
+      projectId: inputForGeneration.projectId,
+      nodeId: inputForGeneration.nodeId,
+      modelConfigId: inputForGeneration.modelConfigId,
       modelDisplayName: model.display_name,
-      inputMode: input.inputMode,
-      prompt: input.prompt,
-      resolution: input.aspectRatio ?? input.imageSize,
-      aspectRatio: input.aspectRatio,
+      inputMode: inputForGeneration.inputMode,
+      prompt: inputForGeneration.prompt,
+      resolution: inputForGeneration.aspectRatio ?? inputForGeneration.imageSize,
+      aspectRatio: inputForGeneration.aspectRatio,
       status: "success",
       outputPath: asset?.localPath ?? result.localPath,
       outputUrl: asset?.url ?? result.outputUrl

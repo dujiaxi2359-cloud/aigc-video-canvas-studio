@@ -118,7 +118,11 @@ function status(payload: Record<string, unknown>) {
 
 function errorMessage(payload: Record<string, unknown>) {
   const error = record(payload.error);
-  return String(error.message ?? payload.message ?? payload.error ?? "未知错误");
+  const message = String(error.message ?? payload.message ?? payload.error ?? "未知错误");
+  if (/orchestration-service|name or service not known|cannot connect to host|ssl:|getaddrinfo|service unavailable/i.test(message)) {
+    return "Grok 中转商内部服务暂时不可达，请稍后重试或切换其他视频通道。";
+  }
+  return message;
 }
 
 function videoUrl(payload: Record<string, unknown>): string | undefined {

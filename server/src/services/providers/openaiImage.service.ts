@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import { getAsset } from "../asset.service.js";
+import { ensureAssetLocalFile } from "../assets/ensureAssetLocalFile.service.js";
 import { downloadGeneratedFile, saveGeneratedBuffer } from "../../utils/downloadGeneratedFile.js";
 import { aspectRatioToOpenAIImageSize } from "../../utils/imageAspectRatio.js";
 import { ProviderError } from "../../utils/providerErrors.js";
@@ -119,10 +120,7 @@ export async function generateImageWithOpenAI(params: ImageProviderParams): Prom
   form.set("n", String(Math.max(1, params.generateCount || 1)));
 
   for (const assetId of params.imageAssetIds.slice(0, 16)) {
-    const asset = await getAsset(assetId);
-    if (!asset?.localPath || !fs.existsSync(asset.localPath)) {
-      throw new ProviderError("ASSET_FILE_NOT_FOUND", "本地素材文件不存在，请重新上传图片。");
-    }
+    const asset = await ensureAssetLocalFile(await getAsset(assetId), "OpenAI 图片编辑引用的图片素材");
     const buffer = fs.readFileSync(asset.localPath);
     const blob = new Blob([buffer]);
     form.append("image", blob, asset.originalName);
