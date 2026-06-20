@@ -289,6 +289,7 @@ assert((seedance2Body.metadata as any).duration === 5, "Seedance 2 should send m
 assert((seedance2Body.metadata as any).ratio === "16:9", "Seedance 2 should send metadata.ratio");
 assert((seedance2Body.metadata as any).resolution === "480p", "Seedance 2 should send lowercase metadata.resolution");
 assert((seedance2Body.metadata as any).watermark === false, "Seedance 2 should disable watermark by default");
+assert((seedance2Body.metadata as any).generate_audio === true, "Seedance 2 should request native audio by default");
 assert((seedance2Body.content as any[])[1]?.role === "first_frame", "Seedance 2 image-to-video should mark the image as first_frame");
 assert((seedance2Body.content as any[])[1]?.image_url?.url === "https://assets.example/frame.png", "Seedance 2 should place image URL inside content[].image_url.url");
 const omniConfig = resolveVideoRequestConfig({

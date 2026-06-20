@@ -740,7 +740,7 @@ export function buildProxyBody(params: SeedanceProviderParams, refs: {
         ratio: refs.aspectRatio,
         resolution: refs.resolution.toLowerCase(),
         watermark: false,
-        generate_audio: refs.audios.length ? true : undefined
+        generate_audio: true
       })
     };
   }
