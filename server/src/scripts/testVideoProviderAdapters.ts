@@ -1,6 +1,6 @@
 import { grokCreateEndpoint, grokPollEndpoint, grokRequestModelName, isOfficialGrokEndpoint } from "../services/providers/grokVideo.service.js";
 import { klingBearerToken, klingCreateEndpoint, klingPollEndpoint, normalizeKlingPrompt } from "../services/providers/klingVideo.service.js";
-import { buildProxyBody, seedanceCreateEndpoint, seedancePollEndpoint } from "../services/providers/seedanceVideo.service.js";
+import { buildProxyBody, buildSeedance15Multipart, seedanceCreateEndpoint, seedancePollEndpoint } from "../services/providers/seedanceVideo.service.js";
 import { configuredRelayModelName, veoProxyCreateEndpoint } from "../services/providers/veoProxyVideo.service.js";
 import { joinUrl, resolveVideoRequestConfig } from "../services/providers/videoRequestAdapter.js";
 import { getVideoModelCapability } from "../config/videoModelCapabilities.js";
@@ -215,6 +215,22 @@ assert(seedance15Config.apiFamily === "doubao_seedance15", "Seedance 1.5 should 
 assert(seedance15Config.requestFormat === "multipart", "Seedance 1.5 should submit multipart form data");
 assert(seedance15Config.imageTransport === "multipart_file", "Seedance 1.5 should upload frame files");
 assert(seedance15Config.imageField === "first_frame_image", "Seedance 1.5 should use first_frame_image");
+const seedance15Body = buildSeedance15Multipart({
+  providerId: "seedance",
+  modelName: "doubao-seedance-1-5-pro-251215",
+  apiBaseUrl: "https://ark.cn-beijing.volces.com/api/v3",
+  apiKey: "ark-test-key",
+  prompt: "test video prompt",
+  nodeId: "node",
+  modelConfigId: "model",
+  inputMode: "text-to-video",
+  duration: 5,
+  aspectRatio: "16:9",
+  resolution: "720P",
+  generateCount: 1
+}, { files: [], aspectRatio: "16:9", resolution: "720P", seconds: "5" });
+assert(seedance15Body.get("generate_audio") === "true", "Seedance 1.5 should request native audio by default");
+assert(seedance15Body.get("audio_generation") === "Enabled", "Seedance 1.5 should send the relay-compatible audio generation flag");
 
 const klingAigcConfig = resolveVideoRequestConfig({
   providerId: "google",

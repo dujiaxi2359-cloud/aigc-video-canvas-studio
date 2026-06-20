@@ -839,7 +839,7 @@ export function buildProxyBody(params: SeedanceProviderParams, refs: {
   return body;
 }
 
-function buildSeedance15Multipart(params: SeedanceProviderParams, refs: {
+export function buildSeedance15Multipart(params: SeedanceProviderParams, refs: {
   files: Array<{ localPath: string; mimeType: string; filename: string }>;
   aspectRatio: string;
   resolution: string;
@@ -850,6 +850,8 @@ function buildSeedance15Multipart(params: SeedanceProviderParams, refs: {
   form.set("prompt", params.prompt);
   if (refs.seconds !== "auto") form.set("seconds", refs.seconds);
   form.set("size", mapVideoSize(refs.aspectRatio, refs.resolution));
+  form.set("generate_audio", "true");
+  form.set("audio_generation", "Enabled");
   const fields = ["first_frame_image", "last_frame_image"];
   refs.files.slice(0, 2).forEach((file, index) => {
     form.set(fields[index]!, new Blob([fs.readFileSync(file.localPath)], { type: file.mimeType }), file.filename);
