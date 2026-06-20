@@ -49,6 +49,7 @@ export type ResolvedRemoteAsset = {
 
 type ResolveRemoteAssetOptions = {
   strategy?: Partial<AssetInputStrategy>;
+  signedUrlExpiresSeconds?: number;
 };
 
 const assetUrlProbeTimeoutMs = Number(process.env.ASSET_URL_PROBE_TIMEOUT_MS || 8000);
@@ -236,14 +237,14 @@ function cosKeyFromAsset(asset: AssetLike) {
   );
 }
 
-async function resolveCosAssetUrl(asset: AssetLike, mimeType: string, filename: string) {
+async function resolveCosAssetUrl(asset: AssetLike, mimeType: string, filename: string, expiresSeconds = 3600) {
   if (!isCosConfigured()) return undefined;
 
   const existingKey = cosKeyFromAsset(asset);
   if (existingKey) {
     return {
       type: "url" as const,
-      url: await cachedSignedCosUrl({ fileKey: existingKey, expiresSeconds: 3600 }),
+      url: await cachedSignedCosUrl({ fileKey: existingKey, expiresSeconds }),
       mimeType,
       filename,
       localPath: asset.localPath,
@@ -262,7 +263,7 @@ async function resolveCosAssetUrl(asset: AssetLike, mimeType: string, filename: 
   });
   return {
     type: "url" as const,
-    url: await cachedSignedCosUrl({ fileKey: stored.fileKey, expiresSeconds: 3600 }),
+    url: await cachedSignedCosUrl({ fileKey: stored.fileKey, expiresSeconds }),
     mimeType,
     filename,
     localPath: asset.localPath,
@@ -318,6 +319,7 @@ export async function resolveRemoteAsset(
   options: ResolveRemoteAssetOptions = {}
 ): Promise<ResolvedRemoteAsset> {
   const strategy = getProviderAssetStrategy(providerId, options.strategy);
+  const signedUrlExpiresSeconds = Math.max(900, Number(options.signedUrlExpiresSeconds || 3600));
   const filename = asset.filename || asset.originalName || (asset.localPath ? path.basename(asset.localPath) : "asset.png");
   const mimeType = asset.mimeType || mimeTypeFromFilename(filename || asset.localPath || asset.url);
   const hasPublicUrl = Boolean(asset.publicUrl);
@@ -327,7 +329,7 @@ export async function resolveRemoteAsset(
 
   let result: ResolvedRemoteAsset | undefined;
 
-  const cosAsset = strategy.supportsPublicUrl ? await resolveCosAssetUrl(asset, mimeType, filename) : undefined;
+  const cosAsset = strategy.supportsPublicUrl ? await resolveCosAssetUrl(asset, mimeType, filename, signedUrlExpiresSeconds) : undefined;
   const signedBackendUrl = backendAssetUrl(asset.publicUrl);
   if (cosAsset) {
     result = cosAsset;
@@ -379,6 +381,7 @@ export async function resolveRemoteAsset(
     strategy,
     resultType: result?.type,
     resultSource: result?.source,
+    signedUrlExpiresSeconds: result?.source === "cos" ? signedUrlExpiresSeconds : undefined,
     width: result?.width,
     height: result?.height,
     aspectRatio: result?.aspectRatio,

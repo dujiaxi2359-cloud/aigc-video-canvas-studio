@@ -114,7 +114,10 @@ async function assetJsonReferences(assetIds: string[] | undefined, aspectRatio: 
       },
       "openai-video",
       "video-reference",
-      { strategy: { supportsPublicUrl: true, supportsBase64: false, supportsMultipart: false, prefer: "publicUrl" } }
+      {
+        strategy: { supportsPublicUrl: true, supportsBase64: false, supportsMultipart: false, prefer: "publicUrl" },
+        signedUrlExpiresSeconds: Number(process.env.SEEDANCE_ASSET_URL_EXPIRES_SECONDS || 86400)
+      }
     );
     if (!resolved.url) throw new ProviderError("PUBLIC_URL_REQUIRED", "当前中转通道需要公网可访问的素材 URL。");
     urls.push(resolved.url);
