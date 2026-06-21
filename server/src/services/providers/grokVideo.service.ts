@@ -3,7 +3,7 @@ import path from "node:path";
 import { legacyInputModeToOfficialMode } from "../../types/videoModes.js";
 import { downloadGeneratedFile, saveGeneratedBuffer } from "../../utils/downloadGeneratedFile.js";
 import { ProviderError, rawErrorMessage } from "../../utils/providerErrors.js";
-import { mapVideoDimensions, mapVideoSize, normalizeVideoAspectRatio, normalizeVideoResolution } from "../../utils/videoParams.js";
+import { mapVideoDimensions, normalizeVideoAspectRatio, normalizeVideoResolution } from "../../utils/videoParams.js";
 import { getAsset } from "../asset.service.js";
 import { ensureAssetLocalFile } from "../assets/ensureAssetLocalFile.service.js";
 import { prepareVideoFrameForAspectRatio } from "../assets/prepareVideoFrame.service.js";
@@ -209,6 +209,11 @@ function videoUrl(payload: Record<string, unknown>): string | undefined {
   return candidates.find((value) => typeof value === "string" && /^https?:\/\//i.test(value)) as string | undefined;
 }
 
+function grokVideoSize(aspectRatio?: string, resolution?: string) {
+  const dimensions = mapVideoDimensions(aspectRatio, resolution);
+  return `${dimensions.width}x${dimensions.height}`;
+}
+
 async function downloadGrokResult(input: {
   remoteUrl?: string;
   pollEndpoint: string;
@@ -323,8 +328,8 @@ export async function generateVideoWithGrok(params: VideoProviderParams): Promis
       aspectRatio: normalizeVideoAspectRatio(params.aspectRatio),
       ratio: normalizeVideoAspectRatio(params.aspectRatio),
       resolution: normalizeVideoResolution(params.resolution),
-      size: normalizeVideoResolution(params.resolution),
-      dimensions: mapVideoSize(params.aspectRatio, params.resolution),
+      size: grokVideoSize(params.aspectRatio, params.resolution),
+      dimensions: grokVideoSize(params.aspectRatio, params.resolution),
       ...mapVideoDimensions(params.aspectRatio, params.resolution)
     };
     if (unifiedEndpoint) body.images = images;
@@ -347,7 +352,7 @@ export async function generateVideoWithGrok(params: VideoProviderParams): Promis
         prompt: params.prompt,
         images,
         aspect_ratio: normalizeVideoAspectRatio(params.aspectRatio),
-        size: normalizeVideoResolution(params.resolution),
+        size: grokVideoSize(params.aspectRatio, params.resolution),
         duration: params.duration
       } : body);
     } else {
@@ -357,9 +362,10 @@ export async function generateVideoWithGrok(params: VideoProviderParams): Promis
       const normalizedRatio = normalizeVideoAspectRatio(params.aspectRatio);
       const normalizedResolution = normalizeVideoResolution(params.resolution);
       const dimensions = mapVideoDimensions(params.aspectRatio, params.resolution);
+      const size = grokVideoSize(params.aspectRatio, params.resolution);
       form.set("aspect_ratio", normalizedRatio);
       form.set("seconds", String(params.duration));
-      form.set("size", normalizedResolution);
+      form.set("size", size);
       if (!isAi666GrokRelay(params.apiBaseUrl)) {
         form.set("aspectRatio", normalizedRatio);
         form.set("ratio", normalizedRatio);
@@ -367,7 +373,7 @@ export async function generateVideoWithGrok(params: VideoProviderParams): Promis
         form.set("resolution", normalizedResolution);
         form.set("width", String(dimensions.width));
         form.set("height", String(dimensions.height));
-        form.set("dimensions", mapVideoSize(params.aspectRatio, params.resolution));
+        form.set("dimensions", size);
       }
       for (const file of relayImages) form.append("input_reference", file.blob, file.filename);
       for (const file of relayVideos) form.append("input_video", file.blob, file.filename);

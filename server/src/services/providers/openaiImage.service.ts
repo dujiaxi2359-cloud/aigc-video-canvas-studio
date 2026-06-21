@@ -21,6 +21,12 @@ function humanOpenAIError(message: string) {
   if (isUnsupportedResponseFormatError(message)) {
     return "当前图片中转不兼容 gpt-image-2 的图片格式参数，会把 output_format 错误转成旧参数 response_format。系统已尝试自动降级；如果仍失败，请在设置中心更换支持新版图片接口的中转线路。";
   }
+  if (/cloudflare.*524|error code 524|a timeout occurred|origin web server timed out/i.test(message)) {
+    return "OpenAI 图片中转上游响应超时，请稍后重试或切换其它图片线路。";
+  }
+  if (/please wait and try again later|try again later|temporarily unavailable|service busy|fully loaded/i.test(message)) {
+    return "OpenAI 图片中转暂时繁忙，请稍后重试或切换其它图片线路。";
+  }
   if (lower.includes("incorrect api key") || lower.includes("invalid api key") || lower.includes("unauthorized") || lower.includes("401")) {
     return "OpenAI API Key 无效。请确认你填写的是 platform.openai.com 创建的 API Key，不是 ChatGPT 登录账号、不是 Azure Key、不是其他中转平台 Key。";
   }

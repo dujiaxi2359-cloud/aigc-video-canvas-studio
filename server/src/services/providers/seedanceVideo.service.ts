@@ -628,6 +628,15 @@ function decodedErrorText(value: unknown, depth = 0): string {
 function upstreamFriendlyErrorMessage(label: string, payload: Record<string, unknown>) {
   const fallback = errorMessage(payload);
   const decoded = `${fallback}\n${decodedErrorText(payload)}`;
+  if (/cloudflare.*524|error code 524|a timeout occurred|origin web server timed out/i.test(decoded)) {
+    return `${label} 中转上游响应超时，请稍后重试或切换其它线路。`;
+  }
+  if (/please wait and try again later|try again later|temporarily unavailable|service busy|fully loaded/i.test(decoded)) {
+    return `${label} 中转暂时繁忙，请稍后重试或切换其它线路。`;
+  }
+  if (/invalid params|invalid size|size must be one of|allowed values/i.test(decoded)) {
+    return `${label} 中转参数格式不兼容，系统已按通用视频尺寸重新提交；如果仍失败，请切换支持该模型的线路。`;
+  }
   if (/orchestration-service|name or service not known|cannot connect to host|ssl:|getaddrinfo|service unavailable/i.test(decoded)) {
     return `${label} 中转商内部服务暂时不可达，请稍后重试或切换其他视频通道。`;
   }
@@ -734,6 +743,11 @@ function videoUrl(value: unknown, preferred = false): string | undefined {
 
 function compactObject<T extends Record<string, unknown>>(value: T): T {
   return Object.fromEntries(Object.entries(value).filter(([, item]) => item !== undefined && item !== null && item !== "")) as T;
+}
+
+function relayVideoSize(aspectRatio: string, resolution: string) {
+  const dimensions = mapVideoDimensions(aspectRatio, resolution);
+  return `${dimensions.width}x${dimensions.height}`;
 }
 
 function durationValue(params: SeedanceProviderParams) {
@@ -1025,6 +1039,7 @@ export function buildProxyBody(params: SeedanceProviderParams, refs: {
   }
 
   const dimensions = mapVideoDimensions(refs.aspectRatio, refs.resolution);
+  const size = relayVideoSize(refs.aspectRatio, refs.resolution);
   const duration = refs.seconds === "auto" ? undefined : Number(refs.seconds);
   const body: Record<string, unknown> = compactObject({
     ...base,
@@ -1035,7 +1050,8 @@ export function buildProxyBody(params: SeedanceProviderParams, refs: {
     resolution: refs.resolution,
     width: dimensions.width,
     height: dimensions.height,
-    size: `${dimensions.width}*${dimensions.height}`,
+    size,
+    dimensions: size,
     watermark: false,
     generate_audio: true,
     metadata: {

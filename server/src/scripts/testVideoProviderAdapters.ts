@@ -507,7 +507,8 @@ const configurableOpenAiVideosBody = buildProxyBody({
 }) as Record<string, any>;
 assert(configurableOpenAiVideosBody.width === 854, "Configured /v1/videos body should include mapped width for relays that require dimensions");
 assert(configurableOpenAiVideosBody.height === 480, "Configured /v1/videos body should include mapped height for relays that require dimensions");
-assert(configurableOpenAiVideosBody.size === "854*480", "Configured /v1/videos body should include width*height size");
+assert(configurableOpenAiVideosBody.size === "854x480", "Configured /v1/videos body should include relay-compatible widthxheight size");
+assert(configurableOpenAiVideosBody.dimensions === "854x480", "Configured /v1/videos body should include relay-compatible dimensions");
 assert(configurableOpenAiVideosBody.duration === 4, "Configured /v1/videos body should include numeric duration");
 assert(configurableOpenAiVideosBody.watermark === false, "Configured /v1/videos body should disable watermark at top level");
 assert((configurableOpenAiVideosBody.metadata as any).watermark === false, "Configured /v1/videos body should disable watermark in metadata");
