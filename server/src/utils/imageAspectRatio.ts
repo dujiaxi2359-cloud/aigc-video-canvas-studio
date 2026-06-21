@@ -32,17 +32,26 @@ function isGptImage2(modelName?: string) {
   return /gpt-image-2|image-2/i.test(modelName ?? "");
 }
 
-export function aspectRatioToOpenAIImageSize(aspectRatio?: string, modelName?: string) {
+function normalizeImageTier(imageSize?: string) {
+  const normalized = imageSize?.trim().toUpperCase();
+  return normalized === "1K" || normalized === "2K" || normalized === "4K" ? normalized : undefined;
+}
+
+const gptImage2TierSizes: Record<string, Record<"1K" | "2K" | "4K", string>> = {
+  "1:1": { "1K": "1024x1024", "2K": "2048x2048", "4K": "2048x2048" },
+  "3:4": { "1K": "1024x1365", "2K": "1536x2048", "4K": "2160x2880" },
+  "4:3": { "1K": "1365x1024", "2K": "2048x1536", "4K": "2880x2160" },
+  "9:16": { "1K": "720x1280", "2K": "1080x1920", "4K": "2160x3840" },
+  "16:9": { "1K": "1280x720", "2K": "1920x1080", "4K": "3840x2160" }
+};
+
+export function aspectRatioToOpenAIImageSize(aspectRatio?: string, modelName?: string, imageSize?: string) {
   if (isGptImage2(modelName)) {
-    switch (normalizeImageAspectRatio(aspectRatio)) {
-      case "9:16":
-        return "2160x3840";
-      case "16:9":
-        return "3840x2160";
-      case "1:1":
-        return "2048x2048";
-      default:
-        break;
+    const tier = normalizeImageTier(imageSize) ?? "2K";
+    const tierSize = gptImage2TierSizes[normalizeImageAspectRatio(aspectRatio)]?.[tier];
+    if (tierSize) return tierSize;
+    if (imageSize && imageSize !== "auto") {
+      return imageSize;
     }
   }
   switch (normalizeImageAspectRatio(aspectRatio)) {

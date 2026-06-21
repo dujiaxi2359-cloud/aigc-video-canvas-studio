@@ -347,7 +347,8 @@ function validateImageRequest(capabilities: ModelCapabilities, input: GenerateIm
   if (input.inputMode !== "text-to-image" && !input.imageAssetIds?.length) {
     throw new Error(input.inputMode === "image-edit" ? "图片编辑需要连接一张图片素材" : "图生图需要连接一张图片素材");
   }
-  if (input.imageSize && !options.availableImageSizes.includes(input.imageSize)) {
+  const isProductImageTier = /^(?:1K|2K|4K)$/i.test(input.imageSize ?? "");
+  if (input.imageSize && !isProductImageTier && !options.availableImageSizes.includes(input.imageSize)) {
     input.imageSize = options.normalizedSelection.imageSize;
   }
   if (!options.availableImageQualities.includes(input.imageQuality)) {

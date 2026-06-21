@@ -331,6 +331,7 @@ function ImageGenerateNodeComponent(props: NodeProps<ImageGenerateNodeData>) {
         inputMode: props.data.inputMode,
         prompt: promptForProvider,
         aspectRatio: props.data.aspectRatio ?? ratios[0],
+        imageSize: props.data.imageSize,
         imageQuality: props.data.imageQuality ?? qualities[0],
         imageFormat: props.data.imageFormat ?? formats[0],
         imageAssetIds: compactAssetIds(requestInputs.imageInputs),

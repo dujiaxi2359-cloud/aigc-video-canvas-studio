@@ -90,8 +90,8 @@ function endpointHost(endpoint: string) {
   }
 }
 
-function mapAspectRatioToAzureSize(aspectRatio?: string, modelName?: string) {
-  return aspectRatioToOpenAIImageSize(aspectRatio, modelName);
+function mapAspectRatioToAzureSize(aspectRatio?: string, modelName?: string, imageSize?: string) {
+  return aspectRatioToOpenAIImageSize(aspectRatio, modelName, imageSize);
 }
 
 function isUnsupportedSizeError(message: string) {
@@ -99,8 +99,14 @@ function isUnsupportedSizeError(message: string) {
 }
 
 function fallbackImageSize(size?: string) {
-  if (size === "2160x3840") return "1024x1536";
-  if (size === "3840x2160") return "1536x1024";
+  if (size === "2160x3840") return "1080x1920";
+  if (size === "1080x1920") return "720x1280";
+  if (size === "3840x2160") return "1920x1080";
+  if (size === "1920x1080") return "1280x720";
+  if (size === "2880x2160") return "2048x1536";
+  if (size === "2048x1536") return "1365x1024";
+  if (size === "2160x2880") return "1536x2048";
+  if (size === "1536x2048") return "1024x1365";
   if (size === "2048x2048") return "1024x1024";
   return undefined;
 }
@@ -191,7 +197,7 @@ export async function generateImageWithAzureOpenAI(params: ImageProviderParams):
 
   try {
     let response: Response;
-    const requestedSize = mapAspectRatioToAzureSize(params.aspectRatio, params.modelName);
+    const requestedSize = mapAspectRatioToAzureSize(params.aspectRatio, params.modelName, params.imageSize);
     if (params.inputMode === "text-to-image") {
       const body: Record<string, unknown> = {
         prompt: params.prompt,
