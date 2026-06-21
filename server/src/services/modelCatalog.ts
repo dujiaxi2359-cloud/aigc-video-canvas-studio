@@ -95,7 +95,7 @@ const wanResolutions = ["720P", "1080P"];
 const klingRatios = ["16:9", "9:16", "1:1"];
 const grokRatios: NonNullable<ModelCapabilities["aspectRatios"]> = ["16:9", "9:16", "1:1", "2:3", "3:2", "3:4", "4:3"];
 const grokAi666Ratios: NonNullable<ModelCapabilities["aspectRatios"]> = ["16:9", "9:16", "2:3", "3:2", "1:1"];
-const grokInputModes: ModelCapabilities["inputModes"] = ["text-to-video", "image-to-video", "reference-to-video", "video-to-video"];
+const grokInputModes: ModelCapabilities["inputModes"] = ["text-to-video", "image-to-video", "reference-to-video", "first-last-frame", "video-to-video"];
 
 function grokVideo(id: string, name: string, displayName: string, duration: ModelCapabilities["duration"]) {
   return video(id, "grok", name, displayName, "text-to-video", {

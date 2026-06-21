@@ -1,4 +1,4 @@
-import { grokCreateEndpoint, grokPollEndpoint, grokRequestModelName, isOfficialGrokEndpoint } from "../services/providers/grokVideo.service.js";
+import { grokCreateEndpoint, grokPollEndpoint, grokRequestModelName, isAi666GrokRelay, isOfficialGrokEndpoint } from "../services/providers/grokVideo.service.js";
 import { klingBearerToken, klingCreateEndpoint, klingPollEndpoint, normalizeKlingPrompt } from "../services/providers/klingVideo.service.js";
 import { buildProxyBody, buildSeedance15Multipart, seedanceAssetUploadShouldFallback, seedanceAuthorizationValues, seedanceCreateEndpoint, seedancePollEndpoint } from "../services/providers/seedanceVideo.service.js";
 import { configuredRelayModelName, veoProxyCreateEndpoint } from "../services/providers/veoProxyVideo.service.js";
@@ -7,7 +7,7 @@ import { getVideoModelCapability } from "../config/videoModelCapabilities.js";
 import { modelCatalog } from "../services/modelCatalog.js";
 import { isGrokLikeVideoModel } from "../services/videoCapabilityNormalization.js";
 import { ProviderError } from "../utils/providerErrors.js";
-import { mapVideoDimensions } from "../utils/videoParams.js";
+import { mapVideoDimensions, normalizeVideoAspectRatio } from "../utils/videoParams.js";
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
@@ -55,6 +55,15 @@ assert(
 );
 assert(isOfficialGrokEndpoint("https://api.x.ai/v1"), "xAI endpoint should use the official JSON protocol");
 assert(!isOfficialGrokEndpoint("https://relay.example/v1/videos"), "Relay endpoint should use multipart protocol");
+assert(isAi666GrokRelay("https://ai.ai666.net/v1"), "ai666 must use the documented Grok relay protocol");
+assert(grokCreateEndpoint("https://ai.ai666.net/v1") === "https://ai.ai666.net/v1/videos", "ai666 Grok relay should create through POST /v1/videos");
+assert(grokPollEndpoint("https://ai.ai666.net/v1", "video_1") === "https://ai.ai666.net/v1/videos/video_1", "ai666 Grok relay should poll GET /v1/videos/{task_id}");
+assert(grokRequestModelName("grok-1.5-video-6s", "https://ai.ai666.net/v1") === "grok-video-3", "ai666 legacy 6s Grok config should map to current base model");
+assert(grokRequestModelName("grok-1.5-video-10s", "https://ai.ai666.net/v1") === "grok-video-3-pro", "ai666 legacy 10s Grok config should map to current pro model");
+assert(grokRequestModelName("grok-1.5-video-15s", "https://ai.ai666.net/v1") === "grok-video-3-max", "ai666 legacy 15s Grok config should map to current max model");
+assert(grokRequestModelName("grok-1.5-video-6s", "https://ai.cy88.ai/v1") === "grok-1.5-video-6s", "non-ai666 Grok relays must retain their configured upstream model name");
+assert(normalizeVideoAspectRatio("2:3") === "2:3", "ai666 documented 2:3 ratio must be preserved");
+assert(normalizeVideoAspectRatio("3:2") === "3:2", "ai666 documented 3:2 ratio must be preserved");
 assert(
   isGrokLikeVideoModel("openai-video", "grok-imagine-1.0-video", { inputModes: ["text-to-video"] }),
   "Historical openai-video configs must still route Grok Imagine through the Grok adapter"
@@ -583,6 +592,30 @@ const runApiConfig = resolveVideoRequestConfig({
 });
 assert(runApiConfig.finalUrl === "https://runapi.co/v1/video/create", "RunAPI should submit video tasks to /v1/video/create");
 assert(runApiConfig.pollEndpoint === "/v1/videos/{taskId}", "RunAPI should query video tasks through /v1/videos/{taskId}");
+const staleRunApiGrokConfig = resolveVideoRequestConfig({
+  providerId: "grok",
+  modelName: "grok-video-3",
+  apiBaseUrl: "https://runapi.co/v1",
+  apiKey: "sk-test-key",
+  prompt: "test",
+  nodeId: "node",
+  modelConfigId: "model",
+  inputMode: "reference-to-video",
+  imageAssetIds: ["asset"],
+  duration: 8,
+  aspectRatio: "9:16",
+  resolution: "720p",
+  generateCount: 1
+}, {
+  inputModes: ["text-to-video", "reference-to-video"],
+  apiFamily: "grok_video",
+  requestFormat: "multipart",
+  imageTransport: "multipart_file",
+  supportedInputs: ["text", "image", "reference_image"]
+});
+assert(staleRunApiGrokConfig.apiFamily === "unified_video_create", "RunAPI should override stale Grok apiFamily with the unified video protocol");
+assert(staleRunApiGrokConfig.requestFormat === "json", "RunAPI Grok should use the unified JSON request format");
+assert(staleRunApiGrokConfig.imageTransport === "url", "RunAPI Grok should pass reference images by URL");
 const runApiVeoFallbackConfig = resolveVideoRequestConfig({
   providerId: "custom-video",
   modelName: "veo-3.1-fast",

@@ -160,6 +160,7 @@ function klingCapability(input: {
 const grokModes = [
   mode({ mode: "text_to_video", label: "文生视频", requiredInputs: ["prompt"] }),
   mode({ mode: "image_to_video_first_frame", label: "首帧图生视频", requiredInputs: ["prompt", "first_frame"], minImages: 1, maxImages: 1 }),
+  mode({ mode: "image_to_video_first_last_frame", label: "首尾帧视频", requiredInputs: ["prompt", "first_frame", "last_frame"], minImages: 2, maxImages: 2 }),
   mode({ mode: "reference_images_to_video", label: "参考图生视频", requiredInputs: ["prompt", "reference_images"], minImages: 1, maxImages: 7 }),
   mode({ mode: "video_edit", label: "视频编辑", requiredInputs: ["prompt", "video"], minVideos: 1, maxVideos: 1 }),
   mode({ mode: "video_extension", label: "视频延展", requiredInputs: ["prompt", "video"], minVideos: 1, maxVideos: 1 })

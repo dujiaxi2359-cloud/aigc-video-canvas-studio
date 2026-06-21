@@ -4,8 +4,8 @@ type VideoSupportedInput = NonNullable<ModelCapabilities["supportedInputs"]>[num
 
 const veoInputModes: ModelInputMode[] = ["text-to-video", "image-to-video", "reference-to-video", "first-last-frame"];
 const veoSupportedInputs: VideoSupportedInput[] = ["text", "image", "first_frame", "reference_image", "first_last_frame"];
-const grokInputModes: ModelInputMode[] = ["text-to-video", "image-to-video", "reference-to-video", "video-to-video"];
-const grokSupportedInputs: VideoSupportedInput[] = ["text", "image", "first_frame", "reference_image", "video"];
+const grokInputModes: ModelInputMode[] = ["text-to-video", "image-to-video", "reference-to-video", "first-last-frame", "video-to-video"];
+const grokSupportedInputs: VideoSupportedInput[] = ["text", "image", "first_frame", "reference_image", "first_last_frame", "video"];
 const seedance2InputModes: ModelInputMode[] = ["text-to-video", "image-to-video", "reference-to-video", "first-last-frame", "video-to-video"];
 const seedance2SupportedInputs: VideoSupportedInput[] = ["text", "image", "first_frame", "reference_image", "first_last_frame", "video"];
 
@@ -44,6 +44,7 @@ export function normalizeVideoCapabilities(
       videoTransport: capabilities.videoTransport === "unsupported" ? "multipart_file" : capabilities.videoTransport ?? "multipart_file",
       supportsImageInput: true,
       supportsReferenceImage: true,
+      supportsFirstLastFrame: true,
       supportsMultiImageInput: true,
       supportsVideoInput: true,
       maxReferenceImages: capabilities.maxReferenceImages ?? 7

@@ -1,5 +1,5 @@
 export function normalizeVideoAspectRatio(aspectRatio?: string) {
-  if (aspectRatio === "9:16" || aspectRatio === "16:9" || aspectRatio === "1:1" || aspectRatio === "3:4" || aspectRatio === "4:3" || aspectRatio === "21:9") return aspectRatio;
+  if (aspectRatio === "9:16" || aspectRatio === "16:9" || aspectRatio === "1:1" || aspectRatio === "2:3" || aspectRatio === "3:2" || aspectRatio === "3:4" || aspectRatio === "4:3" || aspectRatio === "21:9") return aspectRatio;
   return "16:9";
 }
 

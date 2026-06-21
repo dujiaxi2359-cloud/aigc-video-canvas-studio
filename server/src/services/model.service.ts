@@ -606,7 +606,11 @@ export async function generateVideo(input: GenerateVideoRequest) {
     const videoRequestConfig = validateVideoRequestConfig(providerParams, capabilities);
 
     let result: ProviderGenerateResult;
-    if (isGrokLikeVideoModel(model.provider_id, model.model_name, capabilities)) {
+    if (
+      isGrokLikeVideoModel(model.provider_id, model.model_name, capabilities)
+      && videoRequestConfig.apiFamily !== "unified_video_create"
+      && !/runapi\.co/i.test(model.api_base_url)
+    ) {
       // Grok relay endpoints use their multipart input_reference/input_video
       // contract. Sending them through the generic OpenAI-video JSON adapter
       // drops reference files and can incorrectly classify the channel as text-only.

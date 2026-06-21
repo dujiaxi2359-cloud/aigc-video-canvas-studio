@@ -218,34 +218,47 @@ async function migrateAi666VideoProtocols(database: AppDatabase) {
       const existingChannel = capabilities.channelCapability && typeof capabilities.channelCapability === "object"
         ? capabilities.channelCapability as Record<string, unknown>
         : {};
+      const isRunApiGrok = /runapi\.co/i.test(row.api_base_url);
+      const isAi666Grok = /ai\.ai666\.net/i.test(row.api_base_url);
+      const grokResolutions = Array.isArray(capabilities.resolutions) ? capabilities.resolutions.map((value) => String(value).toUpperCase()) : [];
       const channelInputs = Array.isArray(existingChannel.supportedInputs) ? existingChannel.supportedInputs.map(String) : [];
       const rootInputs = Array.isArray(capabilities.supportedInputs) ? capabilities.supportedInputs.map(String) : [];
       const needsReferenceRepair = !channelInputs.includes("reference_image")
+        || !channelInputs.includes("first_last_frame")
         || !rootInputs.includes("reference_image")
+        || (isRunApiGrok && String(existingChannel.apiFamily ?? "") !== "unified_video_create")
+        || (isAi666Grok && (!grokResolutions.includes("720P") || !grokResolutions.includes("1080P") || grokResolutions.some((value) => !["720P", "1080P"].includes(value))))
         || String(existingChannel.imageTransport ?? "") === "unsupported"
         || String(existingChannel.videoTransport ?? "") === "unsupported";
       if (needsReferenceRepair) {
         const isOfficialGrok = /api\.x\.ai/i.test(row.api_base_url);
         assign({
-          inputModes: ["text-to-video", "image-to-video", "reference-to-video", "video-to-video"],
+          inputModes: ["text-to-video", "image-to-video", "reference-to-video", "first-last-frame", "video-to-video"],
           supportsImageInput: true,
           supportsReferenceImage: true,
+          supportsFirstLastFrame: true,
           supportsMultiImageInput: true,
           supportsVideoInput: true,
           maxReferenceImages: Number(capabilities.maxReferenceImages ?? 7),
-          supportedInputs: ["text", "image", "first_frame", "reference_image", "video"],
+          ...(isAi666Grok ? {
+            aspectRatios: ["16:9", "9:16", "2:3", "3:2", "1:1"],
+            supportedAspectRatios: ["16:9", "9:16", "2:3", "3:2", "1:1"],
+            resolutions: ["720P", "1080P"],
+            supportedResolutions: ["720P", "1080P"]
+          } : {}),
+          supportedInputs: ["text", "image", "first_frame", "reference_image", "first_last_frame", "video"],
           channelCapability: {
             ...existingChannel,
             provider: existingChannel.provider ?? "grok",
             channel: isOfficialGrok ? "official" : "proxy",
-            apiFamily: isOfficialGrok ? "official_provider" : "grok_video",
-            createEndpoint: existingChannel.createEndpoint ?? "/v1/videos",
-            endpoint: existingChannel.endpoint ?? "/v1/videos",
-            pollEndpoint: existingChannel.pollEndpoint ?? "/v1/videos/{taskId}",
-            requestFormat: isOfficialGrok ? "json" : "multipart",
-            imageTransport: isOfficialGrok ? "base64_json" : "multipart_file",
-            videoTransport: isOfficialGrok ? "base64_json" : "multipart_file",
-            supportedInputs: ["text", "image", "first_frame", "reference_image", "video"]
+            apiFamily: isOfficialGrok ? "official_provider" : isRunApiGrok ? "unified_video_create" : "grok_video",
+            createEndpoint: isRunApiGrok ? "/v1/video/create" : existingChannel.createEndpoint ?? "/v1/videos",
+            endpoint: isRunApiGrok ? "/v1/video/create" : existingChannel.endpoint ?? "/v1/videos",
+            pollEndpoint: isRunApiGrok ? "/v1/videos/{taskId}" : existingChannel.pollEndpoint ?? "/v1/videos/{taskId}",
+            requestFormat: isOfficialGrok || isRunApiGrok ? "json" : "multipart",
+            imageTransport: isOfficialGrok ? "base64_json" : isRunApiGrok ? "url" : "multipart_file",
+            videoTransport: isOfficialGrok ? "base64_json" : isRunApiGrok ? "url_or_base64_json" : "multipart_file",
+            supportedInputs: ["text", "image", "first_frame", "reference_image", "first_last_frame", "video"]
           }
         });
       }

@@ -132,11 +132,13 @@ function isOpenAiCompatibleVideoEndpoint(baseUrl: string) {
 }
 
 function inferApiFamily(channel: VideoChannel, baseUrl: string, modelName: string, capabilities: ModelCapabilities): VideoApiFamily {
+  const value = `${baseUrl} ${modelName}`.toLowerCase();
+  // RunAPI exposes the unified JSON contract even when a migrated workspace
+  // still carries an older `grok_video`/OpenAI capability snapshot.
+  if (/runapi\.co/.test(value)) return "unified_video_create";
   if (capabilities.apiFamily) return capabilities.apiFamily;
   if (channel === "official") return "official_provider";
-  const value = `${baseUrl} ${modelName}`.toLowerCase();
   if (/grok[-_ .]?(?:imagine[-_ .]?video|video|1[-_ .]?5[-_ .]?video)/.test(value)) return "grok_video";
-  if (/runapi\.co/.test(value)) return "unified_video_create";
   if (/doubao[-_]?seedance[-_]?1[-_]?5/.test(value)) return "doubao_seedance15";
   if (/kling|可灵/.test(value)) return "aigc_video_json";
   if (/\/v1\/video\/create(?:\/|$)/.test(value)) return "unified_video_create";
@@ -215,9 +217,11 @@ export function resolveVideoRequestConfig(params: VideoProviderParams, capabilit
   const apiFamily = inferApiFamily(channel, params.apiBaseUrl, params.modelName, effectiveCapabilities);
   const createEndpoint = defaultCreateEndpoint(channel, params.apiBaseUrl, effectiveCapabilities, apiFamily);
   const finalUrl = createEndpoint ? joinUrl(params.apiBaseUrl, createEndpoint) : params.apiBaseUrl;
-  const requestFormat = effectiveCapabilities.requestFormat
+  const requestFormat = apiFamily === "unified_video_create" ? "json" : effectiveCapabilities.requestFormat
     ?? (apiFamily === "doubao_seedance15" ? "multipart" : channel === "proxy" ? "json" : "multipart");
-  const imageTransport = defaultImageTransport(channel, apiFamily, effectiveCapabilities);
+  const imageTransport = apiFamily === "unified_video_create" && /runapi\.co/i.test(params.apiBaseUrl)
+    ? "url"
+    : defaultImageTransport(channel, apiFamily, effectiveCapabilities);
   const taskIdField = defaultTaskField(apiFamily, effectiveCapabilities);
   return {
     provider,
