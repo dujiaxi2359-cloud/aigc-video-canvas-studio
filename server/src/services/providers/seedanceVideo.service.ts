@@ -922,6 +922,7 @@ export function buildSeedance15Multipart(params: SeedanceProviderParams, refs: {
   form.set("prompt", params.prompt);
   if (refs.seconds !== "auto") form.set("seconds", refs.seconds);
   form.set("size", mapVideoSize(refs.aspectRatio, refs.resolution));
+  form.set("watermark", "false");
   form.set("generate_audio", "true");
   form.set("audio_generation", "Enabled");
   const fields = ["first_frame_image", "last_frame_image"];

@@ -745,6 +745,18 @@ const seedanceNativeRecord = seedanceNativeBody as Record<string, unknown>;
 assert((seedanceNativeRecord.metadata as Record<string, unknown>).watermark === false, "Seedance 2.0 native payload should disable watermark explicitly");
 assert((seedanceNativeRecord.metadata as Record<string, unknown>).generate_audio === true, "Seedance 2.0 native payload should request audio generation explicitly");
 assert(Array.isArray(seedanceNativeRecord.content) && JSON.stringify(seedanceNativeRecord.content).includes("asset://asset-demo"), "Seedance 2.0 native payload should keep asset:// references");
+const seedance15Multipart = buildSeedance15Multipart({
+  modelName: "doubao-seedance-1-5-pro",
+  prompt: "介绍这款产品",
+  apiBaseUrl: "https://example.com/v1",
+  apiKey: "sk-test"
+} as never, {
+  files: [],
+  aspectRatio: "16:9",
+  resolution: "720p",
+  seconds: "5"
+});
+assert(seedance15Multipart.get("watermark") === "false", "Seedance 1.5 multipart payload should disable watermark explicitly");
 
 const klingLegacy = getVideoModelCapability("kling", "kling-1-6", "kling-v1-6", "image_to_video_first_frame");
 assert(klingLegacy?.supportedDurations.join(",") === "5,10", "Kling 1.6 should be available with official durations");
