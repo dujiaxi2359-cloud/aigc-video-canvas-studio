@@ -487,12 +487,31 @@ function upstreamFriendlyErrorMessage(label: string, payload: Record<string, unk
     return `${label} 中转商内部服务暂时不可达，请稍后重试或切换其他视频通道。`;
   }
   if (/InputImageSensitiveContentDetected|PrivacyInformation|may contain real person/i.test(decoded)) {
-    return `${label} 上游内容审核拒绝：参考图可能包含真人或隐私信息（upstream_InputImageSensitiveContentDetected.PrivacyInformation）。请换用非真人/虚拟角色/背影远景素材，或减少人脸特写后重试；也可以切换到允许真人参考的中转通道。`;
+    return `${label} 素材已经进入生成请求，但上游隐私审核拒绝了真人参考图（upstream_InputImageSensitiveContentDetected.PrivacyInformation）。这不是素材库丢失；Seedance 的本次审核不能由本站绕过。请切换到账号中明确标注支持真人参考的 Grok、Kling 或 Veo 通道后重试。`;
   }
   if (/content review|unsafe content|protected IP|identifiable real person|sensitive content|内容审核|敏感内容/i.test(decoded)) {
     return `${label} 上游内容审核拒绝：提示词或参考素材未通过审核。请调整素材/提示词后重试，或切换其他通道。`;
   }
   return fallback;
+}
+
+function isUpstreamHumanPrivacyReview(payload: Record<string, unknown>) {
+  return /InputImageSensitiveContentDetected|PrivacyInformation|may contain real person|identifiable real person/i.test(decodedErrorText(payload));
+}
+
+function humanPrivacyReviewError(label: string, payload: Record<string, unknown>, endpoint: string) {
+  return new ProviderError(
+    "UPSTREAM_HUMAN_PRIVACY_REVIEW",
+    upstreamFriendlyErrorMessage(label, payload),
+    preview(payload),
+    {
+      endpoint,
+      whyBlocked: "upstreamHumanPrivacyReview",
+      assetDeliverySucceeded: true,
+      policyBypassAvailable: false,
+      suggestedProviders: ["grok", "kling", "google-veo"]
+    }
+  );
 }
 
 function assetDownloadError(payload: Record<string, unknown>) {
@@ -1006,6 +1025,7 @@ export async function generateVideoWithSeedance(params: SeedanceProviderParams):
         });
         task = await responsePayload(response);
         if (!response.ok) {
+          if (isUpstreamHumanPrivacyReview(task)) throw humanPrivacyReviewError(label, task, endpoint);
           if (modelAccessDenied(task)) {
             throw new ProviderError(
               "MODEL_ACCESS_DENIED",
@@ -1077,6 +1097,7 @@ export async function generateVideoWithSeedance(params: SeedanceProviderParams):
         if (isFailedStatus(status)) {
           const friendlyMessage = upstreamFriendlyErrorMessage(label, task);
           await saveGenerationTask({ id, status: "failed", result: task, errorMessage: friendlyMessage });
+          if (isUpstreamHumanPrivacyReview(task)) throw humanPrivacyReviewError(label, task, pollEndpoint);
           throw new ProviderError("VEO_OPERATION_FAILED", `${label} 中转任务失败：${friendlyMessage}`, preview(task));
         }
         if (isCompletedStatus(status)) completedSeenAt ??= Date.now();

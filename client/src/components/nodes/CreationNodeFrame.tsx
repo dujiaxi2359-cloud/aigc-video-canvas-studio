@@ -45,7 +45,6 @@ function CreationNodeFrameComponent({ id, type, selected, title, ratio, status, 
   return (
     <div className={`creation-node ${selected ? "is-selected" : ""}`} data-node-type={type} style={{ width: containerWidth }}>
       <div className="creation-node-preview-wrap">
-        {toolbar}
         <div className="creation-node-label node-floating-label drag-handle mb-2 flex cursor-grab items-center gap-1.5 active:cursor-grabbing"><span className="h-2.5 w-2.5 rounded-[3px] border border-white/20" />{title}</div>
         <div
           className="creation-preview-card drag-handle group"
@@ -56,6 +55,7 @@ function CreationNodeFrameComponent({ id, type, selected, title, ratio, status, 
         >
           {acceptsInput && <Handle id="in-0" type="target" position={Position.Left} className={`studio-handle studio-handle-in ${hasIncomingConnection ? "is-connected" : ""}`} />}
           <Handle id="out" type="source" position={Position.Right} className={`studio-handle studio-handle-out ${hasOutgoingConnection ? "is-connected" : ""}`} onClick={(event) => openCreateMenu(event, id, type)} />
+          {toolbar}
           <button type="button" title="删除节点" className="creation-node-delete nodrag nopan" onClick={() => deleteNode(id)}><Trash2 size={13} /></button>
           {preview}
           {status && <span className={`creation-preview-status is-${status}`}>{status === "generating" ? "生成中" : status === "success" ? "已完成" : status === "error" ? "失败" : "未生成"}</span>}

@@ -96,6 +96,14 @@ function generateButtonText(status: ImageGenerateNodeData["status"]) {
   return "生成图片";
 }
 
+function imageReferenceLimitLabel(inputMode: ImageInputMode, modelName?: string) {
+  if (inputMode === "text-to-image") return undefined;
+  const identity = (modelName || "").toLowerCase();
+  if (/qwen|wanx|通义|alibaba/.test(identity)) return "当前通义/阿里图片编辑链路按 1 张主图处理。";
+  if (/gpt-image|openai|azure/.test(identity)) return "OpenAI 兼容图片编辑最多支持 16 张参考图。";
+  return "当前模式支持连接图片素材；多图数量以上游模型能力为准。";
+}
+
 function PayloadSummary({ data }: { data?: Record<string, unknown> }) {
   if (!data) return null;
   const entries = ([
@@ -256,6 +264,7 @@ function ImageGenerateNodeComponent(props: NodeProps<ImageGenerateNodeData>) {
     ? props.data.imageSize!
     : tierForQuality(props.data.imageQuality, qualities);
   const displayRatio = outputRatioFromSummary(props.data.payloadSummary, props.data.aspectRatio || "1:1");
+  const imageReferenceLimit = imageReferenceLimitLabel(props.data.inputMode, selectedModel?.modelName || selectedModel?.displayName);
 
   async function generate() {
     if (!props.data.modelConfigId || !selectedModel) {
@@ -354,7 +363,7 @@ function ImageGenerateNodeComponent(props: NodeProps<ImageGenerateNodeData>) {
         </div>
       </div>
       <NodeToolPanel tool={activeTool} onClose={() => setActiveTool(null)} onInsert={insertPromptContext} />
-      {expanded && <div className="creation-detail-panel nodrag nopan">{props.data.inputMode !== "text-to-image" && !resolvedInputs.hasImageInput && <div className="creation-detail-copy">当前模式需要连接一张图片素材。</div>}{options?.warningMessage && <div className="creation-detail-copy">{options.warningMessage}</div>}<PayloadSummary data={props.data.payloadSummary} />{(props.data.errorMessage || localError) && <AgentAnalyzeErrorButton nodeId={props.id} errorMessage={props.data.errorMessage || localError} nodeData={props.data as unknown as Record<string, unknown>} />}</div>}
+      {expanded && <div className="creation-detail-panel nodrag nopan">{props.data.inputMode !== "text-to-image" && !resolvedInputs.hasImageInput && <div className="creation-detail-copy">当前模式需要连接一张图片素材。</div>}{props.data.inputMode !== "text-to-image" && resolvedInputs.hasImageInput && <div className="creation-detail-copy">已连接 {resolvedInputs.imageInputs.length} 张图片素材。{imageReferenceLimit ? ` ${imageReferenceLimit}` : ""}</div>}{options?.warningMessage && <div className="creation-detail-copy">{options.warningMessage}</div>}<PayloadSummary data={props.data.payloadSummary} />{(props.data.errorMessage || localError) && <AgentAnalyzeErrorButton nodeId={props.id} errorMessage={props.data.errorMessage || localError} nodeData={props.data as unknown as Record<string, unknown>} />}</div>}
     </div>
   );
 

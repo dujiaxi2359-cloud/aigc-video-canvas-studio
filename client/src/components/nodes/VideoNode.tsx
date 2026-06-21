@@ -69,6 +69,10 @@ function isSeedanceModel(model?: ModelConfig) {
   return /seedance|doubao/.test(modelIdentity(model));
 }
 
+function isVeoModel(model?: ModelConfig) {
+  return /\b(?:google|gemini|veo|omni)\b|veo[-_ .]?\d|veo_/.test(modelIdentity(model));
+}
+
 function isKlingOmniModel(model?: ModelConfig) {
   const identity = modelIdentity(model);
   return /kling|可灵/.test(identity) && /(3[._ -]?0|v3|omni)/.test(identity);
@@ -110,6 +114,12 @@ function modelInputModes(model: ModelConfig | undefined) {
     if (input === "first_last_frame") modes.add("first-last-frame");
     if (input === "video") modes.add("video-to-video");
   }
+  if (isVeoModel(model)) {
+    modes.add("text-to-video");
+    modes.add("image-to-video");
+    modes.add("reference-to-video");
+    modes.add("first-last-frame");
+  }
   return Array.from(modes) as VideoInputMode[];
 }
 
@@ -140,7 +150,7 @@ function maxImagesForMode(model: ModelConfig | undefined, mode: OfficialVideoMod
     if (model.providerId === "grok") return 7;
     if (model.providerId === "kling") return 4;
     if (isSeedanceModel(model)) return model.capabilities.maxReferenceImages ?? 9;
-    if (model.providerId === "google") return 3;
+    if (isVeoModel(model) || model.providerId === "google") return model.capabilities.maxReferenceImages ?? 3;
     if (model.modelName === "happyhorse-1.0-r2v" || model.modelName === "wan2.7-r2v") return 5;
   }
   if (mode === "image_to_video_first_frame") return 1;

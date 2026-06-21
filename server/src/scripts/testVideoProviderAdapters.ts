@@ -364,6 +364,59 @@ const configurableOpenAiVideos = resolveVideoRequestConfig({
 });
 assert(configurableOpenAiVideos.supportedInputs.includes("image"), "Configured /v1/videos channels must retain image support");
 assert(configurableOpenAiVideos.imageTransport === "base64_json", "Configured image transport must win over endpoint inference");
+const repairedGrokReferenceConfig = resolveVideoRequestConfig({
+  providerId: "grok",
+  modelName: "grok-1.5-video-6s",
+  apiBaseUrl: "https://ai.cy88.ai/v1",
+  apiKey: "sk-test-key",
+  prompt: "real person reference",
+  nodeId: "node",
+  modelConfigId: "model",
+  inputMode: "reference-to-video",
+  imageAssetIds: ["asset"],
+  duration: 6,
+  aspectRatio: "9:16",
+  resolution: "720p",
+  generateCount: 1
+}, {
+  inputModes: ["text-to-video"],
+  channelCapability: {
+    channel: "proxy",
+    apiFamily: "openai_videos",
+    supportedInputs: ["text"],
+    imageTransport: "unsupported"
+  }
+});
+assert(repairedGrokReferenceConfig.supportedInputs.includes("reference_image"), "Known Grok video channels should repair stale text-only reference capabilities");
+assert(repairedGrokReferenceConfig.imageTransport !== "unsupported", "Known Grok video channels should restore a usable image transport");
+
+const repairedSeedanceReferenceConfig = resolveVideoRequestConfig({
+  providerId: "seedance",
+  modelName: "doubao-seedance-2-0-fast-260128",
+  apiBaseUrl: "https://ai.cy88.ai/v1",
+  apiKey: "sk-test-key",
+  prompt: "omni reference",
+  nodeId: "node",
+  modelConfigId: "model",
+  inputMode: "video-to-video",
+  videoAssetIds: ["video"],
+  duration: 7,
+  aspectRatio: "9:16",
+  resolution: "720P",
+  generateCount: 1
+}, {
+  inputModes: ["text-to-video", "image-to-video"],
+  channelCapability: {
+    channel: "proxy",
+    apiFamily: "seedance2_native",
+    supportedInputs: ["text", "image"],
+    imageTransport: "url_or_asset",
+    videoTransport: "unsupported"
+  }
+});
+assert(repairedSeedanceReferenceConfig.supportedInputs.includes("reference_image"), "Seedance 2 should repair stale reference-image capabilities");
+assert(repairedSeedanceReferenceConfig.supportedInputs.includes("video"), "Seedance 2 should restore video-reference capability");
+assert(repairedSeedanceReferenceConfig.videoTransport === "url_or_asset", "Seedance 2 should send uploaded video assets by asset/public URL");
 const configurableOpenAiVideosBody = buildProxyBody({
   providerId: "grok",
   modelName: "grok-video-proxy",
@@ -525,6 +578,32 @@ const runApiConfig = resolveVideoRequestConfig({
 });
 assert(runApiConfig.finalUrl === "https://runapi.co/v1/video/create", "RunAPI should submit video tasks to /v1/video/create");
 assert(runApiConfig.pollEndpoint === "/v1/videos/{taskId}", "RunAPI should query video tasks through /v1/videos/{taskId}");
+const runApiVeoFallbackConfig = resolveVideoRequestConfig({
+  providerId: "custom-video",
+  modelName: "veo-3.1-fast",
+  apiBaseUrl: "https://runapi.co",
+  apiKey: "sk-test-key",
+  prompt: "test",
+  projectId: "project",
+  nodeId: "node",
+  modelConfigId: "model",
+  inputMode: "image-to-video",
+  imageAssetIds: ["asset"],
+  duration: 8,
+  aspectRatio: "16:9",
+  resolution: "720p",
+  generateCount: 1
+}, {
+  inputModes: ["text-to-video"],
+  supportedInputs: ["text"],
+  imageTransport: "unsupported",
+  aspectRatios: ["16:9", "9:16"],
+  resolutions: ["720p"],
+  duration: { type: "enum", values: [4, 6, 8] }
+});
+assert(runApiVeoFallbackConfig.supportedInputs.includes("image"), "Veo-like relay models should expose image input even when old custom config was text-only");
+assert(runApiVeoFallbackConfig.supportedInputs.includes("reference_image"), "Veo-like relay models should expose reference image input");
+assert(runApiVeoFallbackConfig.imageTransport === "url", "Veo-like RunAPI relay should use URL image transport after normalization");
 assert(
   veoProxyCreateEndpoint("POST https://relay.example/v1/video/create") === "https://relay.example/v1/video/create",
   "Google unified video relay endpoint should ignore a pasted HTTP method prefix"

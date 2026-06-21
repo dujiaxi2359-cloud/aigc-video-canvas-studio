@@ -2,6 +2,7 @@ import type { GenerateVideoRequest } from "../model.service.js";
 import type { ModelCapabilities } from "../../types/model.js";
 import { legacyInputModeToOfficialMode } from "../../types/videoModes.js";
 import type { VideoProviderParams } from "./providerTypes.js";
+import { normalizeVideoCapabilities } from "../videoCapabilityNormalization.js";
 
 export type VideoProviderName = "doubao" | "veo" | "kling" | "sora" | "wan" | "custom";
 export type VideoChannel = "official" | "proxy" | "legacy_custom";
@@ -12,6 +13,7 @@ export type VideoTransport = "url" | "url_or_asset" | "url_or_base64_json" | "ba
 export type VideoSupportedInput = "text" | "image" | "first_frame" | "reference_image" | "first_last_frame" | "video";
 export type VideoApiFamily =
   | "openai_videos"
+  | "grok_video"
   | "doubao_seedance15"
   | "aigc_video_json"
   | "omni_fast"
@@ -133,6 +135,7 @@ function inferApiFamily(channel: VideoChannel, baseUrl: string, modelName: strin
   if (capabilities.apiFamily) return capabilities.apiFamily;
   if (channel === "official") return "official_provider";
   const value = `${baseUrl} ${modelName}`.toLowerCase();
+  if (/grok[-_ .]?(?:imagine[-_ .]?video|video|1[-_ .]?5[-_ .]?video)/.test(value)) return "grok_video";
   if (/runapi\.co/.test(value)) return "unified_video_create";
   if (/doubao[-_]?seedance[-_]?1[-_]?5/.test(value)) return "doubao_seedance15";
   if (/kling|可灵/.test(value)) return "aigc_video_json";
@@ -174,6 +177,7 @@ function defaultImageTransport(channel: VideoChannel, apiFamily: VideoApiFamily,
   if (capabilities.imageTransport) return capabilities.imageTransport;
   if (!supportedInputs(capabilities).some((input) => ["image", "first_frame", "reference_image", "first_last_frame"].includes(input))) return "unsupported";
   if (apiFamily === "seedance2_native") return "url_or_asset";
+  if (apiFamily === "grok_video") return "multipart_file";
   if (channel === "official") return "multipart_file";
   if (apiFamily === "doubao_seedance15") return "multipart_file";
   if (apiFamily === "aigc_video_json") return "url_or_asset";
@@ -200,8 +204,9 @@ export function channelSupportsImage(config: Pick<VideoRequestConfig, "supported
 }
 
 export function resolveVideoRequestConfig(params: VideoProviderParams, capabilities: ModelCapabilities): VideoRequestConfig {
-  const configuredCapabilities = { ...capabilities, ...capabilities.channelCapability } as ModelCapabilities;
-  const effectiveCapabilities = configuredCapabilities;
+  const normalizedCapabilities = normalizeVideoCapabilities(capabilities, params.providerId, params.modelName);
+  const configuredCapabilities = { ...normalizedCapabilities, ...normalizedCapabilities.channelCapability } as ModelCapabilities;
+  const effectiveCapabilities = normalizeVideoCapabilities(configuredCapabilities, params.providerId, params.modelName);
   const provider = effectiveCapabilities.provider ?? inferProvider(params.providerId ?? "", params.modelName);
   const officialEndpoint = isOfficialEndpoint(params.providerId ?? "", params.apiBaseUrl);
   const proxyEndpoint = isOpenAiCompatibleVideoEndpoint(params.apiBaseUrl);

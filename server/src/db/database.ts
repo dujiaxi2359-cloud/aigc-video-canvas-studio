@@ -99,8 +99,10 @@ async function migrateAi666VideoProtocols(database: AppDatabase) {
     const seedance20DisplayName = isSeedance20Fast ? "Seedance 2.0 Fast" : "Seedance 2.0";
     const seedance20ModelKey = isSeedance20Fast ? "seedance-2-0-fast" : "seedance-2-0";
     const seedance20ImageTransport = String(channelCapability.imageTransport ?? capabilities.imageTransport ?? "");
+    const seedance20VideoTransport = String(channelCapability.videoTransport ?? capabilities.videoTransport ?? "");
+    const seedance20ChannelInputs = Array.isArray(channelCapability.supportedInputs) ? channelCapability.supportedInputs.map(String) : [];
 
-    if (isSeedance20 && (!oldFamily || oldFamily === "openai_chat_video" || oldFamily === "openai_videos" || !hasOfficialModel || displayName !== seedance20DisplayName || officialModel !== seedance20ModelKey || seedance20ImageTransport !== "url_or_asset")) {
+    if (isSeedance20 && (!oldFamily || oldFamily === "openai_chat_video" || oldFamily === "openai_videos" || !hasOfficialModel || displayName !== seedance20DisplayName || officialModel !== seedance20ModelKey || seedance20ImageTransport !== "url_or_asset" || seedance20VideoTransport !== "url_or_asset" || !seedance20ChannelInputs.includes("reference_image") || !seedance20ChannelInputs.includes("video"))) {
       assignDisplayName(seedance20DisplayName);
       assign({
         inputModes: ["text-to-video", "image-to-video", "first-last-frame", "reference-to-video", "video-to-video"],
@@ -110,13 +112,14 @@ async function migrateAi666VideoProtocols(database: AppDatabase) {
         supportsImageInput: true, supportsReferenceImage: true, supportsMultiImageInput: true,
         supportsFirstLastFrame: true, supportsVideoInput: true, supportsAudio: true,
         maxReferenceImages: 9, maxReferenceVideos: 3, maxReferenceAudios: 3, maxReferenceFiles: 12,
+        supportedInputs: ["text", "image", "first_frame", "reference_image", "first_last_frame", "video"],
         modelCapability: { model: seedance20ModelKey, supportsTextToVideo: true, supportsImageToVideo: true, supportsFirstLastFrame: true, supportsVideoToVideo: true },
         channelCapability: {
           provider: "doubao", channel: "proxy", apiFamily: "seedance2_native",
           createEndpoint: "/v1/video/generations", endpoint: "/v1/video/generations",
           pollEndpoint: "/v1/video/generations/{taskId}", requestFormat: "json",
-          imageTransport: "url_or_asset", idField: "task_id", taskIdField: "task_id",
-          supportedInputs: ["text", "image", "first_frame", "reference_image", "first_last_frame"]
+          imageTransport: "url_or_asset", videoTransport: "url_or_asset", idField: "task_id", taskIdField: "task_id",
+          supportedInputs: ["text", "image", "first_frame", "reference_image", "first_last_frame", "video"]
         }
       });
     } else if (/doubao[-_]?seedance[-_]?1[-_]?5/.test(name) && (!oldFamily || oldFamily === "openai_videos" || oldFamily === "seedance2_native" || !hasOfficialModel)) {
@@ -209,6 +212,43 @@ async function migrateAi666VideoProtocols(database: AppDatabase) {
                   : /grok[-_ .]?1[-_ .]?5[-_ .]?video[-_ .]?6s/.test(name) ? "Grok 1.5 Video 6s"
                     : "";
     if (grokDisplayName) assignDisplayName(grokDisplayName);
+
+    if (grokDisplayName) {
+      const existingChannel = capabilities.channelCapability && typeof capabilities.channelCapability === "object"
+        ? capabilities.channelCapability as Record<string, unknown>
+        : {};
+      const channelInputs = Array.isArray(existingChannel.supportedInputs) ? existingChannel.supportedInputs.map(String) : [];
+      const rootInputs = Array.isArray(capabilities.supportedInputs) ? capabilities.supportedInputs.map(String) : [];
+      const needsReferenceRepair = !channelInputs.includes("reference_image")
+        || !rootInputs.includes("reference_image")
+        || String(existingChannel.imageTransport ?? "") === "unsupported"
+        || String(existingChannel.videoTransport ?? "") === "unsupported";
+      if (needsReferenceRepair) {
+        const isOfficialGrok = /api\.x\.ai/i.test(row.api_base_url);
+        assign({
+          inputModes: ["text-to-video", "image-to-video", "reference-to-video", "video-to-video"],
+          supportsImageInput: true,
+          supportsReferenceImage: true,
+          supportsMultiImageInput: true,
+          supportsVideoInput: true,
+          maxReferenceImages: Number(capabilities.maxReferenceImages ?? 7),
+          supportedInputs: ["text", "image", "first_frame", "reference_image", "video"],
+          channelCapability: {
+            ...existingChannel,
+            provider: existingChannel.provider ?? "grok",
+            channel: isOfficialGrok ? "official" : "proxy",
+            apiFamily: isOfficialGrok ? "official_provider" : "grok_video",
+            createEndpoint: existingChannel.createEndpoint ?? "/v1/videos",
+            endpoint: existingChannel.endpoint ?? "/v1/videos",
+            pollEndpoint: existingChannel.pollEndpoint ?? "/v1/videos/{taskId}",
+            requestFormat: isOfficialGrok ? "json" : "multipart",
+            imageTransport: isOfficialGrok ? "base64_json" : "multipart_file",
+            videoTransport: isOfficialGrok ? "base64_json" : "multipart_file",
+            supportedInputs: ["text", "image", "first_frame", "reference_image", "video"]
+          }
+        });
+      }
+    }
 
     if (changed) {
       await database.run("UPDATE model_configs SET display_name = ?, capabilities_json = ?, updated_at = ? WHERE id = ?", displayName, JSON.stringify(capabilities), Date.now(), row.id);

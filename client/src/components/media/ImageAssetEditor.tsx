@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent } from "react";
+import { createPortal } from "react-dom";
 import { Brush, Check, Loader2, RotateCcw, Scissors, Undo2, X } from "lucide-react";
 import type { Asset } from "../../types/asset";
 
@@ -100,7 +101,7 @@ export function ImageAssetEditor({ open, src, title, uploadAsset, onSaved, onClo
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [open, onClose]);
 
-  if (!open) return null;
+  if (!open || typeof document === "undefined") return null;
 
   function context() {
     return canvasRef.current?.getContext("2d", { willReadFrequently: true }) ?? null;
@@ -228,7 +229,7 @@ export function ImageAssetEditor({ open, src, title, uploadAsset, onSaved, onClo
     }
   }
 
-  return (
+  return createPortal(
     <div className="image-asset-editor nodrag nopan" role="dialog" aria-modal="true" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
       <div className="image-asset-editor-panel">
         <div className="image-asset-editor-top">
@@ -303,6 +304,7 @@ export function ImageAssetEditor({ open, src, title, uploadAsset, onSaved, onClo
           </aside>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

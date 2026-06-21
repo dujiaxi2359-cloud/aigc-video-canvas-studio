@@ -101,10 +101,13 @@ const veoCapabilities: ModelCapabilities = {
   supportedDurations: [4, 6, 8, 10],
   supportedResolutions: ["720p", "1080p", "4k"],
   inputModes: ["text-to-video", "image-to-video", "first-last-frame", "reference-to-video", "video-to-video"],
-  supportedInputs: ["text", "image", "first_last_frame"],
+  supportedInputs: ["text", "image", "first_frame", "reference_image", "first_last_frame"],
+  supportsImageInput: true,
+  supportsReferenceImage: true,
+  supportsMultiImageInput: true,
   supportsFirstLastFrame: true,
   supportsAudio: true,
-  maxReferenceImages: 5
+  maxReferenceImages: 3
 };
 
 function videoCapabilitiesFor(modelName: string): ModelCapabilities {

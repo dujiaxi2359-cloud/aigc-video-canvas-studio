@@ -2,6 +2,7 @@ import { getDb } from "../db/database.js";
 import { requireRequestContext } from "./requestContext.js";
 import { getVideoModelCapabilityOrLegacy } from "../config/videoModelCapabilities.js";
 import { officialModeToLegacyInputMode, officialVideoModeLabels } from "../types/videoModes.js";
+import { normalizeVideoCapabilities } from "./videoCapabilityNormalization.js";
 import type {
   AvailableImageOptions,
   AvailableVideoOptions,
@@ -150,7 +151,13 @@ export function calculateAvailableImageOptions(capabilities: ModelCapabilities, 
   const availableImageSizes = [...(capabilities.imageAspectRatios ?? capabilities.imageSizes ?? ["1:1"])];
   const availableImageQualities = [...(capabilities.imageQualities ?? ["auto"])];
   const availableImageFormats = [...(capabilities.imageFormats ?? ["png"])];
-  const availableInputModes = capabilities.inputModes.filter((mode) => ["text-to-image", "image-to-image", "image-edit"].includes(mode));
+  const inputModes = new Set(capabilities.inputModes.filter((mode) => ["text-to-image", "image-to-image", "image-edit"].includes(mode)));
+  if (capabilities.supportsImageInput || capabilities.supportsReferenceImage || capabilities.supportsMultiImageInput) {
+    inputModes.add("image-to-image");
+    inputModes.add("image-edit");
+  }
+  if (!inputModes.size) inputModes.add("text-to-image");
+  const availableInputModes = Array.from(inputModes);
   const warningMessage =
     nodeContext.inputMode === "image-edit" && !nodeContext.hasImageInput
       ? "图片编辑需要连接一张图片素材。"
@@ -202,7 +209,10 @@ async function getCapabilityContext(modelConfigId: string) {
 
 export async function getAvailableVideoOptions(modelConfigId: string, nodeContext: VideoNodeContext) {
   const context = await getCapabilityContext(modelConfigId);
-  return calculateAvailableVideoOptions(context.capabilities, nodeContext);
+  return calculateAvailableVideoOptions(
+    normalizeVideoCapabilities(context.capabilities, context.providerId, context.modelName),
+    nodeContext
+  );
 }
 
 export async function getAvailableImageOptions(modelConfigId: string, nodeContext: ImageNodeContext) {

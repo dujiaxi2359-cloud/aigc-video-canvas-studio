@@ -20,6 +20,7 @@ import { generateImageWithOpenAI } from "./providers/openaiImage.service.js";
 import { generateVideoWithSeedance } from "./providers/seedanceVideo.service.js";
 import { channelSupportsImage, resolveVideoRequestConfig, shouldUseProxyVideoAdapter, validateVideoRequestConfig } from "./providers/videoRequestAdapter.js";
 import { resolveProviderApiBaseUrl } from "./providers/providerBaseUrl.js";
+import { normalizeVideoCapabilities } from "./videoCapabilityNormalization.js";
 import { ensureVideoAspectRatio } from "./assets/ensureVideoAspectRatio.service.js";
 import { ensureImageAspectRatio } from "./assets/ensureImageAspectRatio.service.js";
 import type { ImageInputMode, ModelCapabilities, ModelCatalogItem, VideoNodeContext } from "../types/model.js";
@@ -229,8 +230,9 @@ function apiBaseUrlFor(model: NonNullable<InternalModelConfig>) {
   return resolveProviderApiBaseUrl(model.provider_id, model.api_base_url);
 }
 
-function validateVideoRequest(capabilities: ModelCapabilities, input: GenerateVideoRequest) {
-  const options = calculateAvailableVideoOptions(capabilities, {
+function validateVideoRequest(capabilities: ModelCapabilities, input: GenerateVideoRequest, providerId?: string, modelName?: string) {
+  const effectiveCapabilities = normalizeVideoCapabilities(capabilities, providerId, modelName);
+  const options = calculateAvailableVideoOptions(effectiveCapabilities, {
     inputMode: input.inputMode,
     hasImageInput: Boolean(input.imageAssetIds?.length),
     hasVideoInput: Boolean(input.videoAssetIds?.length),
@@ -240,7 +242,7 @@ function validateVideoRequest(capabilities: ModelCapabilities, input: GenerateVi
     selectedAspectRatio: input.aspectRatio,
     selectedResolution: input.resolution
   });
-  const channel = { ...capabilities, ...capabilities.channelCapability };
+  const channel = { ...effectiveCapabilities, ...effectiveCapabilities.channelCapability };
   const requiredInput = input.inputMode === "text-to-video" ? "text"
     : input.inputMode === "first-last-frame" ? "first_last_frame"
       : input.inputMode === "video-to-video" ? "video"
@@ -526,10 +528,11 @@ export async function generateText(input: GenerateTextRequest) {
 export async function generateVideo(input: GenerateVideoRequest) {
   const { model, apiKey, catalogItem, forceMock } = await getGenerationContext(input.modelConfigId, "video");
   logGenerate({ type: "video", model, catalogItem, apiKey, inputMode: input.inputMode });
-  const capabilities = JSON.parse(model.capabilities_json) as ModelCapabilities;
+  const configuredCapabilities = JSON.parse(model.capabilities_json) as ModelCapabilities;
+  const capabilities = normalizeVideoCapabilities(configuredCapabilities, model.provider_id, model.model_name);
   const inputForGeneration: GenerateVideoRequest = { ...input };
   try {
-    validateVideoRequest(capabilities, inputForGeneration);
+    validateVideoRequest(capabilities, inputForGeneration, model.provider_id, model.model_name);
     if (forceMock) {
       const asset = await writeMockAsset({
         nodeId: inputForGeneration.nodeId,
@@ -603,7 +606,12 @@ export async function generateVideo(input: GenerateVideoRequest) {
     const videoRequestConfig = validateVideoRequestConfig(providerParams, capabilities);
 
     let result: ProviderGenerateResult;
-    if (shouldUseProxyVideoAdapter(providerParams, capabilities)) {
+    if (providerId === "grok") {
+      // Grok relay endpoints use their multipart input_reference/input_video
+      // contract. Sending them through the generic OpenAI-video JSON adapter
+      // drops reference files and can incorrectly classify the channel as text-only.
+      result = await generateVideoWithGrok(providerParams);
+    } else if (shouldUseProxyVideoAdapter(providerParams, capabilities)) {
       result = await generateVideoWithSeedance({
         ...providerParams,
         apiBaseUrl: videoRequestConfig.finalUrl,

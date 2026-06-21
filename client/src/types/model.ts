@@ -64,7 +64,7 @@ export type ModelCapabilities = {
   inputModes: ModelInputMode[];
   provider?: "doubao" | "veo" | "kling" | "sora" | "wan" | "custom";
   channel?: "official" | "proxy" | "legacy_custom";
-  apiFamily?: "openai_videos" | "doubao_seedance15" | "aigc_video_json" | "omni_fast" | "omni_fast_v2v" | "seedance2_native" | "unified_video_create" | "official_provider";
+  apiFamily?: "openai_videos" | "grok_video" | "doubao_seedance15" | "aigc_video_json" | "omni_fast" | "omni_fast_v2v" | "seedance2_native" | "unified_video_create" | "official_provider";
   endpoint?: string;
   createEndpoint?: string;
   pollEndpoint?: string;
