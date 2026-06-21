@@ -56,7 +56,7 @@ export function NodeToolPanel({ tool, onClose, onInsert, referenceItems = [] }: 
                 </span>
               </button>
             ))}
-            {!referenceItems.length && <div className="node-reference-empty">先把图片、视频或音频素材连接到视频节点，再用 @ 精确引用。</div>}
+            {!referenceItems.length && <div className="node-reference-empty">先把素材连接到当前生成节点，再用 @ 精确引用。</div>}
           </div>
           <div className="node-tool-section-label">指令</div>
           <div className="node-command-list">

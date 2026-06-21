@@ -1,6 +1,6 @@
 import { memo, useEffect, useMemo, useRef, useState, type ChangeEvent, type CompositionEvent } from "react";
 import type { NodeProps } from "reactflow";
-import { ArrowUp, Camera, ImagePlus, Maximize2, Palette, Plus, Sparkles } from "lucide-react";
+import { ArrowUp, Camera, ImagePlus, Library, Maximize2, Palette, Plus, Sparkles, X } from "lucide-react";
 import { Button } from "../common/Button";
 import { Select } from "../common/Select";
 import { Textarea } from "../common/Textarea";
@@ -11,6 +11,7 @@ import { modelConfigApi } from "../../services/modelConfigApi";
 import { useAssetStore } from "../../store/assetStore";
 import { useCanvasStore } from "../../store/canvasStore";
 import { useModelConfigStore } from "../../store/modelConfigStore";
+import { absoluteUploadUrl } from "../../utils/file";
 import { compactAssetIds, resolveImageNodeInputs } from "../../utils/workflowInputs";
 import { dedupeModelConfigsForSelect, findCanonicalModelConfig } from "../../utils/modelConfigSelection";
 import { AgentAnalyzeErrorButton } from "../agent/AgentAnalyzeErrorButton";
@@ -18,7 +19,7 @@ import type { AvailableImageOptions, ImageInputMode } from "../../types/model";
 import type { ImageGenerateNodeData } from "../../types/node";
 import { NodeParameterPopover } from "./NodeParameterPopover";
 import { CreationNodeFrame } from "./CreationNodeFrame";
-import { NodeToolPanel, type NodeTool } from "./NodeToolPanel";
+import { NodeToolPanel, type NodeTool, type ReferenceMenuItem } from "./NodeToolPanel";
 import { MediaPreviewActions } from "./MediaPreviewActions";
 
 const modeLabels: Record<ImageInputMode, string> = {
@@ -104,6 +105,11 @@ function imageReferenceLimitLabel(inputMode: ImageInputMode, modelName?: string)
   return "当前模式支持连接图片素材；多图数量以上游模型能力为准。";
 }
 
+function compactName(value?: string, fallback = "图片") {
+  const text = value?.trim() || fallback;
+  return text.length > 18 ? `${text.slice(0, 17)}...` : text;
+}
+
 function PayloadSummary({ data }: { data?: Record<string, unknown> }) {
   if (!data) return null;
   const entries = ([
@@ -152,6 +158,7 @@ function PayloadSummary({ data }: { data?: Record<string, unknown> }) {
 
 function ImageGenerateNodeComponent(props: NodeProps<ImageGenerateNodeData>) {
   const update = useCanvasStore((state) => state.updateNodeData);
+  const deleteEdges = useCanvasStore((state) => state.deleteEdges);
   const upload = useAssetStore((state) => state.uploadAsset);
   const edges = useCanvasStore((state) => state.edges);
   const nodes = useCanvasStore((state) => state.nodes);
@@ -167,6 +174,7 @@ function ImageGenerateNodeComponent(props: NodeProps<ImageGenerateNodeData>) {
   const [editorOpen, setEditorOpen] = useState(false);
   const [activeTool, setActiveTool] = useState<NodeTool>(null);
   const isComposingRef = useRef(false);
+  const promptTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const parameterAnchorRef = useRef<HTMLDivElement | null>(null);
   const resolvedInputs = useMemo(() => resolveImageNodeInputs(props.id, nodes, edges), [edges, nodes, props.id]);
 
@@ -266,6 +274,11 @@ function ImageGenerateNodeComponent(props: NodeProps<ImageGenerateNodeData>) {
   const displayRatio = outputRatioFromSummary(props.data.payloadSummary, props.data.aspectRatio || "1:1");
   const imageReferenceLimit = imageReferenceLimitLabel(props.data.inputMode, selectedModel?.modelName || selectedModel?.displayName);
 
+  useEffect(() => {
+    if (!resolvedInputs.hasImageInput || props.data.inputMode !== "text-to-image" || !availableModes.includes("image-to-image")) return;
+    update(props.id, { inputMode: "image-to-image", errorMessage: undefined });
+  }, [availableModes, props.data.inputMode, props.id, resolvedInputs.hasImageInput, update]);
+
   async function generate() {
     if (!props.data.modelConfigId || !selectedModel) {
       update(props.id, { status: "error", errorMessage: "暂无可用图片模型，请先到设置中心配置 API。" });
@@ -319,26 +332,66 @@ function ImageGenerateNodeComponent(props: NodeProps<ImageGenerateNodeData>) {
     update(props.id, { prompt: next });
   }
 
+  function insertReferenceToken(token: string) {
+    const textarea = promptTextareaRef.current;
+    const start = textarea?.selectionStart ?? localPrompt.length;
+    const end = textarea?.selectionEnd ?? start;
+    const before = localPrompt.slice(0, start);
+    const after = localPrompt.slice(end);
+    const leading = before && !/\s$/.test(before) ? " " : "";
+    const trailing = after && !/^\s/.test(after) ? " " : "";
+    const next = `${before}${leading}${token}${trailing}${after}`;
+    const cursor = before.length + leading.length + token.length + trailing.length;
+    setLocalPrompt(next);
+    update(props.id, { prompt: next, errorMessage: undefined });
+    window.requestAnimationFrame(() => {
+      promptTextareaRef.current?.focus();
+      promptTextareaRef.current?.setSelectionRange(cursor, cursor);
+    });
+  }
+
+  function disconnectReference(sourceNodeId: string) {
+    const edgeIds = edges.filter((edge) => edge.source === sourceNodeId && edge.target === props.id).map((edge) => edge.id);
+    if (edgeIds.length) deleteEdges(edgeIds);
+  }
+
   const preview = imageModels.length === 0 ? <div className="creation-preview-empty"><ImagePlus size={29} /><span>请先配置图片模型</span></div> : (
     <MediaPreview type="image" title={props.data.title} outputUrl={props.data.outputUrl} aspectRatio={aspectRatioCss(displayRatio)} className="creation-media-preview">
       <div className={`creation-preview-empty ${props.data.status === "error" ? "is-error" : ""}`}><ImagePlus size={28} /><span>{props.data.status === "generating" ? "正在生成图片" : props.data.status === "error" ? "图片生成失败" : "图片预览"}</span></div>
     </MediaPreview>
   );
 
+  const referenceVisualItems = resolvedInputs.imageInputs.map((input, index) => ({
+    input,
+    token: `@素材${index + 1}`,
+    typedToken: `@图片${index + 1}`,
+    name: compactName(input.title, `图片${index + 1}`),
+    previewUrl: absoluteUploadUrl(input.thumbnailUrl || input.url),
+    fallbackUrl: absoluteUploadUrl(input.url)
+  }));
+  const referenceMenuItems: ReferenceMenuItem[] = referenceVisualItems.map((item, index) => ({
+    token: item.token,
+    typedToken: item.typedToken,
+    label: `素材${index + 1} · 图片${index + 1}`,
+    kind: "图像",
+    name: item.name,
+    previewUrl: item.previewUrl
+  }));
+
   const dock = (
     <div className="creation-dock-content relative">
-      <div className="creation-dock-header">
-        <div className="creation-dock-tools">
-          <button type="button" title="智能辅助" className={activeTool === "styles" ? "is-active" : ""} onClick={() => { setParametersOpen(false); setActiveTool(activeTool === "styles" ? null : "styles"); }}><Sparkles size={15} /></button>
-          <button type="button" title="引用图片" className={activeTool === "assets" ? "is-active" : ""} onClick={() => { setParametersOpen(false); setActiveTool(activeTool === "assets" ? null : "assets"); }}><ImagePlus size={15} /></button>
-          <span className="creation-tool-divider" />
-          <button type="button" title="添加素材" className={activeTool === "assets" ? "is-active" : ""} onClick={() => { setParametersOpen(false); setActiveTool(activeTool === "assets" ? null : "assets"); }}><Plus size={17} /></button>
+      <div className="creation-video-reference-bar">
+        <button type="button" title="智能辅助" className={`creation-video-reference-tool ${activeTool === "styles" ? "is-active" : ""}`} onClick={() => { setParametersOpen(false); setActiveTool(activeTool === "styles" ? null : "styles"); }}><Sparkles size={17} /></button>
+        <span className="creation-video-reference-divider" />
+        <div className="creation-video-reference-thumbnails">
+          {referenceVisualItems.map((item) => <button type="button" className="creation-video-reference-thumbnail" key={item.token} title={`${item.token} · ${item.name}`} onClick={() => insertReferenceToken(item.token)}>{item.previewUrl ? <img src={item.previewUrl} alt="" onError={(event) => { const image = event.currentTarget; if (item.fallbackUrl && image.src !== item.fallbackUrl) image.src = item.fallbackUrl; else image.style.display = "none"; }} /> : <Library size={17} />}</button>)}
+          <button type="button" title="添加参考素材" className={`creation-video-reference-add ${activeTool === "assets" ? "is-active" : ""}`} onClick={() => { setParametersOpen(false); setActiveTool(activeTool === "assets" ? null : "assets"); }}><Plus size={20} /></button>
         </div>
         <button type="button" title={expanded ? "收起详情" : "展开详情"} className="creation-detail-toggle" onClick={() => setExpanded((value) => !value)}><Maximize2 size={14} /></button>
       </div>
+      {referenceVisualItems.length > 0 && <div className="creation-video-reference-chips">{referenceVisualItems.map((item) => <span key={item.token} className="creation-video-reference-chip"><button type="button" className="creation-video-reference-remove" title="移除连接" onClick={() => disconnectReference(item.input.sourceNodeId)}><X size={13} /></button>{item.previewUrl ? <img src={item.previewUrl} alt="" onError={(event) => { const image = event.currentTarget; if (item.fallbackUrl && image.src !== item.fallbackUrl) image.src = item.fallbackUrl; else image.style.display = "none"; }} /> : <Library size={14} />}<button type="button" className="creation-video-reference-token" onClick={() => insertReferenceToken(item.token)}><span>图像</span><strong>{item.name}</strong></button></span>)}</div>}
       <div className="creation-dock-composer">
-        {resolvedInputs.imageInputs.length > 0 && <div className="creation-reference-strip">{resolvedInputs.imageInputs.map((input, index) => <span key={`${input.sourceNodeId}-${index}`} title={`引用图片 ${index + 1}`}>{input.url ? <img src={input.url} alt="" /> : <ImagePlus size={13} />}<small>图片 {index + 1}</small></span>)}</div>}
-        <Textarea className="creation-prompt-input nodrag nopan nowheel" placeholder="描述你想生成的内容，或输入 @ 引用素材" value={localPrompt} onChange={handlePromptChange} onCompositionStart={handleCompositionStart} onCompositionEnd={handleCompositionEnd} />
+        <Textarea ref={promptTextareaRef} className="creation-prompt-input nodrag nopan nowheel" placeholder="描述你想生成的内容，或输入 @ 引用素材" value={localPrompt} onChange={handlePromptChange} onCompositionStart={handleCompositionStart} onCompositionEnd={handleCompositionEnd} />
       </div>
       {(props.data.errorMessage || localError) && <button type="button" className="creation-error-line" onClick={() => setExpanded(true)}><span>{props.data.errorMessage || localError}</span><strong>诊断</strong></button>}
       <div className="creation-dock-footer">
@@ -362,7 +415,7 @@ function ImageGenerateNodeComponent(props: NodeProps<ImageGenerateNodeData>) {
           </div>
         </div>
       </div>
-      <NodeToolPanel tool={activeTool} onClose={() => setActiveTool(null)} onInsert={insertPromptContext} />
+      <NodeToolPanel tool={activeTool} onClose={() => setActiveTool(null)} onInsert={activeTool === "assets" ? insertReferenceToken : insertPromptContext} referenceItems={referenceMenuItems} />
       {expanded && <div className="creation-detail-panel nodrag nopan">{props.data.inputMode !== "text-to-image" && !resolvedInputs.hasImageInput && <div className="creation-detail-copy">当前模式需要连接一张图片素材。</div>}{props.data.inputMode !== "text-to-image" && resolvedInputs.hasImageInput && <div className="creation-detail-copy">已连接 {resolvedInputs.imageInputs.length} 张图片素材。{imageReferenceLimit ? ` ${imageReferenceLimit}` : ""}</div>}{options?.warningMessage && <div className="creation-detail-copy">{options.warningMessage}</div>}<PayloadSummary data={props.data.payloadSummary} />{(props.data.errorMessage || localError) && <AgentAnalyzeErrorButton nodeId={props.id} errorMessage={props.data.errorMessage || localError} nodeData={props.data as unknown as Record<string, unknown>} />}</div>}
     </div>
   );

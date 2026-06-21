@@ -154,8 +154,11 @@ async function resolveImageUrls(params: ImageProviderParams) {
 }
 
 function buildRequestBody(params: ImageProviderParams, imageUrls: string[]) {
+  const prompt = imageUrls.length
+    ? params.prompt.replace(/@(?:素材|图片|图像|参考图)\s*(\d+)/gi, "参考图$1")
+    : params.prompt;
   const body: JsonRecord = {
-    prompt: params.prompt,
+    prompt,
     metadata: {
       project_id: params.projectId,
       node_id: params.nodeId,
