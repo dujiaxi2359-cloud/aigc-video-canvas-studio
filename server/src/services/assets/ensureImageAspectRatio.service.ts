@@ -40,11 +40,24 @@ export async function ensureImageAspectRatio(localPath: string | undefined, aspe
   fs.mkdirSync(outputDir, { recursive: true });
   const outputPath = path.join(outputDir, `image_${ratio.replace(":", "x")}_${Date.now()}.png`);
 
-  await sharp(localPath)
+  const background = await sharp(localPath)
     .resize(target.width, target.height, {
       fit: "cover",
       position: "attention"
     })
+    .blur(24)
+    .png()
+    .toBuffer();
+  const foreground = await sharp(localPath)
+    .resize(target.width, target.height, {
+      fit: "contain",
+      background: { r: 0, g: 0, b: 0, alpha: 0 }
+    })
+    .png()
+    .toBuffer();
+
+  await sharp(background)
+    .composite([{ input: foreground, gravity: "center" }])
     .png({ compressionLevel: 9 })
     .toFile(outputPath);
 
@@ -55,6 +68,6 @@ export async function ensureImageAspectRatio(localPath: string | undefined, aspe
     originalMetadata: metadata,
     transformed: true,
     aspectRatio: ratio,
-    fitMode: "cover_crop"
+    fitMode: "contain_blur"
   };
 }
