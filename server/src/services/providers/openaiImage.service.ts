@@ -16,8 +16,24 @@ async function responseError(response: Response) {
   }
 }
 
+async function responseJson(response: Response, endpoint: string) {
+  const text = await response.text();
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    const preview = text.replace(/\s+/g, " ").trim().slice(0, 220);
+    throw new Error(humanOpenAIError(`OPENAI_COMPAT_NON_JSON_RESPONSE endpoint=${endpoint} status=${response.status} body=${preview}`));
+  }
+}
+
 function humanOpenAIError(message: string) {
   const lower = message.toLowerCase();
+  if (/openai_compat_non_json_response/i.test(message) || /^<!doctype|<html/i.test(message.trim())) {
+    if (/cloudflare|error 524|a timeout occurred/i.test(message)) {
+      return "OpenAI 兼容图片中转返回 Cloudflare 超时页面，说明该线路上游生成耗时过长或服务不可用。请稍后重试，或在设置中心切换其它图片中转线路。";
+    }
+    return "OpenAI 兼容图片中转返回了 HTML 页面，不是 JSON 数据。通常是中转地址路径不对、网关/鉴权页、余额页、404/502 页面或线路被 Cloudflare 拦截。请检查该模型的 API Base URL、Key 和中转线路。";
+  }
   if (isUnsupportedResponseFormatError(message)) {
     return "当前图片中转不兼容 gpt-image-2 的图片格式参数，会把 output_format 错误转成旧参数 response_format。系统已尝试自动降级；如果仍失败，请在设置中心更换支持新版图片接口的中转线路。";
   }
@@ -113,7 +129,7 @@ async function fetchOpenAIImageJson(input: {
   });
 
   let response = await request(input.body);
-  if (response.ok) return response.json();
+  if (response.ok) return responseJson(response, "/images/generations");
 
   const message = await responseError(response);
   const fallbackSize = fallbackImageSize(input.body.size);
@@ -126,7 +142,7 @@ async function fetchOpenAIImageJson(input: {
       fallbackSize
     });
     response = await request(fallbackBody);
-    if (response.ok) return response.json();
+    if (response.ok) return responseJson(response, "/images/generations");
     throw new Error(humanOpenAIError(await responseError(response)));
   }
   if (input.body.output_format && isUnsupportedResponseFormatError(message)) {
@@ -137,7 +153,7 @@ async function fetchOpenAIImageJson(input: {
       endpoint: "/images/generations"
     });
     response = await request(fallbackBody);
-    if (response.ok) return response.json();
+    if (response.ok) return responseJson(response, "/images/generations");
     throw new Error(humanOpenAIError(await responseError(response)));
   }
 
@@ -181,7 +197,7 @@ async function fetchOpenAIImageEditJson(input: {
   };
 
   let response = await request(false);
-  if (response.ok) return response.json();
+  if (response.ok) return responseJson(response, "/images/edits");
 
   const message = await responseError(response);
   const requestedSize = input.params.aspectRatio ? aspectRatioToOpenAIImageSize(input.params.aspectRatio, input.params.modelName) : input.params.imageSize;
@@ -194,7 +210,7 @@ async function fetchOpenAIImageEditJson(input: {
       fallbackSize
     });
     response = await request(false, fallbackSize);
-    if (response.ok) return response.json();
+    if (response.ok) return responseJson(response, "/images/edits");
     throw new Error(humanOpenAIError(await responseError(response)));
   }
   if (input.params.imageFormat && input.params.imageFormat !== "auto" && isUnsupportedResponseFormatError(message)) {
@@ -203,7 +219,7 @@ async function fetchOpenAIImageEditJson(input: {
       endpoint: "/images/edits"
     });
     response = await request(true);
-    if (response.ok) return response.json();
+    if (response.ok) return responseJson(response, "/images/edits");
     throw new Error(humanOpenAIError(await responseError(response)));
   }
 
