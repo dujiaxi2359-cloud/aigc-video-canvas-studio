@@ -503,21 +503,63 @@ function savedApiRoutes(models: ModelConfig[]) {
   return Array.from(routes.values()).sort((a, b) => b.updatedAt - a.updatedAt);
 }
 
+type CategoryDraft = {
+  apiBaseUrl: string;
+  apiKey: string;
+  manualModel: string;
+  fetchedModels: string[];
+  selectedModels: Set<string>;
+};
+
+function emptyCategoryDraft(): CategoryDraft {
+  return { apiBaseUrl: "", apiKey: "", manualModel: "", fetchedModels: [], selectedModels: new Set() };
+}
+
 export function ModelConfigCenter() {
   const { modelConfigs, fetchModelConfigs, saveModelConfigsBulk, deleteModelConfigs } = useModelConfigStore();
-  const [apiBaseUrl, setApiBaseUrl] = useState("");
-  const [apiKey, setApiKey] = useState("");
-  const [manualModel, setManualModel] = useState("");
-  const [fetchedModels, setFetchedModels] = useState<string[]>([]);
-  const [selectedModels, setSelectedModels] = useState<Set<string>>(new Set());
   const [activeCategory, setActiveCategory] = useState<ModelCategory>("image");
-  const [busy, setBusy] = useState<"pull" | "save" | "delete" | "">("");
+  const [categoryDrafts, setCategoryDrafts] = useState<Record<ModelCategory, CategoryDraft>>({
+    image: emptyCategoryDraft(),
+    text: emptyCategoryDraft(),
+    video: emptyCategoryDraft()
+  });
+  const [busy, setBusy] = useState<"verify" | "pull" | "save" | "delete" | "">("");
   const [message, setMessage] = useState("");
   const [messageTone, setMessageTone] = useState<"muted" | "success" | "danger">("muted");
 
+  const { apiBaseUrl, apiKey, manualModel, fetchedModels, selectedModels } = categoryDrafts[activeCategory];
+
+  function updateCategoryDraft(category: ModelCategory, patch: Partial<CategoryDraft> | ((current: CategoryDraft) => Partial<CategoryDraft>)) {
+    setCategoryDrafts((current) => {
+      const categoryDraft = current[category];
+      const nextPatch = typeof patch === "function" ? patch(categoryDraft) : patch;
+      return { ...current, [category]: { ...categoryDraft, ...nextPatch } };
+    });
+  }
+
+  function setApiBaseUrl(value: string) {
+    updateCategoryDraft(activeCategory, { apiBaseUrl: value });
+  }
+
+  function setApiKey(value: string) {
+    updateCategoryDraft(activeCategory, { apiKey: value });
+  }
+
+  function setManualModel(value: string) {
+    updateCategoryDraft(activeCategory, { manualModel: value });
+  }
+
+  function setFetchedModels(value: string[] | ((current: string[]) => string[])) {
+    updateCategoryDraft(activeCategory, (current) => ({ fetchedModels: typeof value === "function" ? value(current.fetchedModels) : value }));
+  }
+
+  function setSelectedModels(value: Set<string> | ((current: Set<string>) => Set<string>)) {
+    updateCategoryDraft(activeCategory, (current) => ({ selectedModels: typeof value === "function" ? value(current.selectedModels) : value }));
+  }
+
   useEffect(() => {
-    fetchModelConfigs().catch(() => {
-      setMessage("无法连接后端服务，模型配置需要后端加密保存。");
+    fetchModelConfigs().catch((error) => {
+      setMessage(errorText(error));
       setMessageTone("danger");
     });
   }, [fetchModelConfigs]);
@@ -525,7 +567,8 @@ export function ModelConfigCenter() {
   const videoConfigs = useMemo(() => modelConfigs.filter((model) => model.category === "video" || ["text-to-video", "image-to-video", "video-to-video"].includes(model.modelType)), [modelConfigs]);
   const imageConfigs = useMemo(() => modelConfigs.filter((model) => model.category === "image" || ["text-to-image", "image-to-image", "image-edit", "image"].includes(model.modelType)), [modelConfigs]);
   const textConfigs = useMemo(() => modelConfigs.filter((model) => model.category === "text" || model.modelType === "text"), [modelConfigs]);
-  const apiRoutes = useMemo(() => savedApiRoutes(modelConfigs), [modelConfigs]);
+  const activeConfigs = activeCategory === "image" ? imageConfigs : activeCategory === "text" ? textConfigs : videoConfigs;
+  const apiRoutes = useMemo(() => savedApiRoutes(activeConfigs), [activeConfigs]);
   const categorizedFetchedModels = useMemo(() => ({
     image: fetchedModels.filter((model) => classifyModel(model) === "image"),
     video: fetchedModels.filter((model) => classifyModel(model) === "video"),
@@ -572,13 +615,31 @@ export function ModelConfigCenter() {
   }
 
   function resetLineDraft() {
-    setApiBaseUrl("");
-    setApiKey("");
-    setManualModel("");
-    setFetchedModels([]);
-    setSelectedModels(new Set());
+    updateCategoryDraft(activeCategory, emptyCategoryDraft());
     setMessage("");
     setMessageTone("muted");
+  }
+
+  function changeCategory(category: ModelCategory) {
+    setActiveCategory(category);
+    setMessage("");
+    setMessageTone("muted");
+  }
+
+  function loadSavedRoute(baseUrl: string) {
+    const routeModels = activeConfigs.filter((model) => normalizeBaseUrl(model.apiBaseUrl).toLowerCase() === baseUrl.toLowerCase());
+    updateCategoryDraft(activeCategory, {
+      apiBaseUrl: baseUrl,
+      apiKey: "",
+      manualModel: "",
+      fetchedModels: routeModels.map((model) => model.modelName),
+      selectedModels: new Set(routeModels.map((model) => model.modelName))
+    });
+    setMessage(routeModels.some((model) => model.maskedApiKey)
+      ? "已载入该线路。API Key 已加密保存；如需增删模型，请重新输入 Key 后保存。"
+      : "已载入该线路，请输入 API Key 后验证或更新模型。");
+    setMessageTone("muted");
+    if (typeof window !== "undefined") window.localStorage.setItem(lastApiRouteStorageKey, baseUrl);
   }
 
   function addManualModelsToActiveCategory() {
@@ -623,16 +684,36 @@ export function ModelConfigCenter() {
       setMessage(result.message);
       setMessageTone(result.success ? "success" : "danger");
       if (result.models.length) {
-        setFetchedModels(result.models);
-        const autoSelectedModels = result.models.filter((model) => classifyModel(model) !== "video" || officialTemplateFor(model));
-        const skippedVideoCount = result.models.filter((model) => classifyModel(model) === "video" && !officialTemplateFor(model)).length;
+        const categoryModels = result.models.filter((model) => classifyModel(model) === activeCategory);
+        setFetchedModels(categoryModels);
+        const autoSelectedModels = categoryModels.filter((model) => activeCategory !== "video" || officialTemplateFor(model));
+        const skippedVideoCount = categoryModels.filter((model) => activeCategory === "video" && !officialTemplateFor(model)).length;
         setSelectedModels(new Set(autoSelectedModels));
+        if (!categoryModels.length) {
+          setMessage(`${result.message} 但没有识别到${categoryMeta[activeCategory].label}模型，请检查线路类型或手动添加模型 ID。`);
+          setMessageTone("danger");
+        }
         if (skippedVideoCount > 0) {
           setMessage(`${result.message} 已默认勾选官方可识别模型；${skippedVideoCount} 个未知视频模型需手动确认后启用。`);
         }
-        const firstCategory = categoryOrder.find((category) => result.models.some((model) => classifyModel(model) === category));
-        if (firstCategory) setActiveCategory(firstCategory);
       }
+    } catch (error) {
+      setMessage(errorText(error));
+      setMessageTone("danger");
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function verifyRoute() {
+    setBusy("verify");
+    setMessage("");
+    try {
+      const normalizedBaseUrl = normalizeBaseUrl(apiBaseUrl);
+      const result = await modelConfigApi.probe({ apiBaseUrl: normalizedBaseUrl, apiKey, validationPath: "/models", pullModels: false });
+      setApiBaseUrl(normalizedBaseUrl);
+      setMessage(result.message);
+      setMessageTone(result.success ? "success" : "danger");
     } catch (error) {
       setMessage(errorText(error));
       setMessageTone("danger");
@@ -688,43 +769,23 @@ export function ModelConfigCenter() {
   return (
     <div className="space-y-5">
       <section className="settings-section overflow-hidden">
-        <div className="grid min-h-[620px] lg:grid-cols-[210px_1fr]">
-          <aside className="settings-model-aside flex border-b border-white/[0.07] p-4 lg:flex-col lg:border-b-0 lg:border-r lg:p-5">
-            <div className="text-[14px] font-semibold tracking-[0.04em] text-white">Moon｜Tv</div>
-            <div className="ml-5 space-y-2 lg:ml-0 lg:mt-8">
-              <button type="button" className="flex h-11 w-full items-center gap-3 rounded-[12px] border border-sky-200/15 bg-sky-300/[0.10] px-3 text-left text-[13px] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
-                <KeyRound size={16} /> API 接入
-              </button>
-            </div>
-            <div className="ml-auto lg:ml-0 lg:mt-auto">
-              <button type="button" className="h-10 w-full rounded-full border border-white/[0.08] bg-white/[0.03] text-[12px] text-white/60">联系客服</button>
-            </div>
-          </aside>
-
-          <div className="p-6">
-            <div className="flex items-start justify-between">
+        <div className="p-5 md:p-6">
+            <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
-                <h2 className="text-[22px] font-semibold text-white">API 接入</h2>
-                <p className="mt-1 text-[13px] text-white/40">填写上游地址和 API Key；视频模型按官方名称与能力归一，上游模型 ID 仅作为实际请求名。</p>
+                <div className="flex items-center gap-2"><KeyRound size={17} className="text-white/65" /><h2 className="text-[20px] font-semibold text-white">API 接入</h2></div>
+                <p className="mt-1 max-w-[720px] text-[13px] leading-5 text-white/48">图片、文本、视频使用独立线路与凭证。切换分类不会覆盖未保存的输入，也不会把模型保存到错误分类。</p>
               </div>
               <div className="rounded-full border border-emerald-300/15 bg-emerald-300/[0.06] px-3 py-1.5 text-[12px] text-emerald-100">
                 {imageConfigs.length + videoConfigs.length + textConfigs.length} 个模型已启用
               </div>
             </div>
 
-            <div className="mt-6 rounded-[22px] border border-white/[0.08] bg-[#111115] shadow-[0_24px_90px_rgba(0,0,0,0.38)]">
+            <div className="mt-5 rounded-[16px] border border-white/[0.08] bg-[#111115]">
               <div className="flex items-center justify-between border-b border-white/[0.08] px-5 py-4">
                 <div>
                   <div className="text-[15px] font-semibold text-white">API 配置</div>
-                  <p className="mt-1 text-[12px] text-white/38">按图片、文本、视频分别接入中转线路；每条线路独立保存，不覆盖其它线路。</p>
+                  <p className="mt-1 text-[12px] text-white/42">先选择能力类型，再验证地址、拉取模型并保存。</p>
                 </div>
-                <Button
-                  className="h-9 rounded-full bg-white text-black hover:bg-white/90"
-                  onClick={() => void saveModels()}
-                  disabled={busy === "save" || (!selectedActiveModels.length && !manualModel.trim())}
-                >
-                  {busy === "save" ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />} 保存
-                </Button>
               </div>
 
               <div className="space-y-5 p-5">
@@ -739,7 +800,7 @@ export function ModelConfigCenter() {
                       <button
                         key={category}
                         type="button"
-                        onClick={() => setActiveCategory(category)}
+                        onClick={() => changeCategory(category)}
                         className={`flex h-12 items-center justify-center gap-2 rounded-[11px] text-[12px] transition duration-200 ${active ? "bg-white/[0.10] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]" : "text-white/42 hover:bg-white/[0.04] hover:text-white/70"}`}
                       >
                         <Icon size={15} />
@@ -752,10 +813,14 @@ export function ModelConfigCenter() {
                   })}
                 </div>
 
-                <div className="flex items-center justify-between">
-                  <button type="button" className="rounded-full border border-white/[0.10] bg-white/[0.035] px-4 py-2 text-[12px] text-white/65">
-                    线路 1
-                  </button>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex flex-wrap gap-2">
+                    {apiRoutes.map((route, index) => {
+                      const active = normalizeBaseUrl(apiBaseUrl).toLowerCase() === route.baseUrl.toLowerCase();
+                      return <button key={route.baseUrl} type="button" title={route.baseUrl} onClick={() => loadSavedRoute(route.baseUrl)} className={`rounded-full border px-3 py-2 text-[12px] transition ${active ? "border-white/25 bg-white/[0.10] text-white" : "border-white/[0.08] bg-white/[0.025] text-white/48 hover:bg-white/[0.06] hover:text-white/75"}`}>线路 {index + 1}<span className="ml-2 text-[10px] text-white/35">{route.host}</span></button>;
+                    })}
+                    {!apiRoutes.length && <span className="py-2 text-[12px] text-white/35">当前分类还没有已保存线路</span>}
+                  </div>
                   <button
                     type="button"
                     onClick={resetLineDraft}
@@ -765,7 +830,7 @@ export function ModelConfigCenter() {
                   </button>
                 </div>
 
-                <div className="rounded-[18px] border border-white/[0.08] bg-[#17171b] p-5">
+                <div className="rounded-[14px] border border-white/[0.08] bg-[#17171b] p-4 md:p-5">
                   <div className="mb-4 flex items-start justify-between gap-4">
                     <div>
                       <div className="text-[15px] font-semibold text-white">{categoryMeta[activeCategory].title}</div>
@@ -786,43 +851,20 @@ export function ModelConfigCenter() {
                       <Input className="h-11 rounded-[11px] bg-black/35" type="password" value={apiKey} onChange={(event) => setApiKey(event.target.value)} placeholder="此线路独立 Key" />
                     </label>
                     <div className="flex items-end gap-2">
+                      <Button className="h-11 rounded-full border border-white/[0.10] bg-transparent text-white/75 hover:bg-white/[0.06]" onClick={() => void verifyRoute()} disabled={busy === "verify" || !apiBaseUrl || !apiKey}>
+                        {busy === "verify" ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />} 验证
+                      </Button>
                       <Button className="h-11 rounded-full" onClick={() => void pullModels()} disabled={busy === "pull" || !apiBaseUrl || !apiKey}>
                         {busy === "pull" ? <Loader2 size={15} className="animate-spin" /> : <RefreshCw size={15} />} 拉取模型
                       </Button>
                     </div>
                   </div>
 
-                  {apiRoutes.length > 0 && (
-                    <div className="mt-4 rounded-[14px] border border-white/[0.06] bg-black/20 p-3">
-                      <div className="mb-2 text-[11px] font-medium text-white/42">已保存 API 线路，点击可回填当前输入框</div>
-                      <div className="flex flex-wrap gap-2">
-                        {apiRoutes.map((route) => {
-                          const active = normalizeBaseUrl(apiBaseUrl).toLowerCase() === route.baseUrl.toLowerCase();
-                          return (
-                            <button
-                              key={route.baseUrl}
-                              type="button"
-                              title={route.baseUrl}
-                              onClick={() => {
-                                setApiBaseUrl(route.baseUrl);
-                                if (typeof window !== "undefined") window.localStorage.setItem(lastApiRouteStorageKey, route.baseUrl);
-                              }}
-                              className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[12px] transition duration-200 ${active ? "border-sky-100/40 bg-sky-200/[0.12] text-sky-50 shadow-[0_0_30px_rgba(125,211,252,0.08)]" : "border-white/[0.08] bg-white/[0.035] text-white/50 hover:bg-white/[0.07] hover:text-white/75"}`}
-                            >
-                              <span>{route.host}</span>
-                              <span className="rounded-full bg-black/25 px-1.5 py-0.5 text-[10px] text-white/45">{route.count}</span>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
-
                   <div className="mt-4">
                     <StatusMessage message={message} tone={messageTone} />
                   </div>
 
-                  <div className="mt-4 rounded-[16px] border border-white/[0.08] bg-black/20 p-4">
+                  <div className="mt-4 border-t border-white/[0.08] pt-4">
                     <div className="mb-3 flex items-center justify-between">
                       <div>
                         <div className="text-[13px] font-semibold text-white">模型列表</div>
@@ -841,7 +883,7 @@ export function ModelConfigCenter() {
                             <button type="button" onClick={() => selectCategory(activeCategory, false)} className="rounded-full border border-white/[0.08] px-2.5 py-1 text-[11px] text-white/45 hover:bg-white/[0.06] hover:text-white">取消当前</button>
                           </div>
                         </div>
-                        <div className="mt-3 flex min-h-[92px] max-h-[180px] flex-wrap content-start gap-2 overflow-auto rounded-[12px] border border-dashed border-white/[0.08] p-3">
+                        <div className="mt-3 flex min-h-[76px] max-h-[180px] flex-wrap content-start gap-2 overflow-auto rounded-[10px] border border-white/[0.07] bg-black/15 p-3">
                           {groupedFetchedModels[activeCategory].map((group) => {
                             const meta = categoryMeta[activeCategory];
                             const { selectedCount, allSelected, partiallySelected } = groupSelectionState(group, selectedModels);
@@ -886,7 +928,6 @@ export function ModelConfigCenter() {
               </div>
             </div>
           </div>
-        </div>
       </section>
 
       <section className="grid gap-4 lg:grid-cols-3">

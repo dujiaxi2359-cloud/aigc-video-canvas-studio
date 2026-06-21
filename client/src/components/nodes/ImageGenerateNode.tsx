@@ -110,6 +110,19 @@ function compactName(value?: string, fallback = "图片") {
   return text.length > 18 ? `${text.slice(0, 17)}...` : text;
 }
 
+type MentionRange = { start: number; end: number };
+
+function findReferenceMentionRange(value: string, caret = value.length): MentionRange | null {
+  const safeCaret = Math.max(0, Math.min(caret, value.length));
+  const beforeCaret = value.slice(0, safeCaret);
+  const at = beforeCaret.lastIndexOf("@");
+  if (at < 0) return null;
+  const token = beforeCaret.slice(at);
+  if (!token || /\s/.test(token.slice(1))) return null;
+  if (!/^@{1,2}[\p{L}\p{N}_-]*$/u.test(token)) return null;
+  return { start: at, end: safeCaret };
+}
+
 function PayloadSummary({ data }: { data?: Record<string, unknown> }) {
   if (!data) return null;
   const entries = ([
@@ -173,6 +186,7 @@ function ImageGenerateNodeComponent(props: NodeProps<ImageGenerateNodeData>) {
   const [expanded, setExpanded] = useState(false);
   const [editorOpen, setEditorOpen] = useState(false);
   const [activeTool, setActiveTool] = useState<NodeTool>(null);
+  const [pendingMentionRange, setPendingMentionRange] = useState<MentionRange | null>(null);
   const isComposingRef = useRef(false);
   const promptTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const parameterAnchorRef = useRef<HTMLDivElement | null>(null);
@@ -219,6 +233,7 @@ function ImageGenerateNodeComponent(props: NodeProps<ImageGenerateNodeData>) {
     const value = event.target.value;
     setLocalPrompt(value);
     if (!isComposingRef.current) update(props.id, { prompt: value });
+    maybeOpenReferenceMenu(event.currentTarget);
   }
 
   function handleCompositionStart() {
@@ -230,6 +245,17 @@ function ImageGenerateNodeComponent(props: NodeProps<ImageGenerateNodeData>) {
     const value = event.currentTarget.value;
     setLocalPrompt(value);
     update(props.id, { prompt: value });
+    maybeOpenReferenceMenu(event.currentTarget);
+  }
+
+  function maybeOpenReferenceMenu(textarea = promptTextareaRef.current) {
+    if (isComposingRef.current || !textarea || !resolvedInputs.imageInputs.length) return;
+    const range = findReferenceMentionRange(textarea.value, textarea.selectionStart ?? textarea.value.length);
+    setPendingMentionRange(range);
+    if (range) {
+      setParametersOpen(false);
+      setActiveTool("assets");
+    }
   }
 
   useEffect(() => {
@@ -334,15 +360,20 @@ function ImageGenerateNodeComponent(props: NodeProps<ImageGenerateNodeData>) {
 
   function insertReferenceToken(token: string) {
     const textarea = promptTextareaRef.current;
-    const start = textarea?.selectionStart ?? localPrompt.length;
-    const end = textarea?.selectionEnd ?? start;
-    const before = localPrompt.slice(0, start);
-    const after = localPrompt.slice(end);
+    const selectionStart = textarea?.selectionStart ?? localPrompt.length;
+    const selectionEnd = textarea?.selectionEnd ?? selectionStart;
+    const detectedRange = findReferenceMentionRange(localPrompt, selectionStart);
+    const range = pendingMentionRange ?? detectedRange;
+    const replaceStart = range?.start ?? selectionStart;
+    const replaceEnd = range ? Math.max(range.end, selectionEnd) : selectionEnd;
+    const before = localPrompt.slice(0, replaceStart);
+    const after = localPrompt.slice(replaceEnd);
     const leading = before && !/\s$/.test(before) ? " " : "";
-    const trailing = after && !/^\s/.test(after) ? " " : "";
+    const trailing = after && !/^\s/.test(after) ? " " : " ";
     const next = `${before}${leading}${token}${trailing}${after}`;
-    const cursor = before.length + leading.length + token.length + trailing.length;
+    const cursor = before.length + leading.length + token.length + 1;
     setLocalPrompt(next);
+    setPendingMentionRange(null);
     update(props.id, { prompt: next, errorMessage: undefined });
     window.requestAnimationFrame(() => {
       promptTextareaRef.current?.focus();
@@ -391,7 +422,7 @@ function ImageGenerateNodeComponent(props: NodeProps<ImageGenerateNodeData>) {
       </div>
       {referenceVisualItems.length > 0 && <div className="creation-video-reference-chips">{referenceVisualItems.map((item) => <span key={item.token} className="creation-video-reference-chip"><button type="button" className="creation-video-reference-remove" title="移除连接" onClick={() => disconnectReference(item.input.sourceNodeId)}><X size={13} /></button>{item.previewUrl ? <img src={item.previewUrl} alt="" onError={(event) => { const image = event.currentTarget; if (item.fallbackUrl && image.src !== item.fallbackUrl) image.src = item.fallbackUrl; else image.style.display = "none"; }} /> : <Library size={14} />}<button type="button" className="creation-video-reference-token" onClick={() => insertReferenceToken(item.token)}><span>图像</span><strong>{item.name}</strong></button></span>)}</div>}
       <div className="creation-dock-composer">
-        <Textarea ref={promptTextareaRef} className="creation-prompt-input nodrag nopan nowheel" placeholder="描述你想生成的内容，或输入 @ 引用素材" value={localPrompt} onChange={handlePromptChange} onCompositionStart={handleCompositionStart} onCompositionEnd={handleCompositionEnd} />
+        <Textarea ref={promptTextareaRef} className="creation-prompt-input nodrag nopan nowheel" placeholder="描述你想生成的内容，或输入 @ 引用素材" value={localPrompt} onChange={handlePromptChange} onCompositionStart={handleCompositionStart} onCompositionEnd={handleCompositionEnd} onClick={(event) => maybeOpenReferenceMenu(event.currentTarget)} onKeyUp={(event) => maybeOpenReferenceMenu(event.currentTarget)} />
       </div>
       {(props.data.errorMessage || localError) && <button type="button" className="creation-error-line" onClick={() => setExpanded(true)}><span>{props.data.errorMessage || localError}</span><strong>诊断</strong></button>}
       <div className="creation-dock-footer">

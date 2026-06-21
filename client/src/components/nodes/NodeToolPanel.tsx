@@ -1,3 +1,4 @@
+import { useMemo, useState } from "react";
 import { Clock3, Gauge, ImagePlus, Library, Plus, Search, SlidersHorizontal, Video, X } from "lucide-react";
 
 export type NodeTool = "tags" | "camera" | "styles" | "characters" | "assets" | "quick" | null;
@@ -16,6 +17,12 @@ const characters = ["品牌模特 A", "都市男主", "运动女主", "产品手
 const styles = ["电影感", "商业摄影", "极简产品", "胶片颗粒", "自然纪实", "3D 渲染"];
 
 export function NodeToolPanel({ tool, onClose, onInsert, referenceItems = [] }: { tool: NodeTool; onClose: () => void; onInsert: (value: string) => void; referenceItems?: ReferenceMenuItem[] }) {
+  const [referenceQuery, setReferenceQuery] = useState("");
+  const visibleReferenceItems = useMemo(() => {
+    const query = referenceQuery.trim().toLowerCase().replace(/^@+/, "");
+    if (!query) return referenceItems;
+    return referenceItems.filter((item) => [item.token, item.typedToken, item.label, item.name].filter(Boolean).some((value) => String(value).toLowerCase().includes(query)));
+  }, [referenceItems, referenceQuery]);
   if (!tool) return null;
   const title = tool === "tags" ? "标记" : tool === "camera" ? "运镜与摄影机" : tool === "styles" ? "风格" : tool === "characters" ? "角色库" : tool === "assets" ? "全能参考" : "快速添加";
   const values = tool === "tags" ? tags : tool === "camera" ? motions : tool === "styles" ? styles : tool === "characters" ? characters : [];
@@ -38,10 +45,10 @@ export function NodeToolPanel({ tool, onClose, onInsert, referenceItems = [] }: 
         </div>
       ) : tool === "assets" ? (
         <div className="node-reference-menu">
-          <label className="node-reference-search"><Search size={13} /><input placeholder="搜索素材，或直接输入 @ 引用" /></label>
+          <label className="node-reference-search"><Search size={13} /><input value={referenceQuery} onChange={(event) => setReferenceQuery(event.target.value)} placeholder="搜索当前连接素材" /></label>
           <div className="node-tool-section-label">当前连接素材</div>
           <div className="node-reference-list">
-            {referenceItems.map((item) => (
+            {visibleReferenceItems.map((item) => (
               <button
                 key={`${item.token}-${item.typedToken}`}
                 type="button"
@@ -57,6 +64,7 @@ export function NodeToolPanel({ tool, onClose, onInsert, referenceItems = [] }: 
               </button>
             ))}
             {!referenceItems.length && <div className="node-reference-empty">先把素材连接到当前生成节点，再用 @ 精确引用。</div>}
+            {referenceItems.length > 0 && !visibleReferenceItems.length && <div className="node-reference-empty">没有匹配的连接素材。</div>}
           </div>
           <div className="node-tool-section-label">指令</div>
           <div className="node-command-list">

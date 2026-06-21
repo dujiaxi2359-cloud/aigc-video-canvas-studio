@@ -396,7 +396,11 @@ export async function probeOpenAiCompatibleModels(input: { apiBaseUrl?: string; 
   const models = input.pullModels === false ? [] : extractModels(payload);
   return {
     success: true,
-    message: models.length ? `验证通过，已拉取 ${models.length} 个模型。` : "验证通过，但未从返回内容中识别到模型列表。",
+    message: input.pullModels === false
+      ? "地址与 API Key 验证通过。请继续拉取模型，或直接手动添加上游模型 ID。"
+      : models.length
+        ? `验证通过，已拉取 ${models.length} 个模型。`
+        : "验证通过，但未从返回内容中识别到模型列表。",
     models
   };
 }
