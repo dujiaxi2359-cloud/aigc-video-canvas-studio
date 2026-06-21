@@ -234,6 +234,17 @@ export function seedanceAuthorizationValues(apiKey: string) {
   return [trimmed, `Bearer ${trimmed}`];
 }
 
+function seedanceBusinessFailed(payload: Record<string, unknown>) {
+  const state = payload.state;
+  if (typeof state === "number" && state !== 1) return true;
+  if (typeof state === "string" && state.trim() && !["1", "success", "ok"].includes(state.trim().toLowerCase())) return true;
+  const code = payload.code;
+  if (typeof code === "string" && code.trim() && !["success", "ok", "200"].includes(code.trim().toLowerCase())) return true;
+  const error = payload.error;
+  if (error && !(typeof error === "object" && Object.keys(error as Record<string, unknown>).length === 0)) return true;
+  return false;
+}
+
 async function seedanceAssetRequest(params: SeedanceProviderParams, endpoint: string, body: Record<string, unknown>) {
   let lastPayload: Record<string, unknown> = {};
   let lastStatus = 0;
@@ -249,7 +260,7 @@ async function seedanceAssetRequest(params: SeedanceProviderParams, endpoint: st
     });
     lastStatus = response.status;
     lastPayload = await responsePayload(response);
-    if (response.ok) return lastPayload;
+    if (response.ok && !seedanceBusinessFailed(lastPayload)) return lastPayload;
   }
   throw new ProviderError(
     "SEEDANCE_ASSET_UPLOAD_FAILED",
@@ -265,6 +276,14 @@ function seedanceAssetGroupId(payload: Record<string, unknown>) {
 
 function seedanceAssetId(payload: Record<string, unknown>) {
   return findStringByKeys(payload, ["Id", "id", "asset_id", "assetId"]);
+}
+
+function seedanceAssetTaskId(payload: Record<string, unknown>) {
+  return findStringByKeys(payload, ["task_id", "taskId", "TaskId"]);
+}
+
+function seedanceAssetStatus(payload: Record<string, unknown>) {
+  return findStringByKeys(payload, ["Status", "status"]);
 }
 
 function seedanceAssetType(type: "Image" | "Video" | "Audio") {
@@ -294,10 +313,42 @@ async function uploadSeedanceAsset(params: SeedanceProviderParams, groupId: stri
     Name: `${type.toLowerCase()}-${index + 1}`
   });
   const assetId = seedanceAssetId(payload);
+  const taskId = seedanceAssetTaskId(payload);
+  if (taskId) {
+    return `asset://${await waitForSeedanceAssetActive(params, taskId, assetId, type, index)}`;
+  }
   if (!assetId) {
     throw new ProviderError("SEEDANCE_ASSET_UPLOAD_FAILED", "Seedance 素材上传没有返回 asset ID。", preview(payload), { endpoint, response: payload });
   }
   return `asset://${assetId}`;
+}
+
+async function waitForSeedanceAssetActive(params: SeedanceProviderParams, taskId: string, fallbackAssetId: string | undefined, type: "Image" | "Video" | "Audio", index: number) {
+  const endpoint = seedanceAssetEndpoint(params, "/v1/seedance/asset/GetAsset");
+  const attempts = Math.max(1, Number(process.env.SEEDANCE_ASSET_POLL_ATTEMPTS || 60));
+  const delayMs = Math.max(250, Number(process.env.SEEDANCE_ASSET_POLL_DELAY_MS || 1500));
+  let latestPayload: Record<string, unknown> = {};
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    latestPayload = await seedanceAssetRequest(params, endpoint, { task_id: taskId });
+    const status = seedanceAssetStatus(latestPayload)?.toLowerCase();
+    const assetId = seedanceAssetId(latestPayload) ?? fallbackAssetId;
+    if (status === "active" && assetId) return assetId;
+    if (status === "failed" || status === "error") {
+      throw new ProviderError(
+        "SEEDANCE_ASSET_UPLOAD_FAILED",
+        `Seedance 素材库处理失败：第 ${index + 1} 个 ${type} 素材没有转为 Active。`,
+        preview(latestPayload),
+        { endpoint, taskId, response: latestPayload }
+      );
+    }
+    await sleep(delayMs);
+  }
+  throw new ProviderError(
+    "SEEDANCE_ASSET_UPLOAD_FAILED",
+    `Seedance 素材库处理超时：第 ${index + 1} 个 ${type} 素材长时间未 Active。`,
+    preview(latestPayload),
+    { endpoint, taskId, response: latestPayload }
+  );
 }
 
 async function uploadSeedanceAssets(params: SeedanceProviderParams, urls: string[], type: "Image" | "Video" | "Audio") {
@@ -327,7 +378,7 @@ export function seedanceAssetUploadShouldFallback(error: unknown) {
   const text = error instanceof ProviderError
     ? `${error.message}\n${error.debugMessage ?? ""}\n${preview(error.details)}`
     : rawErrorMessage(error);
-  return /fetch failed|network|econn|dns|timeout|socket|reset|tls|terminated|task_id is required|asset provider error|素材库没有返回|素材上传没有返回/i.test(text);
+  return /fetch failed|network|econn|dns|timeout|socket|reset|tls|terminated|task_id is required/i.test(text);
 }
 
 async function uploadSeedanceAssetsIfAvailable(params: SeedanceProviderParams, urls: string[], type: "Image" | "Video" | "Audio") {
@@ -356,7 +407,7 @@ function seedanceInvalidAssetResource(payload: Record<string, unknown>) {
 }
 
 function seedanceAssetReadyDelayMs() {
-  return Math.max(0, Number(process.env.SEEDANCE_ASSET_READY_DELAY_MS || 6000));
+  return Math.max(0, Number(process.env.SEEDANCE_ASSET_READY_DELAY_MS || 0));
 }
 
 function findStringByKeys(value: unknown, keys: string[], depth = 0): string | undefined {
@@ -487,31 +538,12 @@ function upstreamFriendlyErrorMessage(label: string, payload: Record<string, unk
     return `${label} 中转商内部服务暂时不可达，请稍后重试或切换其他视频通道。`;
   }
   if (/InputImageSensitiveContentDetected|PrivacyInformation|may contain real person/i.test(decoded)) {
-    return `${label} 素材已经进入生成请求，但上游隐私审核拒绝了真人参考图（upstream_InputImageSensitiveContentDetected.PrivacyInformation）。这不是素材库丢失；Seedance 的本次审核不能由本站绕过。请切换到账号中明确标注支持真人参考的 Grok、Kling 或 Veo 通道后重试。`;
+    return `${label} 上游返回了输入素材审核提示。素材库引用已按 Active 状态校验；请保留当前素材重新提交一次，若仍失败再调整单张素材或提示词。`;
   }
   if (/content review|unsafe content|protected IP|identifiable real person|sensitive content|内容审核|敏感内容/i.test(decoded)) {
     return `${label} 上游内容审核拒绝：提示词或参考素材未通过审核。请调整素材/提示词后重试，或切换其他通道。`;
   }
   return fallback;
-}
-
-function isUpstreamHumanPrivacyReview(payload: Record<string, unknown>) {
-  return /InputImageSensitiveContentDetected|PrivacyInformation|may contain real person|identifiable real person/i.test(decodedErrorText(payload));
-}
-
-function humanPrivacyReviewError(label: string, payload: Record<string, unknown>, endpoint: string) {
-  return new ProviderError(
-    "UPSTREAM_HUMAN_PRIVACY_REVIEW",
-    upstreamFriendlyErrorMessage(label, payload),
-    preview(payload),
-    {
-      endpoint,
-      whyBlocked: "upstreamHumanPrivacyReview",
-      assetDeliverySucceeded: true,
-      policyBypassAvailable: false,
-      suggestedProviders: ["grok", "kling", "google-veo"]
-    }
-  );
 }
 
 function assetDownloadError(payload: Record<string, unknown>) {
@@ -1025,7 +1057,6 @@ export async function generateVideoWithSeedance(params: SeedanceProviderParams):
         });
         task = await responsePayload(response);
         if (!response.ok) {
-          if (isUpstreamHumanPrivacyReview(task)) throw humanPrivacyReviewError(label, task, endpoint);
           if (modelAccessDenied(task)) {
             throw new ProviderError(
               "MODEL_ACCESS_DENIED",
@@ -1097,7 +1128,6 @@ export async function generateVideoWithSeedance(params: SeedanceProviderParams):
         if (isFailedStatus(status)) {
           const friendlyMessage = upstreamFriendlyErrorMessage(label, task);
           await saveGenerationTask({ id, status: "failed", result: task, errorMessage: friendlyMessage });
-          if (isUpstreamHumanPrivacyReview(task)) throw humanPrivacyReviewError(label, task, pollEndpoint);
           throw new ProviderError("VEO_OPERATION_FAILED", `${label} 中转任务失败：${friendlyMessage}`, preview(task));
         }
         if (isCompletedStatus(status)) completedSeenAt ??= Date.now();

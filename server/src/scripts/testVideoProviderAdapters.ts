@@ -722,6 +722,29 @@ assert(
   seedanceAssetUploadShouldFallback(new ProviderError("SEEDANCE_ASSET_UPLOAD_FAILED", "Seedance 素材库接口调用失败：Asset provider error", "{\"message\":\"Asset provider error\"}", { upstreamStatus: 502 })),
   "Seedance asset upload should fall back to public URLs when the relay asset provider returns 5xx"
 );
+assert(
+  !seedanceAssetUploadShouldFallback(new ProviderError("SEEDANCE_ASSET_UPLOAD_FAILED", "Seedance 素材库接口调用失败：Asset provider error", "{\"state\":0,\"data\":null}", { upstreamStatus: 200 })),
+  "Seedance asset upload should not silently bypass the asset library when the relay returns a business failure"
+);
+const seedanceNativeBody = buildProxyBody({
+  modelName: "doubao-seedance-2-0-260128",
+  prompt: "介绍这款产品",
+  apiBaseUrl: "https://duoyuanx.com/v1",
+  apiKey: "sk-test"
+} as never, {
+  apiFamily: "seedance2_native",
+  mode: "reference_images_to_video",
+  images: ["asset://asset-demo"],
+  videos: [],
+  audios: [],
+  aspectRatio: "16:9",
+  resolution: "720p",
+  seconds: "10"
+});
+const seedanceNativeRecord = seedanceNativeBody as Record<string, unknown>;
+assert((seedanceNativeRecord.metadata as Record<string, unknown>).watermark === false, "Seedance 2.0 native payload should disable watermark explicitly");
+assert((seedanceNativeRecord.metadata as Record<string, unknown>).generate_audio === true, "Seedance 2.0 native payload should request audio generation explicitly");
+assert(Array.isArray(seedanceNativeRecord.content) && JSON.stringify(seedanceNativeRecord.content).includes("asset://asset-demo"), "Seedance 2.0 native payload should keep asset:// references");
 
 const klingLegacy = getVideoModelCapability("kling", "kling-1-6", "kling-v1-6", "image_to_video_first_frame");
 assert(klingLegacy?.supportedDurations.join(",") === "5,10", "Kling 1.6 should be available with official durations");
