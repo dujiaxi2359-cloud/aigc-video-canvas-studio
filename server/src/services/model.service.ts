@@ -473,28 +473,14 @@ async function enforceImageAspectRatio(result: ProviderGenerateResult, aspectRat
   if (!aspectRatio) return result;
   const ensured = await ensureImageAspectRatio(result.localPath, aspectRatio);
   if (!ensured) return result;
-  if (!ensured.transformed) {
-    return {
-      ...result,
-      payloadSummary: {
-        ...(result.payloadSummary && typeof result.payloadSummary === "object" ? result.payloadSummary as Record<string, unknown> : {}),
-        outputAspectRatio: ensured.aspectRatio,
-        outputAspectRatioTransformed: false,
-        outputAspectRatioFitMode: ensured.fitMode
-      }
-    };
-  }
   return {
     ...result,
-    localPath: ensured.localPath,
-    outputUrl: ensured.outputUrl ?? result.outputUrl,
     payloadSummary: {
       ...(result.payloadSummary && typeof result.payloadSummary === "object" ? result.payloadSummary as Record<string, unknown> : {}),
       outputAspectRatio: ensured.aspectRatio,
-      outputAspectRatioTransformed: true,
+      outputAspectRatioTransformed: false,
       outputAspectRatioFitMode: ensured.fitMode,
-      originalOutput: ensured.originalMetadata,
-      transformedOutput: ensured.metadata
+      modelNativeOutput: ensured.metadata
     }
   };
 }
