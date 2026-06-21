@@ -8,6 +8,8 @@ const grokInputModes: ModelInputMode[] = ["text-to-video", "image-to-video", "re
 const grokSupportedInputs: VideoSupportedInput[] = ["text", "image", "first_frame", "reference_image", "first_last_frame", "video"];
 const seedance2InputModes: ModelInputMode[] = ["text-to-video", "image-to-video", "reference-to-video", "first-last-frame", "video-to-video"];
 const seedance2SupportedInputs: VideoSupportedInput[] = ["text", "image", "first_frame", "reference_image", "first_last_frame", "video"];
+const kling3InputModes: ModelInputMode[] = ["text-to-video", "image-to-video", "reference-to-video", "first-last-frame"];
+const kling3SupportedInputs: VideoSupportedInput[] = ["text", "image", "first_frame", "reference_image", "first_last_frame"];
 
 function union<T>(base: readonly T[] | undefined, additions: readonly T[]) {
   return Array.from(new Set([...(base ?? []), ...additions]));
@@ -30,11 +32,41 @@ export function isSeedance2LikeVideoModel(providerId?: string, modelName?: strin
   return /seedance[-_ .]?2(?:[-_ .]?0)?|doubao[-_]?seedance[-_]?2[-_]?0/.test(modelIdentity(providerId, modelName, capabilities));
 }
 
+function isKling3LikeVideoModel(providerId?: string, modelName?: string, capabilities?: ModelCapabilities) {
+  const identity = modelIdentity(providerId, modelName, capabilities);
+  return /kling|\u53ef\u7075/.test(identity) && /(3[._ -]?0|v3|omni)/.test(identity);
+}
+
 export function normalizeVideoCapabilities(
   capabilities: ModelCapabilities,
   providerId?: string,
   modelName?: string
 ): ModelCapabilities {
+  if (isKling3LikeVideoModel(providerId, modelName, capabilities) && !/(?:^|[-_])noref(?:$|[-_])/.test((modelName ?? "").toLowerCase())) {
+    const normalized: ModelCapabilities = {
+      ...capabilities,
+      inputModes: union(capabilities.inputModes, kling3InputModes),
+      supportedInputs: union(capabilities.supportedInputs, kling3SupportedInputs),
+      imageTransport: capabilities.imageTransport === "unsupported" ? "url_or_asset" : capabilities.imageTransport ?? "url_or_asset",
+      supportsImageInput: true,
+      supportsReferenceImage: true,
+      supportsFirstLastFrame: true,
+      supportsMultiImageInput: true,
+      supportsAudio: true,
+      maxReferenceImages: capabilities.maxReferenceImages ?? 4
+    };
+    if (capabilities.channelCapability) {
+      normalized.channelCapability = {
+        ...capabilities.channelCapability,
+        apiFamily: capabilities.channelCapability.apiFamily ?? "aigc_video_json",
+        supportedInputs: union(capabilities.channelCapability.supportedInputs, kling3SupportedInputs),
+        imageTransport: capabilities.channelCapability.imageTransport === "unsupported" ? "url_or_asset" : capabilities.channelCapability.imageTransport ?? "url_or_asset",
+        imageField: capabilities.channelCapability.imageField ?? "image"
+      };
+    }
+    return normalized;
+  }
+
   if (isGrokLikeVideoModel(providerId, modelName, capabilities)) {
     const normalized: ModelCapabilities = {
       ...capabilities,

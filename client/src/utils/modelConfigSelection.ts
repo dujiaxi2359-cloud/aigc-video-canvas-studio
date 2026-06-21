@@ -21,8 +21,25 @@ export function modelConfigSelectionKey(model: ModelConfig) {
   return `raw:${normalizeKey(model.modelName || model.id)}:${channelKey(model)}`;
 }
 
+function selectionPriority(model: ModelConfig) {
+  const channel = { ...model.capabilities, ...model.capabilities.channelCapability };
+  const inputs = channel.supportedInputs ?? [];
+  const identity = `${model.modelName} ${model.displayName}`.toLowerCase();
+  let score = 0;
+  if (inputs.some((input) => ["image", "first_frame", "reference_image", "first_last_frame"].includes(input))) score += 100;
+  if (channel.imageTransport && channel.imageTransport !== "unsupported") score += 50;
+  if (/(?:^|[-_])ref(?:$|[-_])/.test(identity)) score += 20;
+  if (/(?:^|[-_])audio(?:$|[-_])/.test(identity)) score += 10;
+  if (/(?:^|[-_])noref(?:$|[-_])/.test(identity)) score -= 100;
+  if (/(?:^|[-_])mute(?:$|[-_])/.test(identity)) score -= 5;
+  return score;
+}
+
 export function dedupeModelConfigsForSelect(models: ModelConfig[]) {
-  const sorted = [...models].sort((left, right) => (right.updatedAt ?? 0) - (left.updatedAt ?? 0));
+  const sorted = [...models].sort((left, right) => {
+    const priority = selectionPriority(right) - selectionPriority(left);
+    return priority || (right.updatedAt ?? 0) - (left.updatedAt ?? 0);
+  });
   const seen = new Set<string>();
   const result: ModelConfig[] = [];
   for (const model of sorted) {

@@ -5,7 +5,7 @@ import { configuredRelayModelName, veoProxyCreateEndpoint } from "../services/pr
 import { joinUrl, resolveVideoRequestConfig } from "../services/providers/videoRequestAdapter.js";
 import { getVideoModelCapability } from "../config/videoModelCapabilities.js";
 import { modelCatalog } from "../services/modelCatalog.js";
-import { isGrokLikeVideoModel } from "../services/videoCapabilityNormalization.js";
+import { isGrokLikeVideoModel, normalizeVideoCapabilities } from "../services/videoCapabilityNormalization.js";
 import { ProviderError } from "../utils/providerErrors.js";
 import { mapVideoDimensions, normalizeVideoAspectRatio } from "../utils/videoParams.js";
 
@@ -293,6 +293,39 @@ const klingAigcBody = buildProxyBody({
 assert(klingAigcBody.image === "https://assets.example/frame.png", "Kling AIGC should send the documented image field");
 assert((klingAigcBody.metadata as any).output_config.audio_generation === "Enabled", "Kling audio variants should enable audio generation");
 assert((klingAigcBody.metadata as any).output_config.aspect_ratio === "16:9", "Kling AIGC should send metadata.output_config.aspect_ratio");
+const klingGenericBody = buildProxyBody({
+  providerId: "kling",
+  modelName: "kling-3.0-omni",
+  apiBaseUrl: "https://ai.ai666.net/v1",
+  apiKey: "sk-test-key",
+  prompt: "test video prompt",
+  nodeId: "node",
+  modelConfigId: "model",
+  inputMode: "image-to-video",
+  duration: 5,
+  aspectRatio: "16:9",
+  resolution: "720P",
+  generateCount: 1
+}, {
+  apiFamily: "aigc_video_json",
+  mode: "image_to_video_first_frame",
+  images: ["https://assets.example/frame.png"],
+  videos: [],
+  audios: [],
+  aspectRatio: "16:9",
+  resolution: "720P",
+  seconds: "5"
+}) as Record<string, any>;
+assert(klingGenericBody.image === "https://assets.example/frame.png", "Generic Kling 3.0 Omni should send the documented image URL");
+assert((klingGenericBody.metadata as any).output_config.audio_generation === "Enabled", "Generic Kling 3.0 Omni should enable native audio by default");
+const normalizedKling = normalizeVideoCapabilities({
+  inputModes: ["text-to-video"],
+  supportedInputs: ["text"],
+  imageTransport: "unsupported",
+  channelCapability: { supportedInputs: ["text"], imageTransport: "unsupported" }
+}, "kling", "kling-3.0-omni");
+assert(normalizedKling.supportedInputs?.includes("image"), "Kling 3.0 Omni should recover image capability from stale text-only metadata");
+assert(normalizedKling.channelCapability?.imageTransport === "url_or_asset", "Kling 3.0 Omni relay should send public image URLs");
 
 const seedance2Body = buildProxyBody({
   providerId: "seedance",

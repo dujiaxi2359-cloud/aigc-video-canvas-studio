@@ -3,7 +3,18 @@ import type { ModelConfig } from "../types/model";
 const imageInputs = new Set(["image", "first_frame", "reference_image", "first_last_frame"]);
 
 function effectiveChannel(model: ModelConfig) {
-  return { ...model.capabilities, ...model.capabilities.channelCapability };
+  const channel = { ...model.capabilities, ...model.capabilities.channelCapability };
+  const identity = `${model.providerId} ${model.provider} ${model.modelName} ${model.displayName}`.toLowerCase();
+  if (/kling|\u53ef\u7075/.test(identity) && /(3[._ -]?0|v3|omni)/.test(identity) && !/(?:^|[-_])noref(?:$|[-_])/.test(model.modelName.toLowerCase())) {
+    return {
+      ...channel,
+      apiFamily: channel.apiFamily ?? "aigc_video_json",
+      imageTransport: channel.imageTransport === "unsupported" ? "url_or_asset" : channel.imageTransport ?? "url_or_asset",
+      imageField: channel.imageField ?? "image",
+      supportedInputs: Array.from(new Set([...(channel.supportedInputs ?? []), "text", "image", "first_frame", "reference_image", "first_last_frame"]))
+    };
+  }
+  return channel;
 }
 
 function supportedInputsFor(model: ModelConfig) {

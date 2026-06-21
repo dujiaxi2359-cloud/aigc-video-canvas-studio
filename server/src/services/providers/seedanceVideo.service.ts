@@ -877,7 +877,8 @@ export function buildProxyBody(params: SeedanceProviderParams, refs: {
 
   if (refs.apiFamily === "aigc_video_json") {
     const model = params.modelName.toLowerCase();
-    const audioGeneration = /(?:^|[-_])audio(?:$|[-_])/.test(model)
+    const kling3Omni = /kling/.test(model) && /(3[._ -]?0|v3|omni)/.test(model);
+    const audioGeneration = /(?:^|[-_])audio(?:$|[-_])/.test(model) || (kling3Omni && !/(?:^|[-_])mute(?:$|[-_])/.test(model))
       ? "Enabled"
       : /(?:^|[-_])mute(?:$|[-_])/.test(model) ? "Disabled" : undefined;
     return compactObject({
