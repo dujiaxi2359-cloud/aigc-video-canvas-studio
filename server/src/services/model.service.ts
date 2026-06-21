@@ -109,8 +109,7 @@ function safeStringify(value: unknown) {
 }
 
 function upstreamQuotaMessage(providerId?: string) {
-  const channel = providerId ? `当前 ${providerId} 线路` : "当前上游线路";
-  return `${channel}额度已耗尽或达到并发上限，请切换到其他可用通道，或到对应中转/官方后台补充额度后再试。`;
+  return "额度不足";
 }
 
 function isUpstreamQuotaError(text: string) {

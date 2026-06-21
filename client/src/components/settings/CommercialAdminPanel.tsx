@@ -89,6 +89,12 @@ type AdminFailureLog = {
   createdAt?: number;
 };
 
+function displayFailureMessage(message?: string) {
+  if (!message) return "未知失败原因";
+  if (/token quota|quota is not enough|remain quota|need quota|RESOURCE_EXHAUSTED|USER_QUOTA_REACHED|credit|balance|insufficient|余额不足|额度不足|额度耗尽/i.test(message)) return "额度不足";
+  return message;
+}
+
 type Overview = {
   users: AdminUser[];
   workspaces: AdminWorkspace[];
@@ -376,7 +382,7 @@ export function CommercialAdminPanel() {
                 </div>
                 <div className="mt-2 min-w-0 text-[12px] font-medium text-white/82">{item.modelDisplayName}</div>
                 <div className="mt-1 text-[11px] text-white/38">{item.userEmail} · {item.provider || "provider"} · {item.inputMode || "mode"}</div>
-                <div className="mt-2 line-clamp-2 text-[12px] leading-5 text-red-100/85">{item.errorMessage || "未知失败原因"}</div>
+                <div className="mt-2 line-clamp-2 text-[12px] leading-5 text-red-100/85">{displayFailureMessage(item.errorMessage)}</div>
                 {item.prompt && <div className="mt-2 line-clamp-1 text-[11px] text-white/28">Prompt：{item.prompt}</div>}
               </div>
             ))}
