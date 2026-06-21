@@ -497,19 +497,43 @@ function configuredTaskId(payload: Record<string, unknown>, config?: VideoReques
   return taskId(payload);
 }
 
+function normalizeStatus(value: unknown) {
+  return typeof value === "string" ? value.trim().toLowerCase() : "";
+}
+
+function directStatus(payload: Record<string, unknown>, keys: string[]) {
+  for (const key of keys) {
+    const value = normalizeStatus(payload[key]);
+    if (value) return value;
+  }
+  return "";
+}
+
+function nestedStatus(payload: Record<string, unknown>, keys: string[]) {
+  const data = record(payload.data);
+  const result = record(payload.result);
+  const output = record(payload.output);
+  const candidates = [
+    directStatus(payload, keys),
+    directStatus(data, keys),
+    directStatus(record(data.data), keys),
+    directStatus(result, keys),
+    directStatus(output, keys)
+  ].filter(Boolean);
+  return candidates[0] ?? "";
+}
+
 function taskStatus(payload: Record<string, unknown>) {
-  const value = findStringByKeys(payload, ["status", "state", "task_status", "taskStatus", "phase"]);
-  return value ? value.toLowerCase() : "";
+  return nestedStatus(payload, ["status", "state", "task_status", "taskStatus", "phase"]);
 }
 
 function configuredStatus(payload: Record<string, unknown>, config?: VideoRequestConfig) {
   const preferred = [config?.statusField, "status", "state", "task_status", "taskStatus", "phase"].filter(Boolean) as string[];
-  const value = findStringByKeys(payload, preferred);
-  return value ? value.toLowerCase() : "";
+  return nestedStatus(payload, preferred);
 }
 
-const completedStatuses = new Set(["completed", "succeeded", "success", "done", "finished"]);
-const failedStatuses = new Set(["failed", "error", "cancelled", "canceled", "fail"]);
+const completedStatuses = new Set(["completed", "succeeded", "success", "done", "finished", "succeed"]);
+const failedStatuses = new Set(["failed", "failure", "error", "cancelled", "canceled", "fail"]);
 
 function isCompletedStatus(status: string) {
   return completedStatuses.has(status.toLowerCase());
@@ -517,6 +541,14 @@ function isCompletedStatus(status: string) {
 
 function isFailedStatus(status: string) {
   return failedStatuses.has(status.toLowerCase());
+}
+
+function seedanceCreateBusinessFailed(payload: Record<string, unknown>) {
+  const statusCode = Number(payload.status_code ?? payload.statusCode ?? payload.code_status ?? 0);
+  if (statusCode >= 400) return true;
+  const code = normalizeStatus(payload.code);
+  if (!code || code === "success" || code === "ok") return false;
+  return !configuredTaskId(payload) && !videoUrl(payload);
 }
 
 function isSeedanceAssetRetryableCreateFailure(payload: Record<string, unknown>) {
@@ -1103,7 +1135,8 @@ export async function generateVideoWithSeedance(params: SeedanceProviderParams):
               : JSON.stringify(requestBody.body)
           });
           task = await responsePayload(response);
-          if (!response.ok && requestBody.source === "seedance_asset" && isSeedanceAssetRetryableCreateFailure(task) && createAttempt < createAttempts) {
+          const createFailed = !response.ok || seedanceCreateBusinessFailed(task);
+          if (createFailed && requestBody.source === "seedance_asset" && isSeedanceAssetRetryableCreateFailure(task) && createAttempt < createAttempts) {
             console.warn("[seedance asset create retry]", {
               endpoint,
               model: params.modelName,
@@ -1114,7 +1147,7 @@ export async function generateVideoWithSeedance(params: SeedanceProviderParams):
             await sleep(createRetryDelayMs);
             continue;
           }
-          if (!response.ok) {
+          if (createFailed) {
             if (modelAccessDenied(task)) {
               throw new ProviderError(
                 "MODEL_ACCESS_DENIED",
@@ -1129,6 +1162,10 @@ export async function generateVideoWithSeedance(params: SeedanceProviderParams):
                 model: params.modelName,
                 reason: errorMessage(task)
               });
+              break;
+            }
+            if (isRetryableSeedancePollFailure(response, task)) {
+              createError = new ProviderError("PROVIDER_ERROR", `${label} 中转任务创建暂时不可查，请稍后重试。`, preview(task), { endpoint });
               break;
             }
             if (assetDownloadError(task)) {
