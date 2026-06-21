@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import { downloadGeneratedFile, saveGeneratedBuffer } from "../../utils/downloadGeneratedFile.js";
-import { normalizeImageAspectRatio } from "../../utils/imageAspectRatio.js";
+import { aspectRatioToOpenAIImageSize } from "../../utils/imageAspectRatio.js";
 import { readGeneratedFileMetadata } from "../../utils/mediaMetadata.js";
 import { ProviderError } from "../../utils/providerErrors.js";
 import { getAsset } from "../asset.service.js";
@@ -90,19 +90,19 @@ function endpointHost(endpoint: string) {
   }
 }
 
-function mapAspectRatioToAzureSize(aspectRatio?: string) {
-  switch (normalizeImageAspectRatio(aspectRatio)) {
-    case "1:1":
-      return "1024x1024";
-    case "3:4":
-    case "9:16":
-      return "1024x1536";
-    case "4:3":
-    case "16:9":
-      return "1536x1024";
-    default:
-      return "1024x1024";
-  }
+function mapAspectRatioToAzureSize(aspectRatio?: string, modelName?: string) {
+  return aspectRatioToOpenAIImageSize(aspectRatio, modelName);
+}
+
+function isUnsupportedSizeError(message: string) {
+  return /invalid.*size|size must be one of|unsupported.*size|invalid_value/i.test(message) && /size/i.test(message);
+}
+
+function fallbackImageSize(size?: string) {
+  if (size === "2160x3840") return "1024x1536";
+  if (size === "3840x2160") return "1536x1024";
+  if (size === "2048x2048") return "1024x1024";
+  return undefined;
 }
 
 function extensionFor(format?: string) {
@@ -191,11 +191,12 @@ export async function generateImageWithAzureOpenAI(params: ImageProviderParams):
 
   try {
     let response: Response;
+    const requestedSize = mapAspectRatioToAzureSize(params.aspectRatio, params.modelName);
     if (params.inputMode === "text-to-image") {
       const body: Record<string, unknown> = {
         prompt: params.prompt,
         n: Math.max(1, params.generateCount || 1),
-        size: mapAspectRatioToAzureSize(params.aspectRatio)
+        size: requestedSize
       };
       if (!usesDeploymentPath) body.model = params.modelName;
       if (params.imageQuality && params.imageQuality !== "auto") body.quality = params.imageQuality;
@@ -207,42 +208,74 @@ export async function generateImageWithAzureOpenAI(params: ImageProviderParams):
         },
         body: JSON.stringify(body)
       });
+      if (!response.ok) {
+        const message = await readError(response);
+        const fallbackSize = fallbackImageSize(requestedSize);
+        if (fallbackSize && isUnsupportedSizeError(message)) {
+          response = await fetch(endpoint, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "api-key": params.apiKey
+            },
+            body: JSON.stringify({ ...body, size: fallbackSize })
+          });
+        } else {
+          throw classifyAzureError(message);
+        }
+      }
     } else {
       if (!params.imageAssetIds?.length) throw new ProviderError("MISSING_INPUT_ASSET", "Azure 图片编辑需要连接一张图片素材。");
-      const form = new FormData();
-      if (!usesDeploymentPath) form.set("model", params.modelName);
-      form.set("prompt", params.prompt);
-      form.set("n", String(Math.max(1, params.generateCount || 1)));
-      form.set("size", mapAspectRatioToAzureSize(params.aspectRatio));
-      if (params.imageQuality && params.imageQuality !== "auto") form.set("quality", params.imageQuality);
-      for (const assetId of params.imageAssetIds.slice(0, 16)) {
-        const asset = await getAsset(assetId);
-        if (!asset) throw new ProviderError("MISSING_INPUT_ASSET", "Azure 图片编辑引用的图片素材不存在或已被删除。");
-        const resolved = await resolveRemoteAsset(
-          { localPath: asset.localPath, url: asset.url, filename: asset.originalName, mimeType: asset.mimeType },
-          "azure-openai",
-          "image-edit"
-        );
-        if (resolved.type !== "multipart" || !resolved.localPath || !fs.existsSync(resolved.localPath)) {
-          throw new ProviderError("ADAPTER_NOT_IMPLEMENTED", "Azure 图片编辑当前需要 multipart 原图文件输入。");
+      const buildForm = async (size: string) => {
+        const form = new FormData();
+        if (!usesDeploymentPath) form.set("model", params.modelName);
+        form.set("prompt", params.prompt);
+        form.set("n", String(Math.max(1, params.generateCount || 1)));
+        form.set("size", size);
+        if (params.imageQuality && params.imageQuality !== "auto") form.set("quality", params.imageQuality);
+        for (const assetId of params.imageAssetIds!.slice(0, 16)) {
+          const asset = await getAsset(assetId);
+          if (!asset) throw new ProviderError("MISSING_INPUT_ASSET", "Azure 图片编辑引用的图片素材不存在或已被删除。");
+          const resolved = await resolveRemoteAsset(
+            { localPath: asset.localPath, url: asset.url, filename: asset.originalName, mimeType: asset.mimeType },
+            "azure-openai",
+            "image-edit"
+          );
+          if (resolved.type !== "multipart" || !resolved.localPath || !fs.existsSync(resolved.localPath)) {
+            throw new ProviderError("ADAPTER_NOT_IMPLEMENTED", "Azure 图片编辑当前需要 multipart 原图文件输入。");
+          }
+          const metadata = await readGeneratedFileMetadata(resolved.localPath);
+          console.log("[Azure OpenAI Image] input asset", {
+            assetId,
+            inputImageWidth: metadata.width,
+            inputImageHeight: metadata.height,
+            inputImageFileSize: metadata.fileSize,
+            usesPreviewUrl: false,
+            usesOriginalFile: true
+          });
+          const blob = new Blob([Buffer.from(readLocalFileAsBase64(resolved.localPath), "base64")], { type: resolved.mimeType });
+          form.append("image", blob, resolved.filename);
         }
-        const metadata = await readGeneratedFileMetadata(resolved.localPath);
-        console.log("[Azure OpenAI Image] input asset", {
-          assetId,
-          inputImageWidth: metadata.width,
-          inputImageHeight: metadata.height,
-          inputImageFileSize: metadata.fileSize,
-          usesPreviewUrl: false,
-          usesOriginalFile: true
-        });
-        const blob = new Blob([Buffer.from(readLocalFileAsBase64(resolved.localPath), "base64")], { type: resolved.mimeType });
-        form.append("image", blob, resolved.filename);
-      }
+        return form;
+      };
       response = await fetch(endpoint, {
         method: "POST",
         headers: { "api-key": params.apiKey },
-        body: form
+        body: await buildForm(requestedSize)
       });
+      if (!response.ok) {
+        const message = await readError(response);
+        const fallbackSize = fallbackImageSize(requestedSize);
+        if (fallbackSize && isUnsupportedSizeError(message)) {
+          response = await fetch(endpoint, {
+            method: "POST",
+            headers: { "api-key": params.apiKey },
+            body: await buildForm(fallbackSize)
+          });
+        } else {
+          throw classifyAzureError(message);
+        }
+      }
     }
 
     if (!response.ok) throw classifyAzureError(await readError(response));

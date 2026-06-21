@@ -28,7 +28,23 @@ export function aspectRatioToQwen20Size(aspectRatio?: string) {
   return `${size.width}*${size.height}`;
 }
 
-export function aspectRatioToOpenAIImageSize(aspectRatio?: string) {
+function isGptImage2(modelName?: string) {
+  return /gpt-image-2|image-2/i.test(modelName ?? "");
+}
+
+export function aspectRatioToOpenAIImageSize(aspectRatio?: string, modelName?: string) {
+  if (isGptImage2(modelName)) {
+    switch (normalizeImageAspectRatio(aspectRatio)) {
+      case "9:16":
+        return "2160x3840";
+      case "16:9":
+        return "3840x2160";
+      case "1:1":
+        return "2048x2048";
+      default:
+        break;
+    }
+  }
   switch (normalizeImageAspectRatio(aspectRatio)) {
     case "3:4":
     case "9:16":

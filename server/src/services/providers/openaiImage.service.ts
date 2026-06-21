@@ -43,6 +43,17 @@ function isUnsupportedResponseFormatError(message: string) {
   return /unknown parameter/i.test(message) && /response_format/i.test(message);
 }
 
+function isUnsupportedSizeError(message: string) {
+  return /invalid.*size|size must be one of|unsupported.*size|invalid_value/i.test(message) && /size/i.test(message);
+}
+
+function fallbackImageSize(size?: unknown) {
+  if (size === "2160x3840") return "1024x1536";
+  if (size === "3840x2160") return "1536x1024";
+  if (size === "2048x2048") return "1024x1024";
+  return undefined;
+}
+
 function assertUsableApiKey(apiKey: string) {
   if (!apiKey) throw new Error("请先在设置中心配置该模型 API Key");
   if (apiKey.includes("*")) {
@@ -81,7 +92,7 @@ async function saveOpenAIImage(json: unknown, format?: string): Promise<Provider
 function applySharedImageParams(body: Record<string, unknown>, params: ImageProviderParams) {
   const n = Math.max(1, params.generateCount || 1);
   body.n = n;
-  const mappedSize = params.aspectRatio ? aspectRatioToOpenAIImageSize(params.aspectRatio) : params.imageSize && params.imageSize !== "auto" ? params.imageSize : undefined;
+  const mappedSize = params.aspectRatio ? aspectRatioToOpenAIImageSize(params.aspectRatio, params.modelName) : params.imageSize && params.imageSize !== "auto" ? params.imageSize : undefined;
   if (mappedSize) body.size = mappedSize;
   if (params.imageQuality && params.imageQuality !== "auto") body.quality = params.imageQuality;
   if (params.imageFormat && params.imageFormat !== "auto") body.output_format = params.imageFormat;
@@ -105,6 +116,19 @@ async function fetchOpenAIImageJson(input: {
   if (response.ok) return response.json();
 
   const message = await responseError(response);
+  const fallbackSize = fallbackImageSize(input.body.size);
+  if (fallbackSize && isUnsupportedSizeError(message)) {
+    const fallbackBody: Record<string, unknown> = { ...input.body, size: fallbackSize };
+    console.warn("[OpenAI Image] relay rejected high-resolution size; retrying with compatible size", {
+      modelName: fallbackBody.model,
+      endpoint: "/images/generations",
+      rejectedSize: input.body.size,
+      fallbackSize
+    });
+    response = await request(fallbackBody);
+    if (response.ok) return response.json();
+    throw new Error(humanOpenAIError(await responseError(response)));
+  }
   if (input.body.output_format && isUnsupportedResponseFormatError(message)) {
     const fallbackBody = { ...input.body };
     delete fallbackBody.output_format;
@@ -120,11 +144,11 @@ async function fetchOpenAIImageJson(input: {
   throw new Error(humanOpenAIError(message));
 }
 
-function buildImageEditForm(params: ImageProviderParams, options: { omitOutputFormat?: boolean } = {}) {
+function buildImageEditForm(params: ImageProviderParams, options: { omitOutputFormat?: boolean; sizeOverride?: string } = {}) {
   const form = new FormData();
   form.set("model", params.modelName);
   form.set("prompt", params.prompt);
-  const mappedSize = params.aspectRatio ? aspectRatioToOpenAIImageSize(params.aspectRatio) : params.imageSize && params.imageSize !== "auto" ? params.imageSize : undefined;
+  const mappedSize = options.sizeOverride ?? (params.aspectRatio ? aspectRatioToOpenAIImageSize(params.aspectRatio, params.modelName) : params.imageSize && params.imageSize !== "auto" ? params.imageSize : undefined);
   if (mappedSize) form.set("size", mappedSize);
   if (params.imageQuality && params.imageQuality !== "auto") form.set("quality", params.imageQuality);
   if (!options.omitOutputFormat && params.imageFormat && params.imageFormat !== "auto") form.set("output_format", params.imageFormat);
@@ -146,8 +170,8 @@ async function fetchOpenAIImageEditJson(input: {
   apiKey: string;
   params: ImageProviderParams;
 }) {
-  const request = async (omitOutputFormat = false) => {
-    const form = buildImageEditForm(input.params, { omitOutputFormat });
+  const request = async (omitOutputFormat = false, sizeOverride?: string) => {
+    const form = buildImageEditForm(input.params, { omitOutputFormat, sizeOverride });
     await appendImageEditAssets(form, input.params.imageAssetIds ?? []);
     return fetch(`${input.apiBaseUrl}/images/edits`, {
       method: "POST",
@@ -160,6 +184,19 @@ async function fetchOpenAIImageEditJson(input: {
   if (response.ok) return response.json();
 
   const message = await responseError(response);
+  const requestedSize = input.params.aspectRatio ? aspectRatioToOpenAIImageSize(input.params.aspectRatio, input.params.modelName) : input.params.imageSize;
+  const fallbackSize = fallbackImageSize(requestedSize);
+  if (fallbackSize && isUnsupportedSizeError(message)) {
+    console.warn("[OpenAI Image] relay rejected high-resolution edit size; retrying with compatible size", {
+      modelName: input.params.modelName,
+      endpoint: "/images/edits",
+      rejectedSize: requestedSize,
+      fallbackSize
+    });
+    response = await request(false, fallbackSize);
+    if (response.ok) return response.json();
+    throw new Error(humanOpenAIError(await responseError(response)));
+  }
   if (input.params.imageFormat && input.params.imageFormat !== "auto" && isUnsupportedResponseFormatError(message)) {
     console.warn("[OpenAI Image] relay rejected response_format; retrying edit without output_format", {
       modelName: input.params.modelName,
