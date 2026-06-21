@@ -401,6 +401,7 @@ export function seedanceAssetUploadShouldFallback(error: unknown) {
   const text = error instanceof ProviderError
     ? `${error.message}\n${error.debugMessage ?? ""}\n${preview(error.details)}`
     : rawErrorMessage(error);
+  if (/no access to model\s+seedance-asset|seedance-asset.*(?:no access|unauthorized|forbidden|无权限|未开通|不可用)/i.test(text)) return true;
   return /not found|not support|unsupported|method not allowed/i.test(text);
 }
 
@@ -776,10 +777,17 @@ function shouldTryNextPollAttempt(response: Response, payload: Record<string, un
   return /invalid url|not found|cannot\s+(?:get|post)|method not allowed|route|endpoint/i.test(message);
 }
 
-function isRetryablePollFailure(response: Response, payload: Record<string, unknown>) {
-  if (response.ok) return false;
-  if (![408, 409, 425, 429, 500, 502, 503, 504].includes(response.status)) return false;
-  return /capacity|fully loaded|try again later|rate limit|too many|busy|queue|queued|pending|processing|timeout|temporar|upstream/i.test(JSON.stringify(payload));
+function seedanceTaskFetchPending(payload: Record<string, unknown>) {
+  const text = JSON.stringify(payload);
+  return /fail_to_fetch_task|failed?\s+to\s+fetch\s+task|task.*(?:not\s+ready|not\s+found|not\s+exist|pending)|任务.*(?:未生成|不存在|查询失败|暂未|稍后)/i.test(text);
+}
+
+export function isRetryableSeedancePollFailure(response: Response, payload: Record<string, unknown>) {
+  const payloadStatus = Number(payload.status_code ?? payload.statusCode ?? payload.code_status ?? 0);
+  const status = response.ok && payloadStatus ? payloadStatus : response.status;
+  if (![408, 409, 425, 429, 500, 502, 503, 504].includes(status)) return false;
+  const text = JSON.stringify(payload);
+  return seedanceTaskFetchPending(payload) || /capacity|fully loaded|try again later|rate limit|too many|busy|queue|queued|pending|processing|timeout|temporar|upstream/i.test(text);
 }
 
 function isRetryablePollNetworkError(error: unknown) {
@@ -1214,7 +1222,7 @@ export async function generateVideoWithSeedance(params: SeedanceProviderParams):
         }
         task = pollResult.task;
         const pollResponse = pollResult.response;
-        if (!pollResponse.ok && isRetryablePollFailure(pollResponse, task)) {
+        if (isRetryableSeedancePollFailure(pollResponse, task)) {
           await saveGenerationTask({
             id,
             status: "processing",

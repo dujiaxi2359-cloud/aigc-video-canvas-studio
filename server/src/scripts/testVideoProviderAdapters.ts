@@ -1,6 +1,6 @@
 import { grokCreateEndpoint, grokPollEndpoint, grokRequestModelName, isAi666GrokRelay, isOfficialGrokEndpoint } from "../services/providers/grokVideo.service.js";
 import { klingBearerToken, klingCreateEndpoint, klingPollEndpoint, normalizeKlingPrompt } from "../services/providers/klingVideo.service.js";
-import { buildProxyBody, buildSeedance15Multipart, seedanceAssetUploadShouldFallback, seedanceAuthorizationValues, seedanceCreateEndpoint, seedancePollEndpoint } from "../services/providers/seedanceVideo.service.js";
+import { buildProxyBody, buildSeedance15Multipart, isRetryableSeedancePollFailure, seedanceAssetUploadShouldFallback, seedanceAuthorizationValues, seedanceCreateEndpoint, seedancePollEndpoint } from "../services/providers/seedanceVideo.service.js";
 import { configuredRelayModelName, veoProxyCreateEndpoint } from "../services/providers/veoProxyVideo.service.js";
 import { joinUrl, resolveVideoRequestConfig } from "../services/providers/videoRequestAdapter.js";
 import { getVideoModelCapability } from "../config/videoModelCapabilities.js";
@@ -729,6 +729,18 @@ assert(
 assert(
   seedanceAssetUploadShouldFallback(new ProviderError("SEEDANCE_ASSET_UPLOAD_FAILED", "Seedance 素材库接口调用失败：not found", "{\"message\":\"not found\"}", { upstreamStatus: 404 })),
   "Seedance asset upload may fall back only when the relay does not provide an asset endpoint"
+);
+assert(
+  seedanceAssetUploadShouldFallback(new ProviderError("SEEDANCE_ASSET_UPLOAD_FAILED", "Seedance 素材库接口调用失败：This token has no access to model seedance-asset", "{\"message\":\"This token has no access to model seedance-asset\"}", { upstreamStatus: 403 })),
+  "Seedance asset upload should fall back to public URLs when the current relay key has no seedance-asset permission"
+);
+assert(
+  isRetryableSeedancePollFailure(new Response("{}", { status: 502 }), { code: "fail_to_fetch_task", message: "fail to fetch task" }),
+  "Seedance poll should keep waiting when the relay returns fail_to_fetch_task with HTTP 502"
+);
+assert(
+  isRetryableSeedancePollFailure(new Response("{}", { status: 200 }), { status_code: 502, code: "fail_to_fetch_task", message: "fail to fetch task" }),
+  "Seedance poll should keep waiting when the relay wraps fail_to_fetch_task inside a 200 JSON body"
 );
 const seedanceNativeBody = buildProxyBody({
   modelName: "doubao-seedance-2-0-260128",
