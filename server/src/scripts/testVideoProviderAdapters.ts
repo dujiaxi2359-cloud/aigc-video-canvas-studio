@@ -1,4 +1,4 @@
-import { grokCreateEndpoint, grokPollEndpoint, grokRequestModelName, isAi666GrokRelay, isOfficialGrokEndpoint } from "../services/providers/grokVideo.service.js";
+import { grokCreateEndpoint, grokPollEndpoint, grokPollEndpointCandidates, grokRequestModelName, isAi666GrokRelay, isOfficialGrokEndpoint } from "../services/providers/grokVideo.service.js";
 import { klingBearerToken, klingCreateEndpoint, klingPollEndpoint, normalizeKlingPrompt } from "../services/providers/klingVideo.service.js";
 import { buildProxyBody, buildSeedance15Multipart, isRetryableSeedancePollFailure, seedanceAssetUploadShouldFallback, seedanceAuthorizationValues, seedanceCreateEndpoint, seedancePollEndpoint } from "../services/providers/seedanceVideo.service.js";
 import { configuredRelayModelName, veoProxyCreateEndpoint } from "../services/providers/veoProxyVideo.service.js";
@@ -48,6 +48,18 @@ assert(
 assert(
   grokPollEndpoint("https://relay.example/v1/videos", "request/1") === "https://relay.example/v1/videos/request%2F1",
   "Grok full relay videos endpoint should also be the polling base"
+);
+assert(
+  grokPollEndpointCandidates("https://relay.example/v1/videos", "request/1").includes("https://relay.example/v1/video/query?id=request%2F1"),
+  "Grok relay polling should fallback to unified video query when /videos/{id} reports task_not_exist"
+);
+assert(
+  grokPollEndpointCandidates("https://relay.example/v1/video/create", "task_abc").includes("https://relay.example/v1/videos/task_abc"),
+  "Grok unified create polling should fallback to OpenAI-style videos lookup"
+);
+assert(
+  grokPollEndpointCandidates("https://api.x.ai/v1", "request/1").length === 1,
+  "Official xAI polling should not try relay fallback endpoints"
 );
 assert(
   grokCreateEndpoint("POST https://relay.example/v1/videos") === "https://relay.example/v1/videos",
@@ -109,6 +121,10 @@ assert(
 assert(
   seedancePollEndpoint("https://ai.ai666.net/v1/video/create", "task_abc") === "https://ai.ai666.net/v1/video/query?id=task_abc",
   "Seedance unified create endpoint should poll through /v1/video/query"
+);
+assert(
+  isRetryableSeedancePollFailure(new Response("{}", { status: 404 }), { code: "task_not_exist", message: "task_not_exist" }),
+  "Generic video relay polling should treat 404 task_not_exist as retryable instead of immediate failure"
 );
 assert(
   seedanceCreateEndpoint("https://relay.example/v1") === "https://relay.example/v1/videos",

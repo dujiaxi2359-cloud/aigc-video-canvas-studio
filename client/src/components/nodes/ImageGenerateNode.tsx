@@ -12,7 +12,7 @@ import { useAssetStore } from "../../store/assetStore";
 import { useCanvasStore } from "../../store/canvasStore";
 import { useModelConfigStore } from "../../store/modelConfigStore";
 import { absoluteUploadUrl } from "../../utils/file";
-import { compactAssetIds, resolveImageNodeInputs } from "../../utils/workflowInputs";
+import { buildReferenceAwareImagePrompt, compactAssetIds, resolveImageNodeInputs, resolvePromptReferencedImageInputs } from "../../utils/workflowInputs";
 import { dedupeModelConfigsForSelect, findCanonicalModelConfig } from "../../utils/modelConfigSelection";
 import { AgentAnalyzeErrorButton } from "../agent/AgentAnalyzeErrorButton";
 import type { AvailableImageOptions, ImageInputMode } from "../../types/model";
@@ -313,18 +313,27 @@ function ImageGenerateNodeComponent(props: NodeProps<ImageGenerateNodeData>) {
     update(props.id, { status: "generating", errorMessage: undefined });
     setLocalError("");
     try {
-      if (props.data.inputMode !== "text-to-image" && !resolvedInputs.hasImageInput) {
+      const promptForRequest = localPrompt || props.data.prompt || "";
+      const promptReferencedInputs = resolvePromptReferencedImageInputs(promptForRequest, resolvedInputs);
+      const requestInputs = promptReferencedInputs.hasPromptReferences ? promptReferencedInputs : resolvedInputs;
+      const promptForProvider = promptReferencedInputs.hasPromptReferences
+        ? (promptReferencedInputs.referencePrompt ?? buildReferenceAwareImagePrompt(promptForRequest, requestInputs))
+        : promptForRequest;
+      if (promptReferencedInputs.missingPromptReferences.length) {
+        throw new Error(`提示词中的图片引用不存在：${promptReferencedInputs.missingPromptReferences.join("、")}。请使用 @素材1 或 @图片1。`);
+      }
+      if (props.data.inputMode !== "text-to-image" && !requestInputs.hasImageInput) {
         throw new Error(props.data.inputMode === "image-edit" ? "图片编辑需要连接一张图片素材。" : "图生图需要连接一张图片素材。");
       }
       const result = await generationApi.image({
         nodeId: props.id,
         modelConfigId: props.data.modelConfigId,
         inputMode: props.data.inputMode,
-        prompt: props.data.prompt,
+        prompt: promptForProvider,
         aspectRatio: props.data.aspectRatio ?? ratios[0],
         imageQuality: props.data.imageQuality ?? qualities[0],
         imageFormat: props.data.imageFormat ?? formats[0],
-        imageAssetIds: compactAssetIds(resolvedInputs.imageInputs),
+        imageAssetIds: compactAssetIds(requestInputs.imageInputs),
         generateCount: props.data.generateCount,
         qualityMode: props.data.qualityMode ?? "full_quality",
         realismMode: "natural_human"

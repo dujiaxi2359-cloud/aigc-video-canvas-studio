@@ -154,6 +154,36 @@ function seedanceEndpointCandidates(apiBaseUrl: string) {
   return Array.from(new Set([first, joinUrl(base, "/v1/video/create"), joinUrl(base, "/videos/generations"), joinUrl(base, "/video/generations")]));
 }
 
+function relayEndpointRoot(value: string) {
+  const endpoint = seedanceCreateEndpoint(value);
+  try {
+    const url = new URL(endpoint);
+    url.search = "";
+    url.hash = "";
+    url.pathname = url.pathname
+      .replace(/\/(?:v1\/video\/create|v1\/videos|video\/generations|videos\/generations|videos)$/i, "")
+      .replace(/\/+$/g, "");
+    return url.toString().replace(/\/$/g, "");
+  } catch {
+    return endpoint
+      .replace(/\/(?:v1\/video\/create|v1\/videos|video\/generations|videos\/generations|videos)$/i, "")
+      .replace(/\/+$/g, "");
+  }
+}
+
+function relayCreateEndpointCandidates(params: SeedanceProviderParams) {
+  const baseUrl = params.videoRequestConfig?.baseUrl ?? params.apiBaseUrl;
+  const root = relayEndpointRoot(baseUrl);
+  return Array.from(new Set([
+    params.videoRequestConfig?.finalUrl,
+    ...seedanceEndpointCandidates(params.apiBaseUrl),
+    joinUrl(root, "/v1/videos"),
+    joinUrl(root, "/v1/video/create"),
+    joinUrl(root, "/v1/video/generations"),
+    joinUrl(root, "/v1/videos/generations")
+  ].filter(Boolean) as string[]));
+}
+
 function parseJsonCandidate(text: string): unknown | undefined {
   const trimmed = text.trim();
   if (!trimmed) return undefined;
@@ -738,7 +768,7 @@ function apiFamilyFor(params: SeedanceProviderParams): VideoApiFamily {
 }
 
 function configuredCreateEndpoints(params: SeedanceProviderParams) {
-  return params.videoRequestConfig ? [params.videoRequestConfig.finalUrl] : seedanceEndpointCandidates(params.apiBaseUrl);
+  return relayCreateEndpointCandidates(params);
 }
 
 function requiresPublicImageUrl(apiFamily: VideoApiFamily) {
@@ -803,7 +833,49 @@ function runApiPollAttempts(params: SeedanceProviderParams, taskIdValue: string)
   ];
 }
 
+function genericPollAttempts(params: SeedanceProviderParams, pollEndpoint: string, taskIdValue: string): Array<{ endpoint: string; init: RequestInit }> {
+  const baseUrl = params.videoRequestConfig?.baseUrl ?? params.apiBaseUrl;
+  const root = relayEndpointRoot(baseUrl);
+  const encoded = encodeURIComponent(taskIdValue);
+  const queryEndpoint = joinUrl(root, "/v1/video/query");
+  return [
+    {
+      endpoint: pollEndpoint,
+      init: { method: "GET", headers: pollHeaders(params) }
+    },
+    {
+      endpoint: joinUrl(root, `/v1/videos/${encoded}`),
+      init: { method: "GET", headers: pollHeaders(params) }
+    },
+    {
+      endpoint: `${queryEndpoint}?id=${encoded}`,
+      init: { method: "GET", headers: pollHeaders(params) }
+    },
+    {
+      endpoint: `${queryEndpoint}?task_id=${encoded}`,
+      init: { method: "GET", headers: pollHeaders(params) }
+    },
+    {
+      endpoint: joinUrl(root, `/v1/video/generations/${encoded}`),
+      init: { method: "GET", headers: pollHeaders(params) }
+    },
+    {
+      endpoint: joinUrl(root, `/v1/videos/generations/${encoded}`),
+      init: { method: "GET", headers: pollHeaders(params) }
+    },
+    {
+      endpoint: queryEndpoint,
+      init: { method: "POST", headers: pollHeaders(params, true), body: JSON.stringify({ id: taskIdValue }) }
+    },
+    {
+      endpoint: queryEndpoint,
+      init: { method: "POST", headers: pollHeaders(params, true), body: JSON.stringify({ task_id: taskIdValue }) }
+    }
+  ].filter((attempt, index, attempts) => attempts.findIndex((item) => item.endpoint === attempt.endpoint && item.init.method === attempt.init.method && item.init.body === attempt.init.body) === index);
+}
+
 function shouldTryNextPollAttempt(response: Response, payload: Record<string, unknown>) {
+  if (seedanceTaskFetchPending(payload)) return true;
   if (response.ok) return false;
   const message = `${response.status} ${JSON.stringify(payload)}`;
   return /invalid url|not found|cannot\s+(?:get|post)|method not allowed|route|endpoint/i.test(message);
@@ -811,13 +883,13 @@ function shouldTryNextPollAttempt(response: Response, payload: Record<string, un
 
 function seedanceTaskFetchPending(payload: Record<string, unknown>) {
   const text = JSON.stringify(payload);
-  return /fail_to_fetch_task|failed?\s+to\s+fetch\s+task|task.*(?:not\s+ready|not\s+found|not\s+exist|pending)|任务.*(?:未生成|不存在|查询失败|暂未|稍后)/i.test(text);
+  return /task_not_exist|fail_to_fetch_task|failed?\s+to\s+fetch\s+task|task.*(?:not\s+ready|not\s+found|not\s+exist|does\s+not\s+exist|pending)|任务.*(?:未生成|不存在|查询失败|暂未|稍后)/i.test(text);
 }
 
 export function isRetryableSeedancePollFailure(response: Response, payload: Record<string, unknown>) {
   const payloadStatus = Number(payload.status_code ?? payload.statusCode ?? payload.code_status ?? 0);
   const status = response.ok && payloadStatus ? payloadStatus : response.status;
-  if (![408, 409, 425, 429, 500, 502, 503, 504].includes(status)) return false;
+  if (![404, 408, 409, 425, 429, 500, 502, 503, 504].includes(status)) return false;
   const text = JSON.stringify(payload);
   return seedanceTaskFetchPending(payload) || /capacity|fully loaded|try again later|rate limit|too many|busy|queue|queued|pending|processing|timeout|temporar|upstream/i.test(text);
 }
@@ -827,15 +899,11 @@ function isRetryablePollNetworkError(error: unknown) {
 }
 
 async function fetchPollTask(params: SeedanceProviderParams, pollEndpoint: string, taskIdValue: string): Promise<PollResult> {
-  if (!isRunApiVideoCreate(params)) {
-    const response = await fetch(pollEndpoint, {
-      headers: pollHeaders(params)
-    });
-    return { endpoint: pollEndpoint, response, task: await responsePayload(response) };
-  }
-
   let last: PollResult | undefined;
-  for (const attempt of runApiPollAttempts(params, taskIdValue)) {
+  const attempts = isRunApiVideoCreate(params)
+    ? runApiPollAttempts(params, taskIdValue)
+    : genericPollAttempts(params, pollEndpoint, taskIdValue);
+  for (const attempt of attempts) {
     const response = await fetch(attempt.endpoint, attempt.init);
     const task = await responsePayload(response);
     last = { endpoint: attempt.endpoint, response, task };
@@ -1189,7 +1257,6 @@ export async function generateVideoWithSeedance(params: SeedanceProviderParams):
         if (remoteUrl || id) break;
       }
       if (remoteUrl || id) break;
-      if (params.videoRequestConfig) break;
     }
 
     if (createError && !remoteUrl && !id) throw createError;

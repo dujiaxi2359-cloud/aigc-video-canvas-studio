@@ -18,6 +18,9 @@ async function responseError(response: Response) {
 
 function humanOpenAIError(message: string) {
   const lower = message.toLowerCase();
+  if (isUnsupportedResponseFormatError(message)) {
+    return "当前图片中转不兼容 gpt-image-2 的图片格式参数，会把 output_format 错误转成旧参数 response_format。系统已尝试自动降级；如果仍失败，请在设置中心更换支持新版图片接口的中转线路。";
+  }
   if (lower.includes("incorrect api key") || lower.includes("invalid api key") || lower.includes("unauthorized") || lower.includes("401")) {
     return "OpenAI API Key 无效。请确认你填写的是 platform.openai.com 创建的 API Key，不是 ChatGPT 登录账号、不是 Azure Key、不是其他中转平台 Key。";
   }
@@ -28,6 +31,10 @@ function humanOpenAIError(message: string) {
     return `OpenAI 图片模型不可用或没有权限：${message}`;
   }
   return `OpenAI 图片生成失败：${message}`;
+}
+
+function isUnsupportedResponseFormatError(message: string) {
+  return /unknown parameter/i.test(message) && /response_format/i.test(message);
 }
 
 function assertUsableApiKey(apiKey: string) {
@@ -74,6 +81,92 @@ function applySharedImageParams(body: Record<string, unknown>, params: ImageProv
   if (params.imageFormat && params.imageFormat !== "auto") body.output_format = params.imageFormat;
 }
 
+async function fetchOpenAIImageJson(input: {
+  apiBaseUrl: string;
+  apiKey: string;
+  body: Record<string, unknown>;
+}) {
+  const request = async (body: Record<string, unknown>) => fetch(`${input.apiBaseUrl}/images/generations`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${input.apiKey}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(body)
+  });
+
+  let response = await request(input.body);
+  if (response.ok) return response.json();
+
+  const message = await responseError(response);
+  if (input.body.output_format && isUnsupportedResponseFormatError(message)) {
+    const fallbackBody = { ...input.body };
+    delete fallbackBody.output_format;
+    console.warn("[OpenAI Image] relay rejected response_format; retrying without output_format", {
+      modelName: fallbackBody.model,
+      endpoint: "/images/generations"
+    });
+    response = await request(fallbackBody);
+    if (response.ok) return response.json();
+    throw new Error(humanOpenAIError(await responseError(response)));
+  }
+
+  throw new Error(humanOpenAIError(message));
+}
+
+function buildImageEditForm(params: ImageProviderParams, options: { omitOutputFormat?: boolean } = {}) {
+  const form = new FormData();
+  form.set("model", params.modelName);
+  form.set("prompt", params.prompt);
+  const mappedSize = params.aspectRatio ? aspectRatioToOpenAIImageSize(params.aspectRatio) : params.imageSize && params.imageSize !== "auto" ? params.imageSize : undefined;
+  if (mappedSize) form.set("size", mappedSize);
+  if (params.imageQuality && params.imageQuality !== "auto") form.set("quality", params.imageQuality);
+  if (!options.omitOutputFormat && params.imageFormat && params.imageFormat !== "auto") form.set("output_format", params.imageFormat);
+  form.set("n", String(Math.max(1, params.generateCount || 1)));
+  return form;
+}
+
+async function appendImageEditAssets(form: FormData, assetIds: string[]) {
+  for (const assetId of assetIds.slice(0, 16)) {
+    const asset = await ensureAssetLocalFile(await getAsset(assetId), "OpenAI 图片编辑引用的图片素材");
+    const buffer = fs.readFileSync(asset.localPath);
+    const blob = new Blob([buffer]);
+    form.append("image", blob, asset.originalName);
+  }
+}
+
+async function fetchOpenAIImageEditJson(input: {
+  apiBaseUrl: string;
+  apiKey: string;
+  params: ImageProviderParams;
+}) {
+  const request = async (omitOutputFormat = false) => {
+    const form = buildImageEditForm(input.params, { omitOutputFormat });
+    await appendImageEditAssets(form, input.params.imageAssetIds ?? []);
+    return fetch(`${input.apiBaseUrl}/images/edits`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${input.apiKey}` },
+      body: form
+    });
+  };
+
+  let response = await request(false);
+  if (response.ok) return response.json();
+
+  const message = await responseError(response);
+  if (input.params.imageFormat && input.params.imageFormat !== "auto" && isUnsupportedResponseFormatError(message)) {
+    console.warn("[OpenAI Image] relay rejected response_format; retrying edit without output_format", {
+      modelName: input.params.modelName,
+      endpoint: "/images/edits"
+    });
+    response = await request(true);
+    if (response.ok) return response.json();
+    throw new Error(humanOpenAIError(await responseError(response)));
+  }
+
+  throw new Error(humanOpenAIError(message));
+}
+
 export async function generateImageWithOpenAI(params: ImageProviderParams): Promise<ProviderGenerateResult> {
   assertUsableApiKey(params.apiKey);
 
@@ -93,45 +186,12 @@ export async function generateImageWithOpenAI(params: ImageProviderParams): Prom
     };
     applySharedImageParams(body, params);
 
-    const response = await fetch(`${apiBaseUrl}/images/generations`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${params.apiKey}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify(body)
-    });
-
-    if (!response.ok) throw new Error(humanOpenAIError(await responseError(response)));
-    return saveOpenAIImage(await response.json(), params.imageFormat);
+    return saveOpenAIImage(await fetchOpenAIImageJson({ apiBaseUrl, apiKey: params.apiKey, body }), params.imageFormat);
   }
 
   if (!params.imageAssetIds?.length) {
     throw new ProviderError("MISSING_INPUT_ASSET", "OpenAI 图片编辑需要连接至少一张图片素材。");
   }
 
-  const form = new FormData();
-  form.set("model", params.modelName);
-  form.set("prompt", params.prompt);
-  const mappedSize = params.aspectRatio ? aspectRatioToOpenAIImageSize(params.aspectRatio) : params.imageSize && params.imageSize !== "auto" ? params.imageSize : undefined;
-  if (mappedSize) form.set("size", mappedSize);
-  if (params.imageQuality && params.imageQuality !== "auto") form.set("quality", params.imageQuality);
-  if (params.imageFormat && params.imageFormat !== "auto") form.set("output_format", params.imageFormat);
-  form.set("n", String(Math.max(1, params.generateCount || 1)));
-
-  for (const assetId of params.imageAssetIds.slice(0, 16)) {
-    const asset = await ensureAssetLocalFile(await getAsset(assetId), "OpenAI 图片编辑引用的图片素材");
-    const buffer = fs.readFileSync(asset.localPath);
-    const blob = new Blob([buffer]);
-    form.append("image", blob, asset.originalName);
-  }
-
-  const response = await fetch(`${apiBaseUrl}/images/edits`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${params.apiKey}` },
-    body: form
-  });
-
-  if (!response.ok) throw new Error(humanOpenAIError(await responseError(response)));
-  return saveOpenAIImage(await response.json(), params.imageFormat);
+  return saveOpenAIImage(await fetchOpenAIImageEditJson({ apiBaseUrl, apiKey: params.apiKey, params }), params.imageFormat);
 }

@@ -327,7 +327,12 @@ function mergeOfficialAndChannelCapabilities(official: ModelCatalogItem | undefi
 }
 
 function errorText(error: unknown) {
-  return error instanceof Error ? error.message : "操作失败，请确认后端服务已启动。";
+  const message = error instanceof Error ? error.message : "";
+  if (/internal server error/i.test(message)) return "设置服务暂时不可用，请确认后端服务已启动并已登录当前工作空间。";
+  if (/failed to fetch|network|fetch failed/i.test(message)) return "无法连接后端服务，请确认本地服务或云端 API 正常运行。";
+  if (/401|unauthorized|未登录|登录/i.test(message)) return "登录会话已失效，请重新登录后再配置模型。";
+  if (/403|forbidden|权限/i.test(message)) return "当前账号没有模型配置权限，请切换到工作空间管理员。";
+  return message || "操作失败，请确认后端服务已启动。";
 }
 
 function normalizeBaseUrl(value: string) {
@@ -755,8 +760,11 @@ export function ModelConfigCenter() {
       const savedRoute = normalizeBaseUrl(apiBaseUrl);
       if (typeof window !== "undefined") window.localStorage.setItem(lastApiRouteStorageKey, savedRoute);
       setApiBaseUrl(savedRoute);
+      setApiKey("");
       setManualModel("");
-      setMessage(`${categoryMeta[activeCategory].label}同步成功：新增 ${result.createdCount} 个、更新 ${result.updatedCount} 个。其它中转线路已保留，可在节点模型下拉里按线路切换。`);
+      setFetchedModels(models);
+      setSelectedModels(new Set(models));
+      setMessage(`${categoryMeta[activeCategory].label}同步成功：新增 ${result.createdCount} 个、更新 ${result.updatedCount} 个。API Key 已加密保存并从输入框清空；其它中转线路已保留。`);
       setMessageTone("success");
     } catch (error) {
       setMessage(errorText(error));

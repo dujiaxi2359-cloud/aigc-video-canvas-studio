@@ -66,6 +66,8 @@ export function resolveImageNodeInputs(nodeId: string, nodes: Node[], edges: Edg
   };
 }
 
+export type ResolvedImageInputs = ReturnType<typeof resolveImageNodeInputs>;
+
 export function resolveVideoNodeInputs(nodeId: string, nodes: Node[], edges: Edge[]) {
   const sources = incomingNodes(nodeId, nodes, edges);
   const imageInputs = sources.filter(isImageNode).map(toAssetInput).filter(isUsableInput);
@@ -87,6 +89,66 @@ export function resolveVideoNodeInputs(nodeId: string, nodes: Node[], edges: Edg
 
 export function compactAssetIds(inputs: AssetInput[]) {
   return Array.from(new Set(inputs.map((input) => input.assetId).filter(Boolean) as string[]));
+}
+
+export type PromptImageReferenceBinding = {
+  token: string;
+  label: string;
+  kind: "image";
+  kindLabel: "图片";
+  kindIndex: number;
+  globalIndex: number;
+  sourceNodeId: string;
+  assetId?: string;
+  title?: string;
+};
+
+export function resolvePromptReferencedImageInputs(prompt: string, resolved: ResolvedImageInputs) {
+  const imageInputs: AssetInput[] = [];
+  const missing: string[] = [];
+  const bindings: PromptImageReferenceBinding[] = [];
+
+  const addBinding = (input: AssetInput, token: string, index: number) => {
+    const key = `${token}:${input.assetId ?? input.sourceNodeId ?? input.nodeId}`;
+    if (bindings.some((binding) => `${binding.token}:${binding.assetId ?? binding.sourceNodeId}` === key)) return;
+    bindings.push({
+      token,
+      label: `参考图片${index + 1}`,
+      kind: "image",
+      kindLabel: "图片",
+      kindIndex: index + 1,
+      globalIndex: index + 1,
+      sourceNodeId: input.sourceNodeId,
+      assetId: input.assetId,
+      title: input.title
+    });
+  };
+
+  const addByIndex = (index: number, label: string) => {
+    const source = resolved.imageInputs[index];
+    if (!source) {
+      missing.push(label);
+      return;
+    }
+    appendUnique(imageInputs, source);
+    addBinding(source, label, index);
+  };
+
+  for (const match of prompt.matchAll(/@(?:素材|参考素材|图像|图片|参考图|image)\s*(\d+)/gi)) {
+    addByIndex(Math.max(0, Number(match[1]) - 1), match[0] ?? "");
+  }
+
+  const hasPromptReferences = imageInputs.length + missing.length > 0;
+  if (!hasPromptReferences) return { ...resolved, hasPromptReferences: false, missingPromptReferences: [] as string[] };
+
+  return {
+    imageInputs,
+    hasImageInput: imageInputs.length > 0,
+    hasPromptReferences: true,
+    missingPromptReferences: missing,
+    referenceBindings: bindings,
+    referencePrompt: buildReferenceAwareImagePrompt(prompt, bindings)
+  };
 }
 
 export type ResolvedVideoInputs = ReturnType<typeof resolveVideoNodeInputs>;
@@ -223,6 +285,49 @@ function buildAutoReferenceBindings(resolved: Pick<ResolvedVideoInputs, "imageIn
   push("video", resolved.videoInputs);
   push("audio", resolved.audioInputs);
   return bindings;
+}
+
+function buildAutoImageReferenceBindings(resolved: Pick<ResolvedImageInputs, "imageInputs">): PromptImageReferenceBinding[] {
+  return resolved.imageInputs.map((input, index) => ({
+    token: `@素材${index + 1}`,
+    label: `参考图片${index + 1}`,
+    kind: "image",
+    kindLabel: "图片",
+    kindIndex: index + 1,
+    globalIndex: index + 1,
+    sourceNodeId: input.sourceNodeId,
+    assetId: input.assetId,
+    title: input.title
+  }));
+}
+
+export function buildReferenceAwareImagePrompt(prompt: string, bindingsOrInputs: PromptImageReferenceBinding[] | Pick<ResolvedImageInputs, "imageInputs">) {
+  const bindings = Array.isArray(bindingsOrInputs) ? bindingsOrInputs : buildAutoImageReferenceBindings(bindingsOrInputs);
+  if (!bindings.length) return prompt;
+
+  let normalizedPrompt = prompt;
+  const sorted = [...bindings].sort((a, b) => b.token.length - a.token.length);
+  for (const binding of sorted) {
+    normalizedPrompt = normalizedPrompt.split(binding.token).join(binding.label);
+  }
+
+  const seen = new Set<string>();
+  const rows = bindings
+    .filter((binding) => {
+      const key = `${binding.label}:${binding.assetId ?? binding.sourceNodeId}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .map((binding) => `${binding.label} = 图片${binding.kindIndex}「${readableAssetTitle(binding)}」`);
+
+  return [
+    "【图文参考绑定】",
+    ...rows,
+    "请严格按照用户描述中的参考图片编号理解主体、产品、场景、风格和构图关系。",
+    "",
+    `【用户创意】${normalizedPrompt.trim() || "请根据参考图片生成可用内容。"}`
+  ].join("\n");
 }
 
 export function buildReferenceAwareVideoPrompt(prompt: string, bindingsOrInputs: PromptReferenceBinding[] | Pick<ResolvedVideoInputs, "imageInputs" | "videoInputs" | "audioInputs">) {

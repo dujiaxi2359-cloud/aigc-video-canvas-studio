@@ -83,6 +83,42 @@ export function grokPollEndpoint(apiBaseUrl: string, requestId: string) {
   return `${createEndpoint}/${encodeURIComponent(requestId)}`;
 }
 
+function uniqueValues(values: Array<string | undefined>) {
+  return Array.from(new Set(values.filter(Boolean) as string[]));
+}
+
+function relayApiRoot(apiBaseUrl: string) {
+  const createEndpoint = grokCreateEndpoint(apiBaseUrl);
+  try {
+    const url = new URL(createEndpoint);
+    url.search = "";
+    url.hash = "";
+    url.pathname = url.pathname
+      .replace(/\/(?:videos\/generations|video\/generations|video\/create|videos)$/i, "")
+      .replace(/\/+$/g, "");
+    return url.toString().replace(/\/$/g, "");
+  } catch {
+    return createEndpoint
+      .replace(/\/(?:videos\/generations|video\/generations|video\/create|videos)$/i, "")
+      .replace(/\/+$/g, "");
+  }
+}
+
+export function grokPollEndpointCandidates(apiBaseUrl: string, requestId: string) {
+  const primary = grokPollEndpoint(apiBaseUrl, requestId);
+  if (isOfficialGrokEndpoint(apiBaseUrl)) return [primary];
+
+  const root = relayApiRoot(apiBaseUrl);
+  const encoded = encodeURIComponent(requestId);
+  return uniqueValues([
+    primary,
+    `${root}/video/query?id=${encoded}`,
+    `${root}/videos/${encoded}`,
+    `${root}/video/generations/${encoded}`,
+    `${root}/videos/generations/${encoded}`
+  ]);
+}
+
 export function isOfficialGrokEndpoint(apiBaseUrl: string) {
   try {
     return new URL(baseUrl(apiBaseUrl)).hostname === "api.x.ai";
@@ -140,10 +176,19 @@ function status(payload: Record<string, unknown>) {
 function errorMessage(payload: Record<string, unknown>) {
   const error = record(payload.error);
   const message = String(error.message ?? payload.message ?? payload.error ?? "未知错误");
+  const code = String(error.code ?? payload.code ?? "");
+  if (/task_not_exist|task not exist|task does not exist|not found/i.test(`${code} ${message}`)) {
+    return "Grok 中转任务查询失败：任务刚创建后查询端暂未同步，或当前中转的创建/查询协议不匹配。系统已尝试备用查询路径；仍失败时请切换同账号下其它 Grok 视频线路。";
+  }
   if (/orchestration-service|name or service not known|cannot connect to host|ssl:|getaddrinfo|service unavailable/i.test(message)) {
     return "Grok 中转商内部服务暂时不可达，请稍后重试或切换其他视频通道。";
   }
   return message;
+}
+
+function isTaskNotExist(payload: Record<string, unknown>) {
+  const error = record(payload.error);
+  return /task_not_exist|task not exist|task does not exist|not found/i.test(String(error.code ?? payload.code ?? error.message ?? payload.message ?? payload.error ?? ""));
 }
 
 function videoUrl(payload: Record<string, unknown>): string | undefined {
@@ -196,6 +241,53 @@ async function downloadGrokResult(input: {
     prefix: "video_grok",
     contentType: response.headers.get("content-type")
   });
+}
+
+async function pollGrokTask(input: {
+  apiBaseUrl: string;
+  apiKey: string;
+  requestId: string;
+  preferredEndpoint: string;
+  createdAt: number;
+}) {
+  const endpoints = uniqueValues([input.preferredEndpoint, ...grokPollEndpointCandidates(input.apiBaseUrl, input.requestId)]);
+  let lastPayload: Record<string, unknown> | undefined;
+  let lastStatus = 0;
+  let sawTaskNotExist = false;
+
+  for (const endpoint of endpoints) {
+    const response = await fetch(endpoint, {
+      headers: { Authorization: `Bearer ${input.apiKey}` }
+    });
+    const task = await responseJson(response);
+    lastPayload = task;
+    lastStatus = response.status;
+    if (response.ok && !isTaskNotExist(task)) {
+      return { task, endpoint };
+    }
+    if (isTaskNotExist(task)) {
+      sawTaskNotExist = true;
+      console.warn("[Grok Video] task lookup missed; trying fallback poll endpoint", {
+        requestId: input.requestId,
+        endpoint,
+        status: response.status
+      });
+      continue;
+    }
+    if (!response.ok) {
+      throw new ProviderError("PROVIDER_ERROR", `Grok 视频任务查询失败：${errorMessage(task)}`, JSON.stringify(task));
+    }
+  }
+
+  if (sawTaskNotExist && Date.now() - input.createdAt < 90 * 1000) {
+    return { task: lastPayload ?? { status: "submitted", message: "task_not_exist" }, endpoint: input.preferredEndpoint, transientTaskMiss: true };
+  }
+
+  throw new ProviderError(
+    "PROVIDER_ERROR",
+    `Grok 视频任务查询失败：${lastPayload ? errorMessage(lastPayload) : "task_not_exist"}`,
+    lastPayload ? JSON.stringify({ httpStatus: lastStatus, response: lastPayload, triedPollEndpoints: endpoints }) : JSON.stringify({ triedPollEndpoints: endpoints })
+  );
 }
 
 export async function generateVideoWithGrok(params: VideoProviderParams): Promise<ProviderGenerateResult> {
@@ -287,11 +379,11 @@ export async function generateVideoWithGrok(params: VideoProviderParams): Promis
     if (!response.ok) throw new ProviderError("PROVIDER_ERROR", `Grok 视频任务创建失败：${errorMessage(task)}`, JSON.stringify(task));
     const id = requestId(task);
     if (!id) throw new ProviderError("PROVIDER_ERROR", "Grok 视频接口没有返回 request_id。", JSON.stringify(task));
-    const pollEndpoint = grokPollEndpoint(params.apiBaseUrl, id);
+    let pollEndpoint = grokPollEndpoint(params.apiBaseUrl, id);
     await saveGenerationTask({
       id,
       status: status(task) || "submitted",
-      result: { provider: "grok", endpoint, pollEndpoint, nodeId: params.nodeId, modelName: params.modelName, response: task }
+      result: { provider: "grok", endpoint, pollEndpoint, pollEndpointCandidates: grokPollEndpointCandidates(params.apiBaseUrl, id), nodeId: params.nodeId, modelName: params.modelName, response: task }
     });
 
     const startedAt = Date.now();
@@ -305,12 +397,16 @@ export async function generateVideoWithGrok(params: VideoProviderParams): Promis
         throw new ProviderError("VEO_OPERATION_TIMEOUT", "Grok 视频任务超过 20 分钟仍未完成。");
       }
       await sleep(5000);
-      const pollResponse = await fetch(pollEndpoint, {
-        headers: { Authorization: `Bearer ${params.apiKey}` }
+      const polled = await pollGrokTask({
+        apiBaseUrl: params.apiBaseUrl,
+        apiKey: params.apiKey,
+        requestId: id,
+        preferredEndpoint: pollEndpoint,
+        createdAt: startedAt
       });
-      task = await responseJson(pollResponse);
+      task = polled.task;
+      pollEndpoint = polled.endpoint;
       await saveGenerationTask({ id, status: status(task) || "processing", result: task });
-      if (!pollResponse.ok) throw new ProviderError("PROVIDER_ERROR", `Grok 视频任务查询失败：${errorMessage(task)}`, JSON.stringify(task));
     }
 
     const remoteUrl = videoUrl(task);
