@@ -271,19 +271,44 @@ async function seedanceAssetRequest(params: SeedanceProviderParams, endpoint: st
 }
 
 function seedanceAssetGroupId(payload: Record<string, unknown>) {
-  return findStringByKeys(payload, ["Id", "id", "group_id", "groupId"]);
+  return findStringByKeys(payload, [
+    "Id",
+    "id",
+    "ID",
+    "GroupId",
+    "group_id",
+    "groupId",
+    "asset_group_id",
+    "assetGroupId",
+    "AssetGroupId",
+    "MaterialGroupId",
+    "material_group_id",
+    "materialGroupId"
+  ]);
 }
 
 function seedanceAssetId(payload: Record<string, unknown>) {
-  return findStringByKeys(payload, ["Id", "id", "asset_id", "assetId"]);
+  return findStringByKeys(payload, [
+    "Id",
+    "id",
+    "ID",
+    "AssetId",
+    "asset_id",
+    "assetId",
+    "MaterialId",
+    "material_id",
+    "materialId",
+    "resource_id",
+    "resourceId"
+  ]);
 }
 
 function seedanceAssetTaskId(payload: Record<string, unknown>) {
-  return findStringByKeys(payload, ["task_id", "taskId", "TaskId"]);
+  return findStringByKeys(payload, ["task_id", "taskId", "TaskId", "taskID", "TaskID", "request_id", "requestId"]);
 }
 
 function seedanceAssetStatus(payload: Record<string, unknown>) {
-  return findStringByKeys(payload, ["Status", "status"]);
+  return findStringByKeys(payload, ["Status", "status", "State", "state", "asset_status", "assetStatus", "phase"]);
 }
 
 function seedanceAssetType(type: "Image" | "Video" | "Audio") {
@@ -314,7 +339,10 @@ async function uploadSeedanceAsset(params: SeedanceProviderParams, groupId: stri
   });
   const assetId = seedanceAssetId(payload);
   const taskId = seedanceAssetTaskId(payload);
-  if (taskId) {
+  // Seedance relay docs return both Id and task_id, then immediately use
+  // asset://{Id} in /v1/video/generations. GetAsset is not part of the
+  // public contract for every relay, so strict active polling is opt-in.
+  if (taskId && process.env.SEEDANCE_ASSET_REQUIRE_ACTIVE === "true") {
     return `asset://${await waitForSeedanceAssetActive(params, taskId, assetId, type, index)}`;
   }
   if (!assetId) {
@@ -370,15 +398,10 @@ function seedanceAssetEndpointUnavailable(error: unknown) {
 
 export function seedanceAssetUploadShouldFallback(error: unknown) {
   if (seedanceAssetEndpointUnavailable(error)) return true;
-  if (error instanceof ProviderError) {
-    const details = record(error.details);
-    const upstreamStatus = Number(details.upstreamStatus ?? 0);
-    if (upstreamStatus >= 500) return true;
-  }
   const text = error instanceof ProviderError
     ? `${error.message}\n${error.debugMessage ?? ""}\n${preview(error.details)}`
     : rawErrorMessage(error);
-  return /fetch failed|network|econn|dns|timeout|socket|reset|tls|terminated|task_id is required/i.test(text);
+  return /not found|not support|unsupported|method not allowed/i.test(text);
 }
 
 async function uploadSeedanceAssetsIfAvailable(params: SeedanceProviderParams, urls: string[], type: "Image" | "Video" | "Audio") {
@@ -406,8 +429,12 @@ function seedanceInvalidAssetResource(payload: Record<string, unknown>) {
   return /invalid assets resources|invalid asset|asset.*(?:invalid|not valid|not found|not ready)/i.test(JSON.stringify(payload));
 }
 
+function seedanceAssetProviderTransient(payload: Record<string, unknown>) {
+  return /Asset provider error|fail to fetch task|asset.*(?:busy|processing|not ready|pending|timeout|temporar)|素材.*(?:处理中|未就绪|繁忙|超时)/i.test(JSON.stringify(payload));
+}
+
 function seedanceAssetReadyDelayMs() {
-  return Math.max(0, Number(process.env.SEEDANCE_ASSET_READY_DELAY_MS || 0));
+  return Math.max(0, Number(process.env.SEEDANCE_ASSET_READY_DELAY_MS || 1200));
 }
 
 function findStringByKeys(value: unknown, keys: string[], depth = 0): string | undefined {
@@ -481,7 +508,7 @@ function configuredStatus(payload: Record<string, unknown>, config?: VideoReques
 }
 
 const completedStatuses = new Set(["completed", "succeeded", "success", "done", "finished"]);
-const failedStatuses = new Set(["failed", "error", "cancelled", "canceled"]);
+const failedStatuses = new Set(["failed", "error", "cancelled", "canceled", "fail"]);
 
 function isCompletedStatus(status: string) {
   return completedStatuses.has(status.toLowerCase());
@@ -489,6 +516,10 @@ function isCompletedStatus(status: string) {
 
 function isFailedStatus(status: string) {
   return failedStatuses.has(status.toLowerCase());
+}
+
+function isSeedanceAssetRetryableCreateFailure(payload: Record<string, unknown>) {
+  return seedanceInvalidAssetResource(payload) || seedanceAssetProviderTransient(payload);
 }
 
 function progressValue(payload: Record<string, unknown>) {
@@ -538,7 +569,7 @@ function upstreamFriendlyErrorMessage(label: string, payload: Record<string, unk
     return `${label} 中转商内部服务暂时不可达，请稍后重试或切换其他视频通道。`;
   }
   if (/InputImageSensitiveContentDetected|PrivacyInformation|may contain real person/i.test(decoded)) {
-    return `${label} 上游返回了输入素材审核提示。素材库引用已按 Active 状态校验；请保留当前素材重新提交一次，若仍失败再调整单张素材或提示词。`;
+    return `${label} 上游返回了输入素材审核提示。系统已通过素材库 asset 引用提交；请保留当前素材重新提交一次，若仍失败再调整单张素材或提示词。`;
   }
   if (/content review|unsafe content|protected IP|identifiable real person|sensitive content|内容审核|敏感内容/i.test(decoded)) {
     return `${label} 上游内容审核拒绝：提示词或参考素材未通过审核。请调整素材/提示词后重试，或切换其他通道。`;
@@ -996,7 +1027,8 @@ export async function generateVideoWithSeedance(params: SeedanceProviderParams):
       resolution: normalizedResolution,
       seconds
     });
-    const fallbackBody = hasSeedanceAssetReferences(images, videos, audios)
+    const allowPublicUrlFallback = apiFamily !== "seedance2_native";
+    const fallbackBody = allowPublicUrlFallback && hasSeedanceAssetReferences(images, videos, audios)
       ? buildProxyBody(params, {
         apiFamily,
         mode,
@@ -1042,54 +1074,73 @@ export async function generateVideoWithSeedance(params: SeedanceProviderParams):
     for (const candidate of configuredCreateEndpoints(params)) {
       endpoint = candidate;
       const multipart = apiFamily === "doubao_seedance15";
+      const bodyUsesSeedanceAssets = hasSeedanceAssetReferences(images, videos, audios);
       const jsonBodies = fallbackBody ? [
         { body, source: "seedance_asset" },
         { body: fallbackBody, source: "public_url_fallback" }
-      ] : [{ body, source: "primary" }];
+      ] : [{ body, source: bodyUsesSeedanceAssets ? "seedance_asset" : "primary" }];
       for (const requestBody of multipart ? [{ body, source: "multipart" }] : jsonBodies) {
-        const response = await fetch(endpoint, {
-          method: "POST",
-          headers: multipart
-            ? { Authorization: `Bearer ${params.apiKey}`, Accept: "application/json" }
-            : { Authorization: `Bearer ${params.apiKey}`, "Content-Type": "application/json", Accept: "application/json" },
-          body: multipart
-            ? buildSeedance15Multipart(params, { files: multipartFiles, aspectRatio: normalizedRatio, resolution: normalizedResolution, seconds })
-            : JSON.stringify(requestBody.body)
-        });
-        task = await responsePayload(response);
-        if (!response.ok) {
-          if (modelAccessDenied(task)) {
-            throw new ProviderError(
-              "MODEL_ACCESS_DENIED",
-              `当前 cy88 API Key 的套餐或 auto 分组没有模型「${params.modelName}」的调用权限。请在 cy88 开通该模型，或换用已授权的 API Key。`,
-              preview(task),
-              { endpoint, model: params.modelName, provider: "cy88", upstreamStatus: response.status }
-            );
-          }
-          if (seedanceInvalidAssetResource(task) && requestBody.source === "seedance_asset" && fallbackBody) {
-            console.warn("[seedance asset fallback]", {
+        const createAttempts = requestBody.source === "seedance_asset"
+          ? Math.max(1, Number(process.env.SEEDANCE_ASSET_CREATE_RETRY_ATTEMPTS || 4))
+          : 1;
+        const createRetryDelayMs = Math.max(500, Number(process.env.SEEDANCE_ASSET_CREATE_RETRY_DELAY_MS || 2500));
+        for (let createAttempt = 1; createAttempt <= createAttempts; createAttempt += 1) {
+          const response = await fetch(endpoint, {
+            method: "POST",
+            headers: multipart
+              ? { Authorization: `Bearer ${params.apiKey}`, Accept: "application/json" }
+              : { Authorization: `Bearer ${params.apiKey}`, "Content-Type": "application/json", Accept: "application/json" },
+            body: multipart
+              ? buildSeedance15Multipart(params, { files: multipartFiles, aspectRatio: normalizedRatio, resolution: normalizedResolution, seconds })
+              : JSON.stringify(requestBody.body)
+          });
+          task = await responsePayload(response);
+          if (!response.ok && requestBody.source === "seedance_asset" && isSeedanceAssetRetryableCreateFailure(task) && createAttempt < createAttempts) {
+            console.warn("[seedance asset create retry]", {
               endpoint,
               model: params.modelName,
+              attempt: createAttempt,
+              attempts: createAttempts,
               reason: errorMessage(task)
             });
+            await sleep(createRetryDelayMs);
             continue;
           }
-          if (assetDownloadError(task)) {
-            throw new ProviderError(
-              "PUBLIC_URL_REQUIRED",
-              "上游无法下载图片素材。请确认公网素材域名和隧道仍然有效，然后重试。",
-              preview(task),
-              { endpoint, whyBlocked: "noPublicImageUrl", upstreamResponse: task }
-            );
+          if (!response.ok) {
+            if (modelAccessDenied(task)) {
+              throw new ProviderError(
+                "MODEL_ACCESS_DENIED",
+                `当前 cy88 API Key 的套餐或 auto 分组没有模型「${params.modelName}」的调用权限。请在 cy88 开通该模型，或换用已授权的 API Key。`,
+                preview(task),
+                { endpoint, model: params.modelName, provider: "cy88", upstreamStatus: response.status }
+              );
+            }
+            if (seedanceInvalidAssetResource(task) && requestBody.source === "seedance_asset" && fallbackBody) {
+              console.warn("[seedance asset fallback]", {
+                endpoint,
+                model: params.modelName,
+                reason: errorMessage(task)
+              });
+              break;
+            }
+            if (assetDownloadError(task)) {
+              throw new ProviderError(
+                "PUBLIC_URL_REQUIRED",
+                "上游无法下载图片素材。请确认公网素材域名和隧道仍然有效，然后重试。",
+                preview(task),
+                { endpoint, whyBlocked: "noPublicImageUrl", upstreamResponse: task }
+              );
+            }
+            createError = new ProviderError("PROVIDER_ERROR", `${label} 中转任务创建失败：${upstreamFriendlyErrorMessage(label, task)}`, preview(task), { endpoint });
+            break;
           }
-          createError = new ProviderError("PROVIDER_ERROR", `${label} 中转任务创建失败：${upstreamFriendlyErrorMessage(label, task)}`, preview(task), { endpoint });
-          if (params.videoRequestConfig) break;
-          continue;
+          remoteUrl = videoUrl(configuredResult(task, params.videoRequestConfig));
+          id = configuredTaskId(task, params.videoRequestConfig);
+          if (remoteUrl || id) break;
+          createError = new ProviderError("PROVIDER_ERROR", `${label} 中转没有返回 task_id 或视频地址。`, preview(task), { endpoint, response: task });
+          break;
         }
-        remoteUrl = videoUrl(configuredResult(task, params.videoRequestConfig));
-        id = configuredTaskId(task, params.videoRequestConfig);
         if (remoteUrl || id) break;
-        createError = new ProviderError("PROVIDER_ERROR", `${label} 中转没有返回 task_id 或视频地址。`, preview(task), { endpoint, response: task });
       }
       if (remoteUrl || id) break;
       if (params.videoRequestConfig) break;

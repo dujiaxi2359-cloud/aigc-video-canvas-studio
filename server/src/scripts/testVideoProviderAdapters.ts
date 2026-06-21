@@ -719,12 +719,16 @@ assert(seedanceReference?.supportedModes.some((mode) => mode.mode === "video_ext
 assert(seedanceReference?.maxReferenceImages === 9 && seedanceReference.maxReferenceVideos === 3 && seedanceReference.maxReferenceAudios === 3, "Seedance 2.0 should expose official multimodal reference limits");
 assert(seedanceReference?.maxReferenceFiles === 12, "Seedance 2.0 should limit mixed references to 12 files");
 assert(
-  seedanceAssetUploadShouldFallback(new ProviderError("SEEDANCE_ASSET_UPLOAD_FAILED", "Seedance 素材库接口调用失败：Asset provider error", "{\"message\":\"Asset provider error\"}", { upstreamStatus: 502 })),
-  "Seedance asset upload should fall back to public URLs when the relay asset provider returns 5xx"
+  !seedanceAssetUploadShouldFallback(new ProviderError("SEEDANCE_ASSET_UPLOAD_FAILED", "Seedance 素材库接口调用失败：Asset provider error", "{\"message\":\"Asset provider error\"}", { upstreamStatus: 502 })),
+  "Seedance asset upload should not bypass the asset library on relay asset provider 5xx"
 );
 assert(
   !seedanceAssetUploadShouldFallback(new ProviderError("SEEDANCE_ASSET_UPLOAD_FAILED", "Seedance 素材库接口调用失败：Asset provider error", "{\"state\":0,\"data\":null}", { upstreamStatus: 200 })),
   "Seedance asset upload should not silently bypass the asset library when the relay returns a business failure"
+);
+assert(
+  seedanceAssetUploadShouldFallback(new ProviderError("SEEDANCE_ASSET_UPLOAD_FAILED", "Seedance 素材库接口调用失败：not found", "{\"message\":\"not found\"}", { upstreamStatus: 404 })),
+  "Seedance asset upload may fall back only when the relay does not provide an asset endpoint"
 );
 const seedanceNativeBody = buildProxyBody({
   modelName: "doubao-seedance-2-0-260128",

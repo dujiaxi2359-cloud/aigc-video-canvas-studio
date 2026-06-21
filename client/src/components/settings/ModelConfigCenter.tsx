@@ -7,13 +7,33 @@ import { useModelConfigStore } from "../../store/modelConfigStore";
 import { fallbackModelCatalog } from "../../data/modelCatalog";
 import type { ModelCapabilities, ModelCatalogItem, ModelConfig, ModelType } from "../../types/model";
 
-type ModelCategory = "image" | "video" | "text";
+type ModelCategory = "image" | "text" | "video";
 const lastApiRouteStorageKey = "aigcnong-last-custom-api-route";
 
-const categoryMeta: Record<ModelCategory, { label: string; icon: typeof Image; activeClass: string }> = {
-  image: { label: "图文模型", icon: Image, activeClass: "border-cyan-200/30 bg-cyan-300/[0.10] text-cyan-100" },
-  video: { label: "视频模型", icon: Video, activeClass: "border-violet-200/30 bg-violet-300/[0.10] text-violet-100" },
-  text: { label: "文本模型", icon: MessageSquare, activeClass: "border-emerald-200/30 bg-emerald-300/[0.10] text-emerald-100" }
+const categoryOrder: ModelCategory[] = ["image", "text", "video"];
+
+const categoryMeta: Record<ModelCategory, { label: string; title: string; icon: typeof Image; activeClass: string; accentClass: string }> = {
+  image: {
+    label: "图片生成",
+    title: "图片生成线路",
+    icon: Image,
+    activeClass: "border-cyan-200/30 bg-cyan-300/[0.10] text-cyan-100",
+    accentClass: "bg-cyan-300"
+  },
+  text: {
+    label: "LLM 对话",
+    title: "LLM 对话线路",
+    icon: MessageSquare,
+    activeClass: "border-emerald-200/30 bg-emerald-300/[0.10] text-emerald-100",
+    accentClass: "bg-emerald-300"
+  },
+  video: {
+    label: "视频生成",
+    title: "视频生成线路",
+    icon: Video,
+    activeClass: "border-violet-200/30 bg-violet-300/[0.10] text-violet-100",
+    accentClass: "bg-violet-300"
+  }
 };
 
 const defaultImageCapabilities: ModelCapabilities = {
@@ -516,11 +536,17 @@ export function ModelConfigCenter() {
     video: groupFetchedModels(categorizedFetchedModels.video),
     text: groupFetchedModels(categorizedFetchedModels.text)
   }), [categorizedFetchedModels]);
-  const selectedGroupCount = useMemo(() => {
-    return (Object.keys(groupedFetchedModels) as ModelCategory[]).reduce((count, category) => {
-      return count + groupedFetchedModels[category].filter((group) => group.models.some((model) => selectedModels.has(model))).length;
-    }, 0);
-  }, [groupedFetchedModels, selectedModels]);
+  const savedCategoryCounts = useMemo(() => ({
+    image: imageConfigs.length,
+    text: textConfigs.length,
+    video: videoConfigs.length
+  }), [imageConfigs.length, textConfigs.length, videoConfigs.length]);
+  const selectedActiveModels = useMemo(() => (
+    categorizedFetchedModels[activeCategory].filter((model) => selectedModels.has(model))
+  ), [activeCategory, categorizedFetchedModels, selectedModels]);
+  const selectedActiveGroupCount = useMemo(() => (
+    groupedFetchedModels[activeCategory].filter((group) => group.models.some((model) => selectedModels.has(model))).length
+  ), [activeCategory, groupedFetchedModels, selectedModels]);
 
   function toggleModelGroup(group: FetchedModelGroup) {
     setSelectedModels((current) => {
@@ -543,6 +569,35 @@ export function ModelConfigCenter() {
       }
       return next;
     });
+  }
+
+  function resetLineDraft() {
+    setApiBaseUrl("");
+    setApiKey("");
+    setManualModel("");
+    setFetchedModels([]);
+    setSelectedModels(new Set());
+    setMessage("");
+    setMessageTone("muted");
+  }
+
+  function addManualModelsToActiveCategory() {
+    const models = uniqueModels(manualModel.split(/[\n,，\s]+/));
+    if (!models.length) return;
+    const accepted = models.filter((model) => classifyModel(model) === activeCategory);
+    const rejected = models.length - accepted.length;
+    if (!accepted.length) {
+      setMessage(`当前正在配置${categoryMeta[activeCategory].label}，请切换分类后再添加这些模型。`);
+      setMessageTone("danger");
+      return;
+    }
+    setFetchedModels((current) => uniqueModels([...current, ...accepted]));
+    setSelectedModels((current) => new Set([...current, ...accepted]));
+    setManualModel("");
+    if (rejected > 0) {
+      setMessage(`已添加 ${accepted.length} 个${categoryMeta[activeCategory].label}模型；${rejected} 个不属于当前分类，已跳过。`);
+      setMessageTone("muted");
+    }
   }
 
   async function deleteModelIds(ids: string[]) {
@@ -575,7 +630,7 @@ export function ModelConfigCenter() {
         if (skippedVideoCount > 0) {
           setMessage(`${result.message} 已默认勾选官方可识别模型；${skippedVideoCount} 个未知视频模型需手动确认后启用。`);
         }
-        const firstCategory = (["image", "video", "text"] as ModelCategory[]).find((category) => result.models.some((model) => classifyModel(model) === category));
+        const firstCategory = categoryOrder.find((category) => result.models.some((model) => classifyModel(model) === category));
         if (firstCategory) setActiveCategory(firstCategory);
       }
     } catch (error) {
@@ -587,7 +642,8 @@ export function ModelConfigCenter() {
   }
 
   async function saveModels() {
-    const models = uniqueModels([...selectedModels, ...manualModel.split(/[\n,，\s]+/)]);
+    const manualModels = uniqueModels(manualModel.split(/[\n,，\s]+/)).filter((model) => classifyModel(model) === activeCategory);
+    const models = uniqueModels([...selectedActiveModels, ...manualModels]);
     if (!normalizeBaseUrl(apiBaseUrl) || !apiKey.trim() || models.length === 0) {
       setMessage("请填写请求地址、API Key，并至少选择或添加一个模型。");
       setMessageTone("danger");
@@ -619,11 +675,7 @@ export function ModelConfigCenter() {
       if (typeof window !== "undefined") window.localStorage.setItem(lastApiRouteStorageKey, savedRoute);
       setApiBaseUrl(savedRoute);
       setManualModel("");
-      const counts = models.reduce((result, model) => {
-        result[classifyModel(model)] += 1;
-        return result;
-      }, { image: 0, video: 0, text: 0 });
-      setMessage(`同步成功：新增 ${result.createdCount} 个、更新 ${result.updatedCount} 个。其它中转线路已保留，可在节点模型下拉里按线路切换。视频模型按官方名称/能力归一，实际请求仍使用上游模型 ID。当前保存：图文 ${counts.image}、视频 ${counts.video}、文本 ${counts.text}。`);
+      setMessage(`${categoryMeta[activeCategory].label}同步成功：新增 ${result.createdCount} 个、更新 ${result.updatedCount} 个。其它中转线路已保留，可在节点模型下拉里按线路切换。`);
       setMessageTone("success");
     } catch (error) {
       setMessage(errorText(error));
@@ -660,35 +712,88 @@ export function ModelConfigCenter() {
               </div>
             </div>
 
-            <div className="mt-6 rounded-[18px] border border-white/[0.08] bg-[#151519]">
-                <div className="flex items-center justify-between border-b border-white/[0.08] px-5 py-4">
-                  <div>
-                    <div className="text-[15px] font-semibold text-white">自定义 API 线路</div>
-                    <p className="mt-1 text-[12px] text-white/38">填写上游地址或官方兼容接口；已保存线路只作为快捷回填，不会自动覆盖当前输入。</p>
-                  </div>
-                  <Button className="h-9 rounded-full bg-white text-black hover:bg-white/90" onClick={() => void saveModels()} disabled={busy === "save"}>
-                    {busy === "save" ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />} 保存并启用
-                  </Button>
+            <div className="mt-6 rounded-[22px] border border-white/[0.08] bg-[#111115] shadow-[0_24px_90px_rgba(0,0,0,0.38)]">
+              <div className="flex items-center justify-between border-b border-white/[0.08] px-5 py-4">
+                <div>
+                  <div className="text-[15px] font-semibold text-white">API 配置</div>
+                  <p className="mt-1 text-[12px] text-white/38">按图片、文本、视频分别接入中转线路；每条线路独立保存，不覆盖其它线路。</p>
+                </div>
+                <Button
+                  className="h-9 rounded-full bg-white text-black hover:bg-white/90"
+                  onClick={() => void saveModels()}
+                  disabled={busy === "save" || (!selectedActiveModels.length && !manualModel.trim())}
+                >
+                  {busy === "save" ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />} 保存
+                </Button>
+              </div>
+
+              <div className="space-y-5 p-5">
+                <div className="grid grid-cols-3 gap-1 rounded-[14px] border border-white/[0.08] bg-black/25 p-1">
+                  {categoryOrder.map((category) => {
+                    const meta = categoryMeta[category];
+                    const Icon = meta.icon;
+                    const enabledCount = savedCategoryCounts[category];
+                    const pulledCount = groupedFetchedModels[category].length;
+                    const active = activeCategory === category;
+                    return (
+                      <button
+                        key={category}
+                        type="button"
+                        onClick={() => setActiveCategory(category)}
+                        className={`flex h-12 items-center justify-center gap-2 rounded-[11px] text-[12px] transition duration-200 ${active ? "bg-white/[0.10] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]" : "text-white/42 hover:bg-white/[0.04] hover:text-white/70"}`}
+                      >
+                        <Icon size={15} />
+                        <span>{meta.label}</span>
+                        <span className="rounded-full bg-white/[0.08] px-1.5 py-0.5 text-[10px] text-white/55">{enabledCount}</span>
+                        {enabledCount > 0 && <span className={`h-1.5 w-1.5 rounded-full ${meta.accentClass}`} />}
+                        {pulledCount > 0 && active && <span className="rounded-full bg-black/25 px-1.5 py-0.5 text-[10px] text-white/50">拉取 {pulledCount}</span>}
+                      </button>
+                    );
+                  })}
                 </div>
 
-                <div className="space-y-5 p-5">
+                <div className="flex items-center justify-between">
+                  <button type="button" className="rounded-full border border-white/[0.10] bg-white/[0.035] px-4 py-2 text-[12px] text-white/65">
+                    线路 1
+                  </button>
+                  <button
+                    type="button"
+                    onClick={resetLineDraft}
+                    className="inline-flex items-center gap-2 rounded-full border border-dashed border-white/[0.12] px-4 py-2 text-[12px] text-white/45 transition hover:border-white/[0.22] hover:bg-white/[0.04] hover:text-white/75"
+                  >
+                    <Plus size={14} /> 添加线路
+                  </button>
+                </div>
+
+                <div className="rounded-[18px] border border-white/[0.08] bg-[#17171b] p-5">
+                  <div className="mb-4 flex items-start justify-between gap-4">
+                    <div>
+                      <div className="text-[15px] font-semibold text-white">{categoryMeta[activeCategory].title}</div>
+                      <p className="mt-1 text-[12px] text-white/38">本条线路使用独立的请求地址与 API Key，可同时保留多个中转。</p>
+                    </div>
+                    <div className="rounded-full bg-white/[0.06] px-2.5 py-1 text-[11px] text-white/45">
+                      已选 {selectedActiveGroupCount} 组 · {selectedActiveModels.length} / {categorizedFetchedModels[activeCategory].length}
+                    </div>
+                  </div>
+
                   <div className="grid gap-3 lg:grid-cols-[1.25fr_1fr_auto]">
                     <label className="space-y-2">
-                      <span className="text-[12px] font-medium text-white/50">上游请求地址</span>
-                      <Input className="h-11 rounded-[11px] bg-black/35" value={apiBaseUrl} onChange={(event) => setApiBaseUrl(event.target.value)} placeholder="填写上游地址或官方接口，例如 https://runapi.co" />
+                      <span className="text-[12px] font-medium text-white/50">请求地址</span>
+                      <Input className="h-11 rounded-[11px] bg-black/35" value={apiBaseUrl} onChange={(event) => setApiBaseUrl(event.target.value)} placeholder="https://api.example.com/v1" />
                     </label>
                     <label className="space-y-2">
                       <span className="text-[12px] font-medium text-white/50">API Key</span>
-                      <Input className="h-11 rounded-[11px] bg-black/35" type="password" value={apiKey} onChange={(event) => setApiKey(event.target.value)} placeholder="sk-..." />
+                      <Input className="h-11 rounded-[11px] bg-black/35" type="password" value={apiKey} onChange={(event) => setApiKey(event.target.value)} placeholder="此线路独立 Key" />
                     </label>
-                    <div className="flex items-end">
+                    <div className="flex items-end gap-2">
                       <Button className="h-11 rounded-full" onClick={() => void pullModels()} disabled={busy === "pull" || !apiBaseUrl || !apiKey}>
                         {busy === "pull" ? <Loader2 size={15} className="animate-spin" /> : <RefreshCw size={15} />} 拉取模型
                       </Button>
                     </div>
                   </div>
+
                   {apiRoutes.length > 0 && (
-                    <div className="rounded-[14px] border border-white/[0.06] bg-black/20 p-3">
+                    <div className="mt-4 rounded-[14px] border border-white/[0.06] bg-black/20 p-3">
                       <div className="mb-2 text-[11px] font-medium text-white/42">已保存 API 线路，点击可回填当前输入框</div>
                       <div className="flex flex-wrap gap-2">
                         {apiRoutes.map((route) => {
@@ -702,7 +807,7 @@ export function ModelConfigCenter() {
                                 setApiBaseUrl(route.baseUrl);
                                 if (typeof window !== "undefined") window.localStorage.setItem(lastApiRouteStorageKey, route.baseUrl);
                               }}
-                              className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[12px] transition ${active ? "border-sky-100/40 bg-sky-200/[0.12] text-sky-50 shadow-[0_0_30px_rgba(125,211,252,0.08)]" : "border-white/[0.08] bg-white/[0.035] text-white/50 hover:bg-white/[0.07] hover:text-white/75"}`}
+                              className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[12px] transition duration-200 ${active ? "border-sky-100/40 bg-sky-200/[0.12] text-sky-50 shadow-[0_0_30px_rgba(125,211,252,0.08)]" : "border-white/[0.08] bg-white/[0.035] text-white/50 hover:bg-white/[0.07] hover:text-white/75"}`}
                             >
                               <span>{route.host}</span>
                               <span className="rounded-full bg-black/25 px-1.5 py-0.5 text-[10px] text-white/45">{route.count}</span>
@@ -713,39 +818,23 @@ export function ModelConfigCenter() {
                     </div>
                   )}
 
-                  <StatusMessage message={message} tone={messageTone} />
+                  <div className="mt-4">
+                    <StatusMessage message={message} tone={messageTone} />
+                  </div>
 
-                  <div className="rounded-[16px] border border-white/[0.08] bg-black/20 p-4">
+                  <div className="mt-4 rounded-[16px] border border-white/[0.08] bg-black/20 p-4">
                     <div className="mb-3 flex items-center justify-between">
                       <div>
                         <div className="text-[13px] font-semibold text-white">模型列表</div>
-                        <div className="mt-1 text-[11px] text-white/35">同名官方模型会按当前上游线路保存；其它已保存中转不会被覆盖或删除。</div>
+                        <div className="mt-1 text-[11px] text-white/35">只保存当前分类模型；例如图片线路不会误保存视频或文本模型。</div>
                       </div>
-                      <div className="rounded-full bg-white/[0.06] px-2 py-1 text-[11px] text-white/45">已选 {selectedGroupCount} 组 · {selectedModels.size} / {fetchedModels.length} 上游</div>
+                      <span className="rounded-full bg-white/[0.06] px-2 py-1 text-[11px] text-white/45">{groupedFetchedModels[activeCategory].length}</span>
                     </div>
                     {fetchedModels.length ? (
                       <div>
-                        <div className="grid grid-cols-3 gap-1 rounded-[12px] border border-white/[0.08] bg-white/[0.025] p-1">
-                          {(Object.keys(categoryMeta) as ModelCategory[]).map((category) => {
-                            const meta = categoryMeta[category];
-                            const Icon = meta.icon;
-                            const count = groupedFetchedModels[category].length;
-                            return (
-                              <button
-                                key={category}
-                                type="button"
-                                onClick={() => setActiveCategory(category)}
-                                className={`flex h-10 items-center justify-center gap-2 rounded-[9px] text-[12px] transition ${activeCategory === category ? "bg-white/[0.09] text-white" : "text-white/40 hover:text-white/65"}`}
-                              >
-                                <Icon size={14} /> {meta.label}
-                                <span className="rounded-full bg-black/25 px-1.5 py-0.5 text-[10px]">{count}</span>
-                              </button>
-                            );
-                          })}
-                        </div>
-                        <div className="mt-3 flex items-center justify-between gap-2">
+                        <div className="flex items-center justify-between gap-2">
                           <div className="text-[11px] text-white/30">
-                            当前分类：{groupedFetchedModels[activeCategory].length} 组官方模型 · {categorizedFetchedModels[activeCategory].length} 个上游 ID
+                            当前分类：{groupedFetchedModels[activeCategory].length} 组 · {categorizedFetchedModels[activeCategory].length} 个上游 ID
                           </div>
                           <div className="flex gap-2">
                             <button type="button" onClick={() => selectCategory(activeCategory, true)} className="rounded-full border border-white/[0.08] px-2.5 py-1 text-[11px] text-white/55 hover:bg-white/[0.06] hover:text-white">全选当前</button>
@@ -762,7 +851,7 @@ export function ModelConfigCenter() {
                                 type="button"
                                 title={group.models.join("\n")}
                                 onClick={() => toggleModelGroup(group)}
-                                className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[12px] transition ${allSelected ? meta.activeClass : partiallySelected ? "border-amber-200/35 bg-amber-300/[0.08] text-amber-100" : "border-white/[0.08] bg-white/[0.03] text-white/45"}`}
+                                className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[12px] transition duration-200 ${allSelected ? meta.activeClass : partiallySelected ? "border-amber-200/35 bg-amber-300/[0.08] text-amber-100" : "border-white/[0.08] bg-white/[0.03] text-white/45 hover:bg-white/[0.06] hover:text-white/65"}`}
                               >
                                 <span>{group.label}</span>
                                 {group.models.length > 1 && (
@@ -775,27 +864,26 @@ export function ModelConfigCenter() {
                             <div className="grid w-full place-items-center text-[12px] text-white/30">当前上游没有返回{categoryMeta[activeCategory].label}</div>
                           )}
                         </div>
-                        <div className="mt-3 flex justify-end">
-                          <Button className="h-10 rounded-full bg-white text-black hover:bg-white/90" onClick={() => void saveModels()} disabled={busy === "save" || selectedModels.size === 0}>
-                            {busy === "save" ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />} 保存并启用 {selectedModels.size} 个模型
-                          </Button>
-                        </div>
                       </div>
                     ) : (
-                      <p className="text-[12px] leading-6 text-white/35">还没有拉取模型。填写上游请求地址和 API Key 后点击“拉取模型”；也可以手动输入上游模型 ID。</p>
+                      <p className="text-[12px] leading-6 text-white/35">还没有拉取模型。填写请求地址和 API Key 后点击“拉取模型”；也可以手动输入当前分类的上游模型 ID。</p>
                     )}
                     <div className="mt-4 flex gap-2">
-                      <Input className="h-11 rounded-[11px] bg-black/35" value={manualModel} onChange={(event) => setManualModel(event.target.value)} placeholder="手动添加上游模型 ID，保存后按官方名称显示" />
-                      <Button className="h-11 rounded-full" onClick={() => {
-                        const models = uniqueModels(manualModel.split(/[\n,，\s]+/));
-                        if (!models.length) return;
-                        setFetchedModels((current) => uniqueModels([...current, ...models]));
-                        setSelectedModels((current) => new Set([...current, ...models]));
-                        setManualModel("");
-                      }}><Plus size={15} /> 添加</Button>
+                      <Input className="h-11 rounded-[11px] bg-black/35" value={manualModel} onChange={(event) => setManualModel(event.target.value)} placeholder={`手动添加${categoryMeta[activeCategory].label}上游模型 ID`} />
+                      <Button className="h-11 rounded-full" onClick={addManualModelsToActiveCategory}><Plus size={15} /> 添加</Button>
+                    </div>
+                    <div className="mt-4 flex justify-end">
+                      <Button
+                        className="h-10 rounded-full bg-white text-black hover:bg-white/90"
+                        onClick={() => void saveModels()}
+                        disabled={busy === "save" || (!selectedActiveModels.length && !manualModel.trim())}
+                      >
+                        {busy === "save" ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />} 保存并启用 {selectedActiveModels.length || uniqueModels(manualModel.split(/[\n,，\s]+/)).filter((model) => classifyModel(model) === activeCategory).length} 个模型
+                      </Button>
                     </div>
                   </div>
                 </div>
+              </div>
             </div>
           </div>
         </div>
@@ -804,8 +892,8 @@ export function ModelConfigCenter() {
       <section className="grid gap-4 lg:grid-cols-3">
         {([
           ["image", imageConfigs],
-          ["video", videoConfigs],
-          ["text", textConfigs]
+          ["text", textConfigs],
+          ["video", videoConfigs]
         ] as Array<[ModelCategory, ModelConfig[]]>).map(([category, models]) => {
           const meta = categoryMeta[category];
           const Icon = meta.icon;
