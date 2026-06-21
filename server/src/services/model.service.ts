@@ -16,6 +16,7 @@ import { generateTextWithGoogle } from "./providers/googleText.service.js";
 import { generateVideoWithGoogleVeo } from "./providers/googleVeo.service.js";
 import { generateVideoWithGrok } from "./providers/grokVideo.service.js";
 import { generateVideoWithKling } from "./providers/klingVideo.service.js";
+import { generateImageWithMidjourney, isMidjourneyImageModel } from "./providers/midjourneyImage.service.js";
 import { generateImageWithOpenAI } from "./providers/openaiImage.service.js";
 import { generateVideoWithSeedance } from "./providers/seedanceVideo.service.js";
 import { channelSupportsImage, resolveVideoRequestConfig, shouldUseProxyVideoAdapter, validateVideoRequestConfig } from "./providers/videoRequestAdapter.js";
@@ -779,21 +780,25 @@ export async function generateImage(input: GenerateImageRequest) {
     logOfficialPayload(preflightSummary);
 
     let result: ProviderGenerateResult;
-    switch (providerId) {
-      case "openai":
-        result = await generateImageWithOpenAI(providerParams);
-        break;
-      case "azure-openai":
-        result = await generateImageWithAzureOpenAI(providerParams);
-        break;
-      case "alibaba":
-        result = await generateImageWithAlibaba(providerParams);
-        break;
-      case "google":
-        result = await generateImageWithGoogle(providerParams);
-        break;
-      default:
-        throw new Error("该图片模型暂未支持真实调用");
+    if (isMidjourneyImageModel({ providerId, modelName, displayName: model.display_name, apiBaseUrl: providerParams.apiBaseUrl })) {
+      result = await generateImageWithMidjourney(providerParams);
+    } else {
+      switch (providerId) {
+        case "openai":
+          result = await generateImageWithOpenAI(providerParams);
+          break;
+        case "azure-openai":
+          result = await generateImageWithAzureOpenAI(providerParams);
+          break;
+        case "alibaba":
+          result = await generateImageWithAlibaba(providerParams);
+          break;
+        case "google":
+          result = await generateImageWithGoogle(providerParams);
+          break;
+        default:
+          throw new Error("该图片模型暂未支持真实调用");
+      }
     }
     result = await enforceImageAspectRatio(result, inputForGeneration.aspectRatio);
 

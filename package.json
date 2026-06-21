@@ -16,6 +16,7 @@
     "test:video-provider-adapters": "npm run test:video-provider-adapters --workspace server",
     "test:azure-gpt-image-config": "npm run test:azure-gpt-image-config --workspace server",
     "test:image-asset-compat": "npm run test:image-asset-compat --workspace server",
+    "test:midjourney-image-adapter": "npm run test:midjourney-image-adapter --workspace server",
     "test:asset-access-token": "npm run test:asset-access-token --workspace server",
     "test:veo-capabilities": "npm run test:veo-capabilities --workspace server"
   },
