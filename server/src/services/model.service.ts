@@ -20,7 +20,7 @@ import { generateImageWithOpenAI } from "./providers/openaiImage.service.js";
 import { generateVideoWithSeedance } from "./providers/seedanceVideo.service.js";
 import { channelSupportsImage, resolveVideoRequestConfig, shouldUseProxyVideoAdapter, validateVideoRequestConfig } from "./providers/videoRequestAdapter.js";
 import { resolveProviderApiBaseUrl } from "./providers/providerBaseUrl.js";
-import { normalizeVideoCapabilities } from "./videoCapabilityNormalization.js";
+import { isGrokLikeVideoModel, normalizeVideoCapabilities } from "./videoCapabilityNormalization.js";
 import { ensureVideoAspectRatio } from "./assets/ensureVideoAspectRatio.service.js";
 import { ensureImageAspectRatio } from "./assets/ensureImageAspectRatio.service.js";
 import type { ImageInputMode, ModelCapabilities, ModelCatalogItem, VideoNodeContext } from "../types/model.js";
@@ -606,10 +606,12 @@ export async function generateVideo(input: GenerateVideoRequest) {
     const videoRequestConfig = validateVideoRequestConfig(providerParams, capabilities);
 
     let result: ProviderGenerateResult;
-    if (providerId === "grok") {
+    if (isGrokLikeVideoModel(model.provider_id, model.model_name, capabilities)) {
       // Grok relay endpoints use their multipart input_reference/input_video
       // contract. Sending them through the generic OpenAI-video JSON adapter
       // drops reference files and can incorrectly classify the channel as text-only.
+      // Match the model identity too because older workspaces may still carry
+      // the historical `openai-video` provider id for Grok Imagine models.
       result = await generateVideoWithGrok(providerParams);
     } else if (shouldUseProxyVideoAdapter(providerParams, capabilities)) {
       result = await generateVideoWithSeedance({

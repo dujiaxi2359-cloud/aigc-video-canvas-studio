@@ -203,14 +203,15 @@ async function migrateAi666VideoProtocols(database: AppDatabase) {
     }
 
     const grokDisplayName = /grok[-_ .]?imagine[-_ .]?video[-_ .]?1[-_ .]?5/.test(name) ? "Grok Imagine Video 1.5 Preview"
-      : /grok[-_ .]?imagine[-_ .]?video/.test(name) ? "Grok Imagine Video"
-        : /grok[-_ .]?video[-_ .]?3[-_ .]?max/.test(name) ? "Grok Video 3 Max"
-          : /grok[-_ .]?video[-_ .]?3[-_ .]?pro/.test(name) ? "Grok Video 3 Pro"
-            : /grok[-_ .]?video[-_ .]?3/.test(name) ? "Grok Video 3"
-              : /grok[-_ .]?1[-_ .]?5[-_ .]?video[-_ .]?15s/.test(name) ? "Grok 1.5 Video 15s"
-                : /grok[-_ .]?1[-_ .]?5[-_ .]?video[-_ .]?10s/.test(name) ? "Grok 1.5 Video 10s"
-                  : /grok[-_ .]?1[-_ .]?5[-_ .]?video[-_ .]?6s/.test(name) ? "Grok 1.5 Video 6s"
-                    : "";
+      : /grok[-_ .]?imagine[-_ .]?1[-_ .]?0[-_ .]?video/.test(name) ? "Grok Imagine Video 1.0"
+        : /grok[-_ .]?imagine[-_ .]?video/.test(name) ? "Grok Imagine Video"
+          : /grok[-_ .]?video[-_ .]?3[-_ .]?max/.test(name) ? "Grok Video 3 Max"
+            : /grok[-_ .]?video[-_ .]?3[-_ .]?pro/.test(name) ? "Grok Video 3 Pro"
+              : /grok[-_ .]?video[-_ .]?3/.test(name) ? "Grok Video 3"
+                : /grok[-_ .]?1[-_ .]?5[-_ .]?video[-_ .]?15s/.test(name) ? "Grok 1.5 Video 15s"
+                  : /grok[-_ .]?1[-_ .]?5[-_ .]?video[-_ .]?10s/.test(name) ? "Grok 1.5 Video 10s"
+                    : /grok[-_ .]?1[-_ .]?5[-_ .]?video[-_ .]?6s/.test(name) ? "Grok 1.5 Video 6s"
+                      : "";
     if (grokDisplayName) assignDisplayName(grokDisplayName);
 
     if (grokDisplayName) {

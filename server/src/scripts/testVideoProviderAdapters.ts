@@ -5,6 +5,7 @@ import { configuredRelayModelName, veoProxyCreateEndpoint } from "../services/pr
 import { joinUrl, resolveVideoRequestConfig } from "../services/providers/videoRequestAdapter.js";
 import { getVideoModelCapability } from "../config/videoModelCapabilities.js";
 import { modelCatalog } from "../services/modelCatalog.js";
+import { isGrokLikeVideoModel } from "../services/videoCapabilityNormalization.js";
 import { ProviderError } from "../utils/providerErrors.js";
 import { mapVideoDimensions } from "../utils/videoParams.js";
 
@@ -54,6 +55,10 @@ assert(
 );
 assert(isOfficialGrokEndpoint("https://api.x.ai/v1"), "xAI endpoint should use the official JSON protocol");
 assert(!isOfficialGrokEndpoint("https://relay.example/v1/videos"), "Relay endpoint should use multipart protocol");
+assert(
+  isGrokLikeVideoModel("openai-video", "grok-imagine-1.0-video", { inputModes: ["text-to-video"] }),
+  "Historical openai-video configs must still route Grok Imagine through the Grok adapter"
+);
 assert(
   grokRequestModelName("grok-imagine-video", "https://api.x.ai/v1") === "grok-imagine-video",
   "Official Grok endpoint should keep the official model name"
