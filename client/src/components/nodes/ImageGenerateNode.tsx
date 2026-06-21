@@ -316,7 +316,7 @@ function ImageGenerateNodeComponent(props: NodeProps<ImageGenerateNodeData>) {
       const promptForRequest = localPrompt || props.data.prompt || "";
       const promptReferencedInputs = resolvePromptReferencedImageInputs(promptForRequest, resolvedInputs);
       const requestInputs = promptReferencedInputs.hasPromptReferences ? promptReferencedInputs : resolvedInputs;
-      const promptForProvider = promptReferencedInputs.hasPromptReferences
+      const promptForProvider = requestInputs.imageInputs.length
         ? (promptReferencedInputs.referencePrompt ?? buildReferenceAwareImagePrompt(promptForRequest, requestInputs))
         : promptForRequest;
       if (promptReferencedInputs.missingPromptReferences.length) {
