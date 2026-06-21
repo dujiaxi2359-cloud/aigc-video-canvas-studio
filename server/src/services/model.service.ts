@@ -1,5 +1,6 @@
 ﻿import fs from "node:fs";
 import path from "node:path";
+import { getDb } from "../db/database.js";
 import { createAsset } from "./asset.service.js";
 import { decryptApiKey } from "./encryption.service.js";
 import { addHistory } from "./history.service.js";
@@ -94,6 +95,7 @@ export type GenerateImageRequest = {
 };
 
 type InternalModelConfig = Awaited<ReturnType<typeof getInternalModelConfig>>;
+type ActiveModelConfig = NonNullable<InternalModelConfig>;
 
 function forceMockGeneration() {
   return process.env.ALLOW_MOCK_GENERATION === "true" || process.env.FORCE_MOCK_GENERATION === "true";
@@ -169,11 +171,11 @@ function errorResponse(errorMessage: string, errorCode = "PROVIDER_ERROR", debug
   return { status: "error" as const, errorCode, errorMessage, debugMessage, payloadSummary };
 }
 
-function catalogFor(model: NonNullable<InternalModelConfig>) {
+function catalogFor(model: ActiveModelConfig) {
   return modelCatalog.find((item) => item.providerId === model.provider_id && item.name === model.model_name);
 }
 
-function isOfficialProviderBaseUrl(model: NonNullable<InternalModelConfig>) {
+function isOfficialProviderBaseUrl(model: ActiveModelConfig) {
   const providerId = model.provider_id ?? "";
   const rawBaseUrl = model.api_base_url?.trim();
   if (!rawBaseUrl) return true;
@@ -190,7 +192,7 @@ function isOfficialProviderBaseUrl(model: NonNullable<InternalModelConfig>) {
   }
 }
 
-function shouldUseCatalogCapabilities(model: NonNullable<InternalModelConfig>, catalogItem?: ModelCatalogItem) {
+function shouldUseCatalogCapabilities(model: ActiveModelConfig, catalogItem?: ModelCatalogItem) {
   if (!catalogItem) return false;
   return isOfficialProviderBaseUrl(model);
 }
@@ -209,7 +211,7 @@ async function getGenerationContext(modelConfigId: string, type: "text" | "image
 
 function logGenerate(input: {
   type: "text" | "image" | "video";
-  model: NonNullable<InternalModelConfig>;
+  model: ActiveModelConfig;
   catalogItem?: ModelCatalogItem;
   apiKey: string;
   inputMode?: string;
@@ -226,7 +228,7 @@ function logGenerate(input: {
   });
 }
 
-function apiBaseUrlFor(model: NonNullable<InternalModelConfig>) {
+function apiBaseUrlFor(model: ActiveModelConfig) {
   return resolveProviderApiBaseUrl(model.provider_id, model.api_base_url);
 }
 
@@ -354,6 +356,150 @@ function validateImageRequest(capabilities: ModelCapabilities, input: GenerateIm
   if (!options.availableImageFormats.includes(input.imageFormat)) {
     input.imageFormat = options.normalizedSelection.imageFormat ?? options.availableImageFormats[0] ?? "png";
   }
+}
+
+function isRetryableImageRelayError(error: unknown) {
+  const text = error instanceof Error ? error.message : safeStringify(error);
+  return /OpenAI 兼容图片中转返回|Cloudflare|OPENAI_COMPAT_NON_JSON_RESPONSE|HTML 页面|上游响应超时|temporarily unavailable|service busy|fully loaded|error code 524|a timeout occurred|502|503|504/i.test(text);
+}
+
+function imageProviderPriority(providerId?: string) {
+  if (providerId === "openai") return 0;
+  if (providerId === "google") return 1;
+  if (providerId === "alibaba") return 2;
+  if (providerId === "azure-openai") return 3;
+  return 9;
+}
+
+async function listImageFallbackModels(primary: ActiveModelConfig) {
+  const db = await getDb();
+  const rows = await db.all<ActiveModelConfig[]>(
+    `SELECT * FROM model_configs
+     WHERE workspace_id = ?
+       AND enabled = 1
+       AND id <> ?
+       AND encrypted_api_key IS NOT NULL
+       AND (category = 'image' OR model_type LIKE '%image%')
+       AND provider_id IN ('openai', 'google', 'alibaba', 'azure-openai')
+     ORDER BY
+       CASE WHEN provider_id = ? THEN 0 ELSE 1 END,
+       CASE WHEN api_base_url = ? THEN 0 ELSE 1 END,
+       updated_at DESC`,
+    primary.workspace_id,
+    primary.id,
+    primary.provider_id,
+    primary.api_base_url
+  );
+  return rows.sort((a, b) => imageProviderPriority(a.provider_id) - imageProviderPriority(b.provider_id));
+}
+
+async function callImageProvider(input: {
+  model: ActiveModelConfig;
+  providerParams: GenerateImageRequest & {
+    apiKey: string;
+    apiBaseUrl: string;
+    modelName: string;
+    providerId: string;
+    catalogModelId?: string;
+    qualityMode: "full_quality" | "balanced" | "fast";
+  };
+}) {
+  const { model, providerParams } = input;
+  const providerId = model.provider_id ?? "";
+  const modelName = model.model_name ?? "";
+  if (isMidjourneyImageModel({ providerId, modelName, displayName: model.display_name, apiBaseUrl: providerParams.apiBaseUrl })) {
+    return generateImageWithMidjourney(providerParams);
+  }
+  switch (providerId) {
+    case "openai":
+      return generateImageWithOpenAI(providerParams);
+    case "azure-openai":
+      return generateImageWithAzureOpenAI(providerParams);
+    case "alibaba":
+      return generateImageWithAlibaba(providerParams);
+    case "google":
+      return generateImageWithGoogle(providerParams);
+    default:
+      throw new Error("该图片模型暂未支持真实调用");
+  }
+}
+
+async function tryImageFallback(input: {
+  primaryModel: ActiveModelConfig;
+  request: GenerateImageRequest;
+  primaryError: unknown;
+}) {
+  if (!isRetryableImageRelayError(input.primaryError)) return undefined;
+  const candidates = await listImageFallbackModels(input.primaryModel);
+  for (const candidate of candidates) {
+    try {
+      const catalogItem = catalogFor(candidate);
+      const useCatalogCapabilities = shouldUseCatalogCapabilities(candidate, catalogItem);
+      const configuredCapabilities = JSON.parse(candidate.capabilities_json) as ModelCapabilities;
+      const capabilities = useCatalogCapabilities ? catalogItem!.capabilities : configuredCapabilities;
+      const candidateRequest: GenerateImageRequest = { ...input.request };
+      validateImageRequest(capabilities, candidateRequest);
+      const apiKey = candidate.encrypted_api_key ? decryptApiKey(candidate.encrypted_api_key) : "";
+      if (!apiKey) continue;
+      const providerId = candidate.provider_id ?? "";
+      const modelName = candidate.model_name ?? "";
+      const providerParams = {
+        ...candidateRequest,
+        apiKey,
+        apiBaseUrl: apiBaseUrlFor(candidate),
+        modelName,
+        providerId,
+        catalogModelId: useCatalogCapabilities ? catalogItem?.id : undefined,
+        qualityMode: candidateRequest.qualityMode ?? "full_quality"
+      };
+      const preflightSummary = buildPayloadSummary({
+        providerId,
+        selectedModelId: useCatalogCapabilities ? catalogItem?.id : candidate.id,
+        actualModelName: modelName,
+        inputMode: candidateRequest.inputMode,
+        aspectRatio: candidateRequest.aspectRatio,
+        quality: candidateRequest.imageQuality,
+        qualityMode: candidateRequest.qualityMode ?? "full_quality",
+        hasImageInput: Boolean(candidateRequest.imageAssetIds?.length),
+        imageInputCount: candidateRequest.imageAssetIds?.length ?? 0,
+        prompt: candidateRequest.prompt,
+        negativePrompt: candidateRequest.negativePrompt,
+        isMock: false,
+        qualityAudit: {
+          qualityMode: candidateRequest.qualityMode ?? "full_quality",
+          promptExtend: candidateRequest.promptExtend,
+          seed: candidateRequest.seed,
+          isFallback: true
+        },
+        payloadSummary: {
+          stage: "fallback-preflight",
+          fallbackFromModelConfigId: input.primaryModel.id,
+          fallbackFromModel: input.primaryModel.model_name,
+          fallbackFromBaseUrl: input.primaryModel.api_base_url
+        }
+      });
+      console.warn("[image fallback] retrying with alternate model", {
+        fromModelConfigId: input.primaryModel.id,
+        fromModelName: input.primaryModel.model_name,
+        toModelConfigId: candidate.id,
+        toModelName: candidate.model_name,
+        toProviderId: candidate.provider_id,
+        toApiBaseUrl: candidate.api_base_url
+      });
+      logOfficialPayload(preflightSummary);
+      let result = await callImageProvider({ model: candidate, providerParams });
+      result = await enforceImageAspectRatio(result, candidateRequest.aspectRatio);
+      return { model: candidate, catalogItem, useCatalogCapabilities, request: candidateRequest, result, preflightSummary };
+    } catch (fallbackError) {
+      console.warn("[image fallback] candidate failed", {
+        modelConfigId: candidate.id,
+        modelName: candidate.model_name,
+        providerId: candidate.provider_id,
+        message: fallbackError instanceof Error ? fallbackError.message : String(fallbackError)
+      });
+    }
+  }
+  return undefined;
 }
 
 async function writeMockAsset(input: { nodeId: string; kind: "image" | "video"; payload: Record<string, unknown> }) {
@@ -742,7 +888,11 @@ export async function generateImage(input: GenerateImageRequest) {
       qualityMode: inputForGeneration.qualityMode ?? "full_quality"
     };
 
-    const preflightSummary = buildPayloadSummary({
+    let activeModel = model;
+    let activeCatalogItem = catalogItem;
+    let activeUseCatalogCapabilities = useCatalogCapabilities;
+    let activeInputForGeneration = inputForGeneration;
+    let preflightSummary = buildPayloadSummary({
       providerId,
       selectedModelId: useCatalogCapabilities ? catalogItem?.id : model.id,
       actualModelName: modelName,
@@ -766,47 +916,46 @@ export async function generateImage(input: GenerateImageRequest) {
     logOfficialPayload(preflightSummary);
 
     let result: ProviderGenerateResult;
-    if (isMidjourneyImageModel({ providerId, modelName, displayName: model.display_name, apiBaseUrl: providerParams.apiBaseUrl })) {
-      result = await generateImageWithMidjourney(providerParams);
-    } else {
-      switch (providerId) {
-        case "openai":
-          result = await generateImageWithOpenAI(providerParams);
-          break;
-        case "azure-openai":
-          result = await generateImageWithAzureOpenAI(providerParams);
-          break;
-        case "alibaba":
-          result = await generateImageWithAlibaba(providerParams);
-          break;
-        case "google":
-          result = await generateImageWithGoogle(providerParams);
-          break;
-        default:
-          throw new Error("该图片模型暂未支持真实调用");
+    try {
+      result = await callImageProvider({ model, providerParams });
+      result = await enforceImageAspectRatio(result, inputForGeneration.aspectRatio);
+    } catch (primaryError) {
+      const fallback = await tryImageFallback({ primaryModel: model, request: inputForGeneration, primaryError });
+      if (!fallback) throw primaryError;
+      activeModel = fallback.model;
+      activeCatalogItem = fallback.catalogItem;
+      activeUseCatalogCapabilities = fallback.useCatalogCapabilities;
+      activeInputForGeneration = fallback.request;
+      preflightSummary = fallback.preflightSummary;
+      result = fallback.result;
+      result.payloadSummary = {
+        ...(result.payloadSummary && typeof result.payloadSummary === "object" ? result.payloadSummary as Record<string, unknown> : {}),
+        fallbackFromModelConfigId: model.id,
+        fallbackFromModelDisplayName: model.display_name,
+        fallbackToModelConfigId: activeModel.id,
+        fallbackToModelDisplayName: activeModel.display_name
       }
     }
-    result = await enforceImageAspectRatio(result, inputForGeneration.aspectRatio);
 
-    const asset = await createGeneratedAssetFromProvider(result, `image_${inputForGeneration.nodeId}.png`, {
-      providerId,
-      modelId: useCatalogCapabilities ? catalogItem?.id : model.id,
-      nodeId: inputForGeneration.nodeId,
-      projectId: inputForGeneration.projectId,
-      prompt: inputForGeneration.prompt,
-      negativePrompt: inputForGeneration.negativePrompt
+    const asset = await createGeneratedAssetFromProvider(result, `image_${activeInputForGeneration.nodeId}.png`, {
+      providerId: activeModel.provider_id ?? "",
+      modelId: activeUseCatalogCapabilities ? activeCatalogItem?.id : activeModel.id,
+      nodeId: activeInputForGeneration.nodeId,
+      projectId: activeInputForGeneration.projectId,
+      prompt: activeInputForGeneration.prompt,
+      negativePrompt: activeInputForGeneration.negativePrompt
     });
     const payloadSummary = await enrichPayloadSummaryWithOutput(preflightSummary, result);
     await addHistory({
       generationType: "image",
-      projectId: inputForGeneration.projectId,
-      nodeId: inputForGeneration.nodeId,
-      modelConfigId: inputForGeneration.modelConfigId,
-      modelDisplayName: model.display_name,
-      inputMode: inputForGeneration.inputMode,
-      prompt: inputForGeneration.prompt,
-      resolution: inputForGeneration.aspectRatio ?? inputForGeneration.imageSize,
-      aspectRatio: inputForGeneration.aspectRatio,
+      projectId: activeInputForGeneration.projectId,
+      nodeId: activeInputForGeneration.nodeId,
+      modelConfigId: activeModel.id,
+      modelDisplayName: activeModel.display_name,
+      inputMode: activeInputForGeneration.inputMode,
+      prompt: activeInputForGeneration.prompt,
+      resolution: activeInputForGeneration.aspectRatio ?? activeInputForGeneration.imageSize,
+      aspectRatio: activeInputForGeneration.aspectRatio,
       status: "success",
       outputPath: asset?.localPath ?? result.localPath,
       outputUrl: asset?.url ?? result.outputUrl
