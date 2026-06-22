@@ -530,6 +530,11 @@ function videoProviderPriority(providerId?: string) {
   return 9;
 }
 
+export function shouldUseVideoFallbackCandidate(primary: Pick<ActiveModelConfig, "provider_id" | "api_base_url">, candidate: Pick<ActiveModelConfig, "provider_id" | "api_base_url">) {
+  return (candidate.provider_id ?? "") === (primary.provider_id ?? "")
+    && (candidate.api_base_url ?? "") === (primary.api_base_url ?? "");
+}
+
 async function listVideoFallbackModels(primary: ActiveModelConfig) {
   const db = await getDb();
   const rows = await db.all<ActiveModelConfig[]>(
@@ -539,6 +544,8 @@ async function listVideoFallbackModels(primary: ActiveModelConfig) {
        AND id <> ?
        AND encrypted_api_key IS NOT NULL
        AND (category = 'video' OR model_type LIKE '%video%')
+       AND provider_id = ?
+       AND COALESCE(api_base_url, '') = COALESCE(?, '')
      ORDER BY
        CASE WHEN provider_id = ? THEN 0 ELSE 1 END,
        CASE WHEN api_base_url = ? THEN 0 ELSE 1 END,
@@ -546,9 +553,13 @@ async function listVideoFallbackModels(primary: ActiveModelConfig) {
     primary.workspace_id,
     primary.id,
     primary.provider_id,
+    primary.api_base_url,
+    primary.provider_id,
     primary.api_base_url
   );
-  return rows.sort((a, b) => videoProviderPriority(a.provider_id) - videoProviderPriority(b.provider_id));
+  return rows
+    .filter((candidate) => shouldUseVideoFallbackCandidate(primary, candidate))
+    .sort((a, b) => videoProviderPriority(a.provider_id) - videoProviderPriority(b.provider_id));
 }
 
 async function callVideoProvider(input: {

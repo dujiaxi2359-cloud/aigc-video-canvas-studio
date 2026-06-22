@@ -6,7 +6,7 @@ import { buildVeoProxyBody, configuredRelayModelName, veoProxyCreateEndpoint, ve
 import { joinUrl, resolveVideoRequestConfig } from "../services/providers/videoRequestAdapter.js";
 import { getVideoModelCapability } from "../config/videoModelCapabilities.js";
 import { modelCatalog } from "../services/modelCatalog.js";
-import { hasSubmittedRemoteVideoTask } from "../services/model.service.js";
+import { hasSubmittedRemoteVideoTask, shouldUseVideoFallbackCandidate } from "../services/model.service.js";
 import { isGrokLikeVideoModel, normalizeVideoCapabilities } from "../services/videoCapabilityNormalization.js";
 import { ProviderError } from "../utils/providerErrors.js";
 import { mapVideoDimensions, normalizeVideoAspectRatio } from "../utils/videoParams.js";
@@ -34,6 +34,20 @@ assert(
 assert(
   !hasSubmittedRemoteVideoTask(new ProviderError("NETWORK_ERROR", "create failed", "fetch failed")),
   "Video fallback can still run when no upstream task was created"
+);
+assert(
+  !shouldUseVideoFallbackCandidate(
+    { provider_id: "grok", api_base_url: "https://runapi.co/v1" },
+    { provider_id: "kling", api_base_url: "https://runapi.co/v1" }
+  ),
+  "Grok video fallback must not switch to Kling on the same relay"
+);
+assert(
+  shouldUseVideoFallbackCandidate(
+    { provider_id: "google", api_base_url: "https://ai.cy88.ai/v1" },
+    { provider_id: "google", api_base_url: "https://ai.cy88.ai/v1" }
+  ),
+  "Video fallback can stay within the same provider and relay"
 );
 assert(
   grokPollEndpoint("https://api.x.ai/v1", "request/1") === "https://api.x.ai/v1/videos/request%2F1",
