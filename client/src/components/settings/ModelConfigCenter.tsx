@@ -683,7 +683,7 @@ export function ModelConfigCenter() {
     setMessage("");
     try {
       const normalizedBaseUrl = normalizeBaseUrl(apiBaseUrl);
-      const result = await modelConfigApi.probe({ apiBaseUrl: normalizedBaseUrl, apiKey, validationPath: "/models", pullModels: true });
+      const result = await modelConfigApi.probe({ apiBaseUrl: normalizedBaseUrl, apiKey, validationPath: "/models", pullModels: true, category: activeCategory });
       if (typeof window !== "undefined") window.localStorage.setItem(lastApiRouteStorageKey, normalizedBaseUrl);
       setApiBaseUrl(normalizedBaseUrl);
       setMessage(result.message);
@@ -715,7 +715,7 @@ export function ModelConfigCenter() {
     setMessage("");
     try {
       const normalizedBaseUrl = normalizeBaseUrl(apiBaseUrl);
-      const result = await modelConfigApi.probe({ apiBaseUrl: normalizedBaseUrl, apiKey, validationPath: "/models", pullModels: false });
+      const result = await modelConfigApi.probe({ apiBaseUrl: normalizedBaseUrl, apiKey, validationPath: "/models", pullModels: false, category: activeCategory });
       setApiBaseUrl(normalizedBaseUrl);
       setMessage(result.message);
       setMessageTone(result.success ? "success" : "danger");

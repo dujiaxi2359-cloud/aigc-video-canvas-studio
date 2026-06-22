@@ -48,6 +48,13 @@ function endpointFrom(baseUrl: string, path: string) {
   return `${trimmedBase}${normalizedPath}`;
 }
 
+function videoRelayProbeFallbackMessage(status: number, endpoint: string) {
+  return [
+    `视频线路格式有效，但该中转未开放模型列表接口（${endpoint} 返回 HTTP ${status}）。`,
+    "请手动添加上游模型 ID 后保存；生成时仍会按视频创建协议调用该线路。"
+  ].join("");
+}
+
 function placeholderApiBaseUrlMessage(apiBaseUrl: string) {
   try {
     const parsed = new URL(apiBaseUrl);
@@ -349,10 +356,11 @@ export async function testModelConfig(id: string, input: Partial<ModelConfig> & 
   };
 }
 
-export async function probeOpenAiCompatibleModels(input: { apiBaseUrl?: string; apiKey?: string; validationPath?: string; pullModels?: boolean }) {
+export async function probeOpenAiCompatibleModels(input: { apiBaseUrl?: string; apiKey?: string; validationPath?: string; pullModels?: boolean; category?: ModelConfig["category"] }) {
   const apiBaseUrl = input.apiBaseUrl?.trim();
   const apiKey = submittedApiKey(input.apiKey);
   const validationPath = input.validationPath?.trim() || "/models";
+  const category = input.category;
   if (!apiBaseUrl || !apiKey) {
     return { success: false, message: "请填写请求地址和 API Key。", models: [] as string[] };
   }
@@ -390,6 +398,9 @@ export async function probeOpenAiCompatibleModels(input: { apiBaseUrl?: string; 
     const message = typeof payload === "object" && payload
       ? String((payload as Record<string, unknown>).error_message ?? (payload as Record<string, unknown>).message ?? (payload as Record<string, unknown>).error ?? text)
       : text;
+    if (category === "video" && validationPath === "/models" && [400, 404, 405].includes(response.status)) {
+      return { success: true, message: videoRelayProbeFallbackMessage(response.status, endpoint), models: [] as string[] };
+    }
     return { success: false, message: `验证失败：HTTP ${response.status}${message ? ` · ${message.slice(0, 160)}` : ""}`, models: [] as string[] };
   }
 

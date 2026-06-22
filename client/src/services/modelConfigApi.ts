@@ -10,7 +10,7 @@ export const modelConfigApi = {
   remove: (id: string) => api.delete(`/api/model-configs/${id}`),
   removeBulk: (ids: string[]) => api.post<{ deletedCount: number; ids: string[] }>("/api/model-configs/bulk-delete", { ids }),
   test: (id: string, data?: Partial<ModelConfig> & { apiKey?: string }) => api.post<{ success: boolean; message: string }>(`/api/model-configs/${id}/test`, data ?? {}),
-  probe: (data: { apiBaseUrl: string; apiKey: string; validationPath?: string; pullModels?: boolean }) =>
+  probe: (data: { apiBaseUrl: string; apiKey: string; validationPath?: string; pullModels?: boolean; category?: ModelConfig["category"] }) =>
     api.post<{ success: boolean; message: string; models: string[] }>("/api/model-configs/probe", data),
   presets: () => api.get("/api/model-capability-presets"),
   catalog: () => api.get<ModelCatalogItem[]>("/api/model-catalog"),
