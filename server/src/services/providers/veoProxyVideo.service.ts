@@ -219,9 +219,17 @@ function relayDimensions(aspectRatio?: string, resolution?: string) {
 
 function relayAspectFields(aspectRatio?: string, resolution?: string) {
   const dimensions = relayDimensions(aspectRatio, resolution);
+  const orientation = aspectRatio === "9:16" || aspectRatio === "3:4" || aspectRatio === "2:5"
+    ? "portrait"
+    : aspectRatio === "1:1"
+      ? "square"
+      : aspectRatio
+        ? "landscape"
+        : undefined;
   return {
     ...(aspectRatio ? { aspect_ratio: aspectRatio, aspectRatio, ratio: aspectRatio } : {}),
     ...(resolution ? { resolution } : {}),
+    ...(orientation ? { orientation } : {}),
     ...(dimensions ? { size: `${dimensions.width}x${dimensions.height}`, width: dimensions.width, height: dimensions.height } : {})
   };
 }

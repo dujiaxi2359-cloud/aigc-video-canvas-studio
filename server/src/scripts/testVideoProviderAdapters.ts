@@ -275,6 +275,7 @@ const cy88VeoProxyBody = buildVeoProxyBody({
 assert(cy88VeoProxyBody.aspect_ratio === "9:16", "cy88 Veo proxy body should include aspect_ratio");
 assert(cy88VeoProxyBody.ratio === "9:16", "cy88 Veo proxy body should include ratio alias");
 assert(cy88VeoProxyBody.size === "720x1280", "cy88 Veo proxy body should include portrait widthxheight size");
+assert(cy88VeoProxyBody.orientation === "portrait", "cy88 Veo proxy body should include documented portrait orientation");
 assert(cy88VeoProxyBody.width === 720 && cy88VeoProxyBody.height === 1280, "cy88 Veo proxy body should include portrait dimensions");
 assert(cy88VeoProxyBody.duration === 8, "cy88 Veo proxy body should include numeric duration");
 assert(cy88VeoProxyBody.seconds === "8", "cy88 Veo proxy body should include string seconds for Go relays");
