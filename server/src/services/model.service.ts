@@ -33,6 +33,7 @@ import type { ProviderGenerateResult } from "./providers/providerTypes.js";
 import { isProviderError, ProviderError } from "../utils/providerErrors.js";
 import { buildPayloadSummary, logOfficialPayload } from "../utils/generationPayload.js";
 import { metadataToQualityAudit, readGeneratedFileMetadata } from "../utils/mediaMetadata.js";
+import { mapVideoDimensions, normalizeVideoAspectRatio } from "../utils/videoParams.js";
 
 export type GenerateTextRequest = {
   projectId?: string;
@@ -764,6 +765,33 @@ async function enrichPayloadSummaryWithOutput(
 
 async function enforceVideoAspectRatio(result: ProviderGenerateResult, aspectRatio?: string, resolution?: string): Promise<ProviderGenerateResult> {
   if (!aspectRatio || !resolution) return result;
+  const payloadSummary = result.payloadSummary && typeof result.payloadSummary === "object" ? result.payloadSummary as Record<string, unknown> : {};
+  if (payloadSummary.nativeAspectRatioRequired) {
+    const metadata = await readGeneratedFileMetadata(result.localPath ?? "");
+    const target = mapVideoDimensions(aspectRatio, resolution);
+    const outputWidth = metadata.width;
+    const outputHeight = metadata.height;
+    const matchesNative = Boolean(outputWidth && outputHeight)
+      && Math.abs((outputWidth! / outputHeight!) - (target.width / target.height)) < 0.02;
+    if (!matchesNative) {
+      throw new ProviderError(
+        "MODEL_PARAM_UNSUPPORTED",
+        `当前中转没有按 ${normalizeVideoAspectRatio(aspectRatio)} 原生比例返回视频。系统未裁剪画面；请切换支持原生 ${normalizeVideoAspectRatio(aspectRatio)} 的通道，或改用普通图生/首尾帧模式。`,
+        JSON.stringify({ requestedAspectRatio: aspectRatio, requestedResolution: resolution, output: metadata, provider: payloadSummary.proxyEndpoint ?? payloadSummary.endpoint }),
+        { ...payloadSummary, output: metadata, nativeAspectRatioMismatch: true }
+      );
+    }
+    return {
+      ...result,
+      payloadSummary: {
+        ...payloadSummary,
+        outputAspectRatio: normalizeVideoAspectRatio(aspectRatio),
+        outputAspectRatioTransformed: false,
+        outputAspectRatioFitMode: "native_required",
+        modelNativeOutput: metadata
+      }
+    };
+  }
   const ensured = await ensureVideoAspectRatio(result.localPath, aspectRatio, resolution);
   if (!ensured) return result;
   if (!ensured.transformed) {

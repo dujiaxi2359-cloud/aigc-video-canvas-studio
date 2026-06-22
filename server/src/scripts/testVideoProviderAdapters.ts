@@ -306,8 +306,8 @@ const ai666PortraitReferenceBody = buildVeoProxyBody({
   }
 }) as Record<string, any>;
 assert(ai666PortraitReferenceBody.size === "720x1280", "ai666 Veo proxy body should use documented portrait size");
-assert(ai666PortraitReferenceBody.input_reference === "https://assets.example/front.png", "ai666 portrait reference mode should degrade to first-frame input to preserve 9:16");
-assert(ai666PortraitReferenceBody.images.length === 1, "ai666 portrait reference mode should not send multi-reference images that force 16:9");
+assert(Array.isArray(ai666PortraitReferenceBody.input_reference), "ai666 portrait reference mode should keep multiple reference images");
+assert(ai666PortraitReferenceBody.images.length === 2, "ai666 portrait reference mode should preserve multi-reference images and request native 9:16 through size plus metadata");
 assert(
   configuredRelayModelName({ modelName: "veo_3_1" }) === "veo_3_1",
   "Veo relay requests should preserve the upstream model name"

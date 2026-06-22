@@ -231,31 +231,6 @@ function relayDurationFields(params: VideoProviderParams) {
   return duration ? { duration, seconds: String(duration) } : {};
 }
 
-function veoDocsStyleEndpoint(endpoint: string) {
-  return isAi666Endpoint(endpoint) || isCy88Endpoint(endpoint);
-}
-
-function shouldPreferFirstFrameForPortraitReference(input: {
-  endpoint: string;
-  params: VideoProviderParams;
-  requestAspectRatio?: string;
-  images: string[];
-}) {
-  return veoDocsStyleEndpoint(input.endpoint)
-    && input.params.videoMode === "reference_images_to_video"
-    && input.requestAspectRatio === "9:16"
-    && input.images.length > 1;
-}
-
-function effectiveVeoReferenceImages(input: {
-  endpoint: string;
-  params: VideoProviderParams;
-  requestAspectRatio?: string;
-  images: string[];
-}) {
-  return shouldPreferFirstFrameForPortraitReference(input) ? input.images.slice(0, 1) : input.images;
-}
-
 function veoMetadataFields(aspectRatio?: string, resolution?: string, params?: VideoProviderParams) {
   return {
     metadata: {
@@ -295,12 +270,11 @@ export function buildVeoProxyBody(input: {
   }
 
   if (protocol === "unified-create-query") {
-    const effectiveImages = effectiveVeoReferenceImages(input);
     return {
       model: input.relayModel,
       prompt: input.params.prompt,
-      images: effectiveImages,
-      input_reference: effectiveImages.length === 1 ? effectiveImages[0] : effectiveImages,
+      images: input.images,
+      input_reference: input.images.length === 1 ? input.images[0] : input.images,
       ...relayAspectFields(input.requestAspectRatio, input.requestResolution),
       ...relayDurationFields(input.params),
       ...veoMetadataFields(input.requestAspectRatio, input.requestResolution, input.params),
@@ -309,7 +283,6 @@ export function buildVeoProxyBody(input: {
     };
   }
 
-  const effectiveImages = effectiveVeoReferenceImages(input);
   return {
     model: input.relayModel,
     prompt: input.params.prompt,
@@ -317,9 +290,9 @@ export function buildVeoProxyBody(input: {
     ...relayAspectFields(input.requestAspectRatio, input.requestResolution),
     ...(input.requestResolution ? { resolution: input.requestResolution } : {}),
     ...relayDurationFields(input.params),
-    input_reference: effectiveImages.length === 1 ? effectiveImages[0] : effectiveImages,
+    input_reference: input.images.length === 1 ? input.images[0] : input.images,
     ...veoMetadataFields(input.requestAspectRatio, input.requestResolution, input.params),
-    images: effectiveImages
+    images: input.images
   };
 }
 
@@ -589,6 +562,7 @@ export async function generateVideoWithVeoProxy(params: VideoProviderParams): Pr
           requestedAspectRatio: requestAspectRatio,
           requestedResolution: requestResolution,
           requestedDuration: params.duration,
+          nativeAspectRatioRequired: (isAi666Endpoint(endpoint) || isCy88Endpoint(endpoint)) && requestAspectRatio === "9:16",
           inputImageCount: images.length,
           inputImages: inputImageAudits,
           directResult: true
@@ -679,6 +653,7 @@ export async function generateVideoWithVeoProxy(params: VideoProviderParams): Pr
         requestedAspectRatio: requestAspectRatio,
         requestedResolution: requestResolution,
         requestedDuration: params.duration,
+        nativeAspectRatioRequired: (isAi666Endpoint(endpoint) || isCy88Endpoint(endpoint)) && requestAspectRatio === "9:16",
         inputImageCount: images.length,
         inputImages: inputImageAudits
       }
