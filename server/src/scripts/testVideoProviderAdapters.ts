@@ -6,6 +6,7 @@ import { buildVeoProxyBody, configuredRelayModelName, veoProxyCreateEndpoint, ve
 import { joinUrl, resolveVideoRequestConfig } from "../services/providers/videoRequestAdapter.js";
 import { getVideoModelCapability } from "../config/videoModelCapabilities.js";
 import { modelCatalog } from "../services/modelCatalog.js";
+import { hasSubmittedRemoteVideoTask } from "../services/model.service.js";
 import { isGrokLikeVideoModel, normalizeVideoCapabilities } from "../services/videoCapabilityNormalization.js";
 import { ProviderError } from "../utils/providerErrors.js";
 import { mapVideoDimensions, normalizeVideoAspectRatio } from "../utils/videoParams.js";
@@ -26,6 +27,14 @@ assert(mapVideoDimensions("3:4", "720p").width === 960, "3:4 720p width should b
 assert(mapVideoDimensions("3:4", "720p").height === 1280, "3:4 720p height should be 1280");
 assert(mapVideoDimensions("21:9", "720p").width === 1280, "21:9 720p width should be 1280");
 assert(mapVideoDimensions("21:9", "720p").height === 549, "21:9 720p height should be rounded from the long edge");
+assert(
+  hasSubmittedRemoteVideoTask(new ProviderError("NETWORK_ERROR", "poll failed", "terminated", { proxyTaskId: "task_123" })),
+  "Video fallback should be blocked once an upstream task id exists"
+);
+assert(
+  !hasSubmittedRemoteVideoTask(new ProviderError("NETWORK_ERROR", "create failed", "fetch failed")),
+  "Video fallback can still run when no upstream task was created"
+);
 assert(
   grokPollEndpoint("https://api.x.ai/v1", "request/1") === "https://api.x.ai/v1/videos/request%2F1",
   "Grok poll endpoint should encode request id"

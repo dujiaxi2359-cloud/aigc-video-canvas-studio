@@ -357,6 +357,10 @@ function shouldTryNextVeoEndpoint(response: Response | undefined, payload: Recor
   return /invalid url|not found|cannot\s+(post|get)|method not allowed|unsupported endpoint|route|path|html|cloudflare|gateway|没有返回任务 id|task_id|task id/i.test(text);
 }
 
+function isTransientPollError(error: unknown) {
+  return /fetch failed|terminated|network|econn|etimedout|timeout|socket|other side closed|und_err|dns|gateway|502|503|504/i.test(rawErrorMessage(error));
+}
+
 function taskIdFromResponse(payload: Record<string, unknown>): string | undefined {
   for (const key of ["id", "task_id", "taskId", "request_id", "requestId", "generation_id", "generationId", "job_id", "jobId", "operation_id", "operationId"]) {
     if (typeof payload[key] === "string" && payload[key]) return payload[key] as string;
@@ -504,6 +508,8 @@ export async function generateVideoWithVeoProxy(params: VideoProviderParams): Pr
     throw new ProviderError("MODEL_MODE_UNSUPPORTED", "Google Omni Flash 10s 暂不支持首尾帧模式。");
   }
 
+  let activeEndpoint: string | undefined;
+  let activeProxyTaskId: string | undefined;
   try {
     const requestAspectRatio = isOmni ? params.aspectRatio : params.aspectRatio ?? "16:9";
     const requestResolution = isOmni ? params.resolution : params.resolution ?? "720p";
@@ -529,6 +535,7 @@ export async function generateVideoWithVeoProxy(params: VideoProviderParams): Pr
 
     for (const candidate of endpointCandidates) {
       endpoint = candidate;
+      activeEndpoint = endpoint;
       protocol = relayProtocol(endpoint);
       relayModel = useUnifiedPortraitComponents && protocol === "unified-create-query"
         ? "veo3.1-fast-components"
@@ -548,6 +555,7 @@ export async function generateVideoWithVeoProxy(params: VideoProviderParams): Pr
       created = attempt.payload;
       directVideoUrl = findVideoUrl(created);
       taskId = taskIdFromResponse(created);
+      activeProxyTaskId = taskId;
       attemptedEndpoints.push({ endpoint, status: response.status, message: errorMessage(created).slice(0, 220) });
       if (response.ok && (directVideoUrl || taskId)) break;
       if (!shouldTryNextVeoEndpoint(response, created, taskId, directVideoUrl)) break;
@@ -605,6 +613,7 @@ export async function generateVideoWithVeoProxy(params: VideoProviderParams): Pr
     if (!taskId) {
       throw new ProviderError("PROVIDER_ERROR", "Veo 中转接口没有返回任务 id。", JSON.stringify(created), { endpoint, attemptedEndpoints, response: created });
     }
+    activeProxyTaskId = taskId;
     const pollUrl = protocol === "unified-create-query"
       ? unifiedQueryEndpoint(endpoint, taskId)
       : `${endpoint}/${encodeURIComponent(taskId)}`;
@@ -635,6 +644,7 @@ export async function generateVideoWithVeoProxy(params: VideoProviderParams): Pr
 
     let task = created;
     const startedAt = Date.now();
+    let transientPollFailures = 0;
     while (!isCompletedStatus(taskStatus(task))) {
       if (isFailedStatus(taskStatus(task))) {
         await saveGenerationTask({ id: taskId, status: "failed", result: task, errorMessage: errorMessage(task) });
@@ -645,13 +655,44 @@ export async function generateVideoWithVeoProxy(params: VideoProviderParams): Pr
         throw new ProviderError("VEO_OPERATION_TIMEOUT", "Veo 中转任务超过 15 分钟仍未完成，请稍后重试。");
       }
       await sleep(5000);
-      const pollResponse = await fetch(pollUrl, {
-        headers: { Authorization: `Bearer ${params.apiKey}` }
-      });
-      task = await responseJson(pollResponse);
+      let pollResponse: Response;
+      try {
+        pollResponse = await fetch(pollUrl, {
+          headers: { Authorization: `Bearer ${params.apiKey}` }
+        });
+      } catch (pollError) {
+        if (isTransientPollError(pollError)) {
+          transientPollFailures += 1;
+          await saveGenerationTask({
+            id: taskId,
+            status: taskStatus(task) || "processing",
+            result: {
+              ...task,
+              pollWarning: rawErrorMessage(pollError),
+              transientPollFailures
+            },
+            errorMessage: `Veo 中转任务已提交，查询临时失败，正在重试：${rawErrorMessage(pollError)}`
+          });
+          continue;
+        }
+        throw pollError;
+      }
+      transientPollFailures = 0;
+      const polledTask = await responseJson(pollResponse);
+      task = polledTask;
       await saveGenerationTask({ id: taskId, status: taskStatus(task) || "processing", result: task });
       if (!pollResponse.ok) {
-        throw new ProviderError("PROVIDER_ERROR", `Veo 中转任务查询失败：${errorMessage(task)}`, JSON.stringify(task));
+        const pollMessage = errorMessage(task);
+        if (isTransientPollError(pollMessage)) continue;
+        throw new ProviderError("PROVIDER_ERROR", `Veo 中转任务查询失败：${pollMessage}`, JSON.stringify(task), {
+          endpoint,
+          pollUrl,
+          taskId,
+          proxyTaskId: taskId,
+          relayModel,
+          relayProtocol: protocol,
+          attemptedEndpoints
+        });
       }
     }
 
@@ -661,6 +702,7 @@ export async function generateVideoWithVeoProxy(params: VideoProviderParams): Pr
       throw new ProviderError("VEO_OPERATION_NO_VIDEO_IN_RESPONSE", "Veo 中转任务已完成，但响应中没有找到视频 URL。", JSON.stringify(task), {
         endpoint,
         taskId,
+        proxyTaskId: taskId,
         configuredModel: params.modelName,
         relayModel,
         relayProtocol: protocol,
@@ -695,8 +737,8 @@ export async function generateVideoWithVeoProxy(params: VideoProviderParams): Pr
     if (error instanceof ProviderError) throw error;
     const message = rawErrorMessage(error);
     if (/fetch failed|network|econn|dns|timeout/i.test(message)) {
-      throw new ProviderError("NETWORK_ERROR", "Veo 中转接口网络请求失败，请检查 Base URL、本地代理和中转服务状态。", message);
+      throw new ProviderError("NETWORK_ERROR", "Veo 中转接口网络请求失败，请检查 Base URL、本地代理和中转服务状态。", message, { proxyTaskId: activeProxyTaskId, endpoint: activeEndpoint });
     }
-    throw new ProviderError("PROVIDER_ERROR", "Veo 中转接口调用失败。", message);
+    throw new ProviderError("PROVIDER_ERROR", "Veo 中转接口调用失败。", message, { proxyTaskId: activeProxyTaskId, endpoint: activeEndpoint });
   }
 }

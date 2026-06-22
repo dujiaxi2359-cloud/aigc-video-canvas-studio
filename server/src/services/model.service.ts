@@ -511,6 +511,14 @@ function isRetryableVideoRelayError(error: unknown) {
     && !/unauthorized|forbidden|invalid api key|incorrect api key|quota|credit|balance|insufficient|no access|permission|额度|余额|无权限|未开通/i.test(text);
 }
 
+export function hasSubmittedRemoteVideoTask(error: unknown) {
+  if (!(error instanceof ProviderError)) return false;
+  const details = error.details;
+  if (!details || typeof details !== "object") return false;
+  const record = details as Record<string, unknown>;
+  return typeof record.proxyTaskId === "string" && record.proxyTaskId.length > 0;
+}
+
 function videoProviderPriority(providerId?: string) {
   if (providerId === "google") return 0;
   if (providerId === "grok") return 1;
@@ -610,6 +618,7 @@ async function tryVideoFallback(input: {
   request: GenerateVideoRequest;
   primaryError: unknown;
 }) {
+  if (hasSubmittedRemoteVideoTask(input.primaryError)) return undefined;
   if (!isRetryableVideoRelayError(input.primaryError)) return undefined;
   const candidates = await listVideoFallbackModels(input.primaryModel);
   for (const candidate of candidates) {
