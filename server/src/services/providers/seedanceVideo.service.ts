@@ -1014,13 +1014,17 @@ export function buildProxyBody(params: SeedanceProviderParams, refs: {
   }
 
   if (refs.apiFamily === "omni_fast") {
+    const images = refs.images.slice(0, 5);
     return compactObject({
       ...base,
+      model: /omni[-_]?flash/i.test(params.modelName) ? "omni-fast" : params.modelName,
       prompt: params.prompt,
-      first_image_url: refs.images[0],
+      first_image_url: refs.mode === "image_to_video_first_frame" || refs.mode === "image_to_video_first_last_frame" ? images[0] : undefined,
+      last_image_url: refs.mode === "image_to_video_first_last_frame" ? images[1] : undefined,
+      images: refs.mode === "reference_images_to_video" ? images : undefined,
       seconds: refs.seconds === "auto" ? undefined : refs.seconds,
       aspect_ratio: refs.aspectRatio,
-      resolution: refs.resolution
+      resolution: refs.resolution.toLowerCase()
     });
   }
 
@@ -1393,6 +1397,10 @@ export async function generateVideoWithSeedance(params: SeedanceProviderParams):
         taskId: id,
         model: params.modelName,
         mode,
+        requestedAspectRatio: normalizedRatio,
+        requestedResolution: normalizedResolution,
+        requestedDuration: seconds,
+        nativeAspectRatioRequired: apiFamily === "omni_fast" && normalizedRatio === "9:16",
         watermark: false,
         referenceBindingCount: params.referenceBindings?.length ?? 0
       }

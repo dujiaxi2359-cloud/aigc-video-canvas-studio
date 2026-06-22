@@ -559,7 +559,12 @@ async function callVideoProvider(input: {
   const providerId = model.provider_id ?? "";
   await assertSelectedVideoChannelSupportsAssets(model, providerParams, capabilities);
   const videoRequestConfig = validateVideoRequestConfig(providerParams, capabilities);
-  if (providerId === "google" && isVeoLikeVideoModel(model.provider_id, model.model_name, capabilities)) {
+  if (
+    providerId === "google"
+    && videoRequestConfig.apiFamily !== "omni_fast"
+    && videoRequestConfig.apiFamily !== "omni_fast_v2v"
+    && isVeoLikeVideoModel(model.provider_id, model.model_name, capabilities)
+  ) {
     return generateVideoWithGoogleVeo(providerParams);
   }
   if (

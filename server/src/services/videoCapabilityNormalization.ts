@@ -10,6 +10,8 @@ const seedance2InputModes: ModelInputMode[] = ["text-to-video", "image-to-video"
 const seedance2SupportedInputs: VideoSupportedInput[] = ["text", "image", "first_frame", "reference_image", "first_last_frame", "video"];
 const kling3InputModes: ModelInputMode[] = ["text-to-video", "image-to-video", "reference-to-video", "first-last-frame"];
 const kling3SupportedInputs: VideoSupportedInput[] = ["text", "image", "first_frame", "reference_image", "first_last_frame"];
+const omniFastInputModes: ModelInputMode[] = ["text-to-video", "image-to-video", "reference-to-video", "first-last-frame"];
+const omniFastSupportedInputs: VideoSupportedInput[] = ["text", "image", "first_frame", "reference_image", "first_last_frame"];
 
 function union<T>(base: readonly T[] | undefined, additions: readonly T[]) {
   return Array.from(new Set([...(base ?? []), ...additions]));
@@ -18,6 +20,11 @@ function union<T>(base: readonly T[] | undefined, additions: readonly T[]) {
 export function isVeoLikeVideoModel(providerId?: string, modelName?: string, capabilities?: ModelCapabilities) {
   const identity = `${providerId ?? ""} ${modelName ?? ""} ${capabilities?.provider ?? ""} ${capabilities?.modelCapability?.model ?? ""}`.toLowerCase();
   return /\b(?:google|gemini|veo|omni)\b/.test(identity) || /veo[-_ .]?\d|veo_/.test(identity);
+}
+
+export function isOmniFastVideoModel(modelName?: string, capabilities?: ModelCapabilities) {
+  const identity = `${modelName ?? ""} ${capabilities?.modelCapability?.model ?? ""} ${capabilities?.apiFamily ?? ""}`.toLowerCase();
+  return /omni[-_]?fast|omni[-_]?flash/.test(identity) && !/omni[-_]?fast[-_]?v2v/.test(identity);
 }
 
 function modelIdentity(providerId?: string, modelName?: string, capabilities?: ModelCapabilities) {
@@ -42,6 +49,38 @@ export function normalizeVideoCapabilities(
   providerId?: string,
   modelName?: string
 ): ModelCapabilities {
+  if (isOmniFastVideoModel(modelName, capabilities)) {
+    const normalized: ModelCapabilities = {
+      ...capabilities,
+      apiFamily: "omni_fast",
+      inputModes: union(capabilities.inputModes, omniFastInputModes),
+      supportedInputs: union(capabilities.supportedInputs, omniFastSupportedInputs),
+      duration: { type: "range", min: 4, max: 30, step: 1 },
+      supportedDurations: Array.from({ length: 27 }, (_, index) => index + 4),
+      aspectRatios: union(capabilities.aspectRatios, ["16:9", "9:16"]),
+      supportedAspectRatios: union(capabilities.supportedAspectRatios, ["16:9", "9:16"]),
+      resolutions: union(capabilities.resolutions, ["720p", "1080p", "2k", "4k"]),
+      supportedResolutions: union(capabilities.supportedResolutions, ["720p", "1080p", "2k", "4k"]),
+      imageTransport: "url",
+      imageField: "first_image_url",
+      supportsImageInput: true,
+      supportsReferenceImage: true,
+      supportsFirstLastFrame: true,
+      supportsMultiImageInput: true,
+      maxReferenceImages: 5
+    };
+    if (capabilities.channelCapability) {
+      normalized.channelCapability = {
+        ...capabilities.channelCapability,
+        apiFamily: "omni_fast",
+        supportedInputs: union(capabilities.channelCapability.supportedInputs, omniFastSupportedInputs),
+        imageTransport: "url",
+        imageField: "first_image_url"
+      };
+    }
+    return normalized;
+  }
+
   if (isKling3LikeVideoModel(providerId, modelName, capabilities) && !/(?:^|[-_])noref(?:$|[-_])/.test((modelName ?? "").toLowerCase())) {
     const normalized: ModelCapabilities = {
       ...capabilities,

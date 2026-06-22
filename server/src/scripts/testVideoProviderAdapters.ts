@@ -564,6 +564,62 @@ assert(omniConfig.finalUrl === "https://ai.ai666.net/v1/videos", "Omni-fast shou
 assert(omniConfig.imageTransport === "url", "Omni-fast image input should use first_image_url with public URL");
 assert(omniConfig.imageField === "first_image_url", "Omni-fast should keep its configured first frame field");
 assert(omniConfig.supportedInputs.includes("image"), "/v1/videos must not force Omni-fast to text-only");
+assert(omniConfig.supportedDurations.includes(30), "Omni-fast should accept the documented 4-30 second range");
+assert(omniConfig.supportedResolutions.includes("4k"), "Omni-fast should accept the documented 4k resolution");
+const omniReferenceBody = buildProxyBody({
+  providerId: "google",
+  modelName: "omni-flash",
+  apiBaseUrl: "https://ai.ai666.net/v1/videos",
+  apiKey: "sk-test-key",
+  prompt: "reference test",
+  nodeId: "node",
+  modelConfigId: "model",
+  inputMode: "reference-to-video",
+  duration: 8,
+  aspectRatio: "9:16",
+  resolution: "4K",
+  generateCount: 1
+}, {
+  apiFamily: "omni_fast",
+  mode: "reference_images_to_video",
+  images: ["https://assets.example/1.png", "https://assets.example/2.png"],
+  videos: [],
+  audios: [],
+  aspectRatio: "9:16",
+  resolution: "4K",
+  seconds: "8"
+}) as Record<string, any>;
+assert(omniReferenceBody.model === "omni-fast", "Legacy omni-flash model names should map to the documented omni-fast model");
+assert(omniReferenceBody.seconds === "8", "Omni-fast seconds must be sent as a string");
+assert(omniReferenceBody.aspect_ratio === "9:16", "Omni-fast should preserve native portrait ratio");
+assert(omniReferenceBody.resolution === "4k", "Omni-fast should normalize resolution to the documented lowercase value");
+assert(Array.isArray(omniReferenceBody.images) && omniReferenceBody.images.length === 2, "Omni-fast reference mode should send images[]");
+assert(!omniReferenceBody.first_image_url, "Omni-fast reference mode should not be downgraded to first-frame mode");
+const omniFirstLastBody = buildProxyBody({
+  providerId: "google",
+  modelName: "omni-fast",
+  apiBaseUrl: "https://relay.example/v1",
+  apiKey: "sk-test-key",
+  prompt: "first last test",
+  nodeId: "node",
+  modelConfigId: "model",
+  inputMode: "first-last-frame",
+  duration: 8,
+  aspectRatio: "16:9",
+  resolution: "720p",
+  generateCount: 1
+}, {
+  apiFamily: "omni_fast",
+  mode: "image_to_video_first_last_frame",
+  images: ["https://assets.example/start.png", "https://assets.example/end.png"],
+  videos: [],
+  audios: [],
+  aspectRatio: "16:9",
+  resolution: "720p",
+  seconds: "8"
+}) as Record<string, any>;
+assert(omniFirstLastBody.first_image_url === "https://assets.example/start.png", "Omni-fast first-last mode should send first_image_url");
+assert(omniFirstLastBody.last_image_url === "https://assets.example/end.png", "Omni-fast first-last mode should send last_image_url");
 const configurableOpenAiVideos = resolveVideoRequestConfig({
   providerId: "grok",
   modelName: "grok-video-proxy",
