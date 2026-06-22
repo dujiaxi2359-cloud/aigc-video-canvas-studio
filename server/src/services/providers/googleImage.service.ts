@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { GoogleGenAI } from "@google/genai";
 import { getAsset } from "../asset.service.js";
+import { ensureAssetLocalFile } from "../assets/ensureAssetLocalFile.service.js";
 import { saveGeneratedBuffer } from "../../utils/downloadGeneratedFile.js";
 import { buildPayloadSummary, logOfficialPayload } from "../../utils/generationPayload.js";
 import { aspectRatioToGoogleSize, normalizeImageAspectRatio } from "../../utils/imageAspectRatio.js";
@@ -76,32 +77,34 @@ function collectInlineImages(value: unknown, results: Array<{ data: string; mime
 }
 
 async function imagePartsFromAssets(assetIds: string[] | undefined) {
-  if (!assetIds?.length) return { parts: [], audits: [] };
+  if (!assetIds?.length) return { parts: [], audits: [], skipped: [] };
   const parts: Array<{ inlineData: { data: string; mimeType: string } }> = [];
   const audits: Array<Record<string, unknown>> = [];
+  const skipped: Array<{ assetId: string; reason: string }> = [];
 
   for (const assetId of assetIds.slice(0, 8)) {
-    const asset = await getAsset(assetId);
-    if (!asset?.localPath || !fs.existsSync(asset.localPath)) {
-      throw new ProviderError("MISSING_INPUT_ASSET", "Google 图片生成引用的图片素材不存在或已被删除。");
+    try {
+      const asset = await ensureAssetLocalFile(await getAsset(assetId), "Google 图片生成引用的图片素材");
+      parts.push({
+        inlineData: {
+          data: fs.readFileSync(asset.localPath).toString("base64"),
+          mimeType: asset.mimeType || mimeFromPath(asset.localPath)
+        }
+      });
+      const metadata = await readGeneratedFileMetadata(asset.localPath);
+      audits.push({
+        inputImageSource: asset.localFileSource,
+        inputImageWidth: metadata.width,
+        inputImageHeight: metadata.height,
+        inputImageFileSize: metadata.fileSize,
+        inputImageWasCompressed: false
+      });
+    } catch (error) {
+      skipped.push({ assetId, reason: rawErrorMessage(error) });
     }
-    parts.push({
-      inlineData: {
-        data: fs.readFileSync(asset.localPath).toString("base64"),
-        mimeType: mimeFromPath(asset.localPath)
-      }
-    });
-    const metadata = await readGeneratedFileMetadata(asset.localPath);
-    audits.push({
-      inputImageSource: "localPath",
-      inputImageWidth: metadata.width,
-      inputImageHeight: metadata.height,
-      inputImageFileSize: metadata.fileSize,
-      inputImageWasCompressed: false
-    });
   }
 
-  return { parts, audits };
+  return { parts, audits, skipped };
 }
 
 async function callGeminiImage(ai: any, params: ImageProviderParams, parts: Array<Record<string, unknown>>) {
@@ -140,6 +143,13 @@ export async function generateImageWithGoogle(params: ImageProviderParams): Prom
   try {
     const ai: any = new GoogleGenAI(googleGenAIOptions(params.apiKey, params.apiBaseUrl));
     const inputParts = await imagePartsFromAssets(params.imageAssetIds);
+    if ((params.inputMode === "image-edit" || params.inputMode === "image-to-image") && params.imageAssetIds?.length && !inputParts.parts.length) {
+      throw new ProviderError(
+        "MISSING_INPUT_ASSET",
+        "Google 图片生成引用的图片素材都不可用，请重新连接画布上的图片节点或重新上传素材。",
+        JSON.stringify(inputParts.skipped)
+      );
+    }
     const parts = [{ text: params.prompt }, ...inputParts.parts];
     const mappedSize = aspectRatioToGoogleSize(params.aspectRatio);
     logOfficialPayload(

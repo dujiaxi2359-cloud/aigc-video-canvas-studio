@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { getAsset } from "../asset.service.js";
+import { ensureAssetLocalFile } from "../assets/ensureAssetLocalFile.service.js";
 import { downloadGeneratedFile, saveGeneratedBuffer } from "../../utils/downloadGeneratedFile.js";
 import { ProviderError, rawErrorMessage } from "../../utils/providerErrors.js";
 import type { ImageProviderParams, ProviderGenerateResult, TextProviderParams } from "./providerTypes.js";
@@ -32,19 +33,21 @@ function mimeTypeFromPath(filePath: string) {
 
 async function imageParts(assetIds?: string[]) {
   const parts: Array<Record<string, unknown>> = [];
+  const skipped: Array<{ assetId: string; reason: string }> = [];
   for (const assetId of assetIds ?? []) {
-    const asset = await getAsset(assetId);
-    if (!asset?.localPath || !fs.existsSync(asset.localPath)) {
-      throw new ProviderError("MISSING_INPUT_ASSET", "Gemini 中转接口引用的图片素材不存在或已被删除。");
+    try {
+      const asset = await ensureAssetLocalFile(await getAsset(assetId), "Gemini 中转接口引用的图片素材");
+      parts.push({
+        inlineData: {
+          mimeType: asset.mimeType || mimeTypeFromPath(asset.localPath),
+          data: fs.readFileSync(asset.localPath).toString("base64")
+        }
+      });
+    } catch (error) {
+      skipped.push({ assetId, reason: rawErrorMessage(error) });
     }
-    parts.push({
-      inlineData: {
-        mimeType: asset.mimeType || mimeTypeFromPath(asset.localPath),
-        data: fs.readFileSync(asset.localPath).toString("base64")
-      }
-    });
   }
-  return parts;
+  return { parts, skipped };
 }
 
 async function requestRelay(apiBaseUrl: string, apiKey: string, modelName: string, body: Record<string, unknown>) {
@@ -120,9 +123,10 @@ function findImage(value: unknown): { url?: string; data?: string; mimeType?: st
 
 export async function generateTextWithGoogleRelay(params: TextProviderParams): Promise<ProviderGenerateResult> {
   try {
+    const inputImages = await imageParts(params.imageAssetIds);
     const parts: Array<Record<string, unknown>> = [
       { text: params.inputText || "请根据当前工作流上下文生成可用内容。" },
-      ...await imageParts(params.imageAssetIds)
+      ...inputImages.parts
     ];
     const payload = await requestRelay(params.apiBaseUrl, params.apiKey, params.modelName, {
       contents: [{ role: "user", parts }],
@@ -139,8 +143,16 @@ export async function generateTextWithGoogleRelay(params: TextProviderParams): P
 
 export async function generateImageWithGoogleRelay(params: ImageProviderParams): Promise<ProviderGenerateResult> {
   try {
+    const inputImages = await imageParts(params.imageAssetIds);
+    if ((params.inputMode === "image-edit" || params.inputMode === "image-to-image") && params.imageAssetIds?.length && !inputImages.parts.length) {
+      throw new ProviderError(
+        "MISSING_INPUT_ASSET",
+        "Gemini 中转接口引用的图片素材都不可用，请重新连接画布上的图片节点或重新上传素材。",
+        JSON.stringify(inputImages.skipped)
+      );
+    }
     const parts: Array<Record<string, unknown>> = [
-      ...await imageParts(params.imageAssetIds),
+      ...inputImages.parts,
       { text: params.prompt }
     ];
     const payload = await requestRelay(params.apiBaseUrl, params.apiKey, params.modelName, {
