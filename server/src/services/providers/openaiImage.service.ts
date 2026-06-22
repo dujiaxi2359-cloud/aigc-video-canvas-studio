@@ -3,6 +3,7 @@ import { getAsset } from "../asset.service.js";
 import { ensureAssetLocalFile } from "../assets/ensureAssetLocalFile.service.js";
 import { downloadGeneratedFile, saveGeneratedBuffer } from "../../utils/downloadGeneratedFile.js";
 import { aspectRatioToOpenAIImageSize } from "../../utils/imageAspectRatio.js";
+import { extractImagePayload, summarizeImageResponseShape } from "../../utils/imageResponseExtractor.js";
 import { ProviderError } from "../../utils/providerErrors.js";
 import type { ImageProviderParams, ProviderGenerateResult } from "./providerTypes.js";
 
@@ -90,25 +91,23 @@ function imageExtension(format?: string) {
 }
 
 async function saveOpenAIImage(json: unknown, format?: string): Promise<ProviderGenerateResult> {
-  const result = json as { data?: Array<{ b64_json?: string; url?: string }> };
-  const first = result.data?.[0];
-  if (!first) throw new Error("OpenAI 图片接口没有返回图片数据。");
+  const image = extractImagePayload(json);
+  if (!image) {
+    throw new Error(`OpenAI 图片接口没有返回可识别的图片字段（已检查 b64_json、url、image_url、output_url、base64 等）。返回结构：${summarizeImageResponseShape(json)}`);
+  }
 
-  if (first.b64_json) {
+  if (image.type === "base64") {
     const saved = await saveGeneratedBuffer({
-      buffer: Buffer.from(first.b64_json, "base64"),
+      buffer: Buffer.from(image.value, "base64"),
       prefix: "image_openai",
-      extension: imageExtension(format)
+      extension: imageExtension(format),
+      contentType: image.mimeType
     });
-    return { status: "success", outputUrl: saved.outputUrl, localPath: saved.localPath, rawResponse: json };
+    return { status: "success", outputUrl: saved.outputUrl, localPath: saved.localPath, rawResponse: json, payloadSummary: { imageResponsePath: image.sourcePath } };
   }
 
-  if (first.url) {
-    const saved = await downloadGeneratedFile(first.url, "image_openai");
-    return { status: "success", outputUrl: saved.outputUrl, localPath: saved.localPath, rawResponse: json };
-  }
-
-  throw new Error("OpenAI 图片接口没有返回 b64_json 或 url。");
+  const saved = await downloadGeneratedFile(image.value, "image_openai");
+  return { status: "success", outputUrl: saved.outputUrl, localPath: saved.localPath, rawResponse: json, payloadSummary: { imageResponsePath: image.sourcePath } };
 }
 
 function applySharedImageParams(body: Record<string, unknown>, params: ImageProviderParams) {

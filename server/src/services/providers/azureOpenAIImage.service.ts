@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import { downloadGeneratedFile, saveGeneratedBuffer } from "../../utils/downloadGeneratedFile.js";
 import { aspectRatioToOpenAIImageSize } from "../../utils/imageAspectRatio.js";
+import { extractImagePayload, summarizeImageResponseShape } from "../../utils/imageResponseExtractor.js";
 import { readGeneratedFileMetadata } from "../../utils/mediaMetadata.js";
 import { ProviderError } from "../../utils/providerErrors.js";
 import { getAsset } from "../asset.service.js";
@@ -150,25 +151,27 @@ function classifyAzureError(message: string): ProviderError {
 }
 
 async function saveAzureImage(json: unknown, format?: string): Promise<ProviderGenerateResult> {
-  const result = json as { data?: Array<{ b64_json?: string; url?: string }> };
-  const first = result.data?.[0];
-  if (!first) throw new ProviderError("PROVIDER_ERROR", "Azure OpenAI 图片接口没有返回图片数据。", JSON.stringify(json));
+  const image = extractImagePayload(json);
+  if (!image) {
+    throw new ProviderError(
+      "PROVIDER_ERROR",
+      "Azure OpenAI 图片接口没有返回可识别的图片字段（已检查 b64_json、url、image_url、output_url、base64 等）。",
+      summarizeImageResponseShape(json)
+    );
+  }
 
-  if (first.b64_json) {
+  if (image.type === "base64") {
     const saved = await saveGeneratedBuffer({
-      buffer: Buffer.from(first.b64_json, "base64"),
+      buffer: Buffer.from(image.value, "base64"),
       prefix: "image_azure_openai",
-      extension: extensionFor(format)
+      extension: extensionFor(format),
+      contentType: image.mimeType
     });
-    return { status: "success", outputUrl: saved.outputUrl, localPath: saved.localPath, rawResponse: json };
+    return { status: "success", outputUrl: saved.outputUrl, localPath: saved.localPath, rawResponse: json, payloadSummary: { imageResponsePath: image.sourcePath } };
   }
 
-  if (first.url) {
-    const saved = await downloadGeneratedFile(first.url, "image_azure_openai");
-    return { status: "success", outputUrl: saved.outputUrl, localPath: saved.localPath, rawResponse: json };
-  }
-
-  throw new ProviderError("PROVIDER_ERROR", "Azure OpenAI 图片接口没有返回 b64_json 或 url。", JSON.stringify(json));
+  const saved = await downloadGeneratedFile(image.value, "image_azure_openai");
+  return { status: "success", outputUrl: saved.outputUrl, localPath: saved.localPath, rawResponse: json, payloadSummary: { imageResponsePath: image.sourcePath } };
 }
 
 export async function generateImageWithAzureOpenAI(params: ImageProviderParams): Promise<ProviderGenerateResult> {
@@ -289,6 +292,7 @@ export async function generateImageWithAzureOpenAI(params: ImageProviderParams):
     return {
       ...result,
       payloadSummary: {
+        ...(result.payloadSummary && typeof result.payloadSummary === "object" ? result.payloadSummary as Record<string, unknown> : {}),
         providerId: "azure-openai",
         modelId: params.catalogModelId,
         deploymentName: params.modelName,
