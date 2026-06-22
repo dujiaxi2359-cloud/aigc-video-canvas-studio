@@ -119,7 +119,7 @@ function grokVideo(id: string, name: string, displayName: string, duration: Mode
 const googleImageCapabilities: ModelCapabilities = {
   inputModes: ["text-to-image", "image-to-image", "image-edit"],
   imageAspectRatios: imageRatios,
-  imageSizes: ["1K", "2K", "4K"],
+  imageSizes: ["1K"],
   imageQualities: ["auto", "standard", "high"],
   imageFormats: ["png"],
   supportsImageInput: true,

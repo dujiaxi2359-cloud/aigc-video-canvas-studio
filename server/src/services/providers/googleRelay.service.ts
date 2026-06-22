@@ -155,13 +155,14 @@ export async function generateImageWithGoogleRelay(params: ImageProviderParams):
       ...inputImages.parts,
       { text: params.prompt }
     ];
+    const imageSize = params.imageSize && params.imageSize !== "auto" ? "1K" : undefined;
     const payload = await requestRelay(params.apiBaseUrl, params.apiKey, params.modelName, {
       contents: [{ role: "user", parts }],
       generationConfig: {
         responseModalities: ["IMAGE"],
         imageConfig: {
           aspectRatio: params.aspectRatio,
-          imageSize: params.imageSize && params.imageSize !== "auto" ? params.imageSize : undefined
+          imageSize
         }
       }
     });

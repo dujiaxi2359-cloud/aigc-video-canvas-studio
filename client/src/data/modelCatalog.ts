@@ -112,7 +112,7 @@ function grokVideoModel(id: string, name: string, displayName: string, duration:
 const googleImageBase: ModelCapabilities = {
   inputModes: ["text-to-image", "image-to-image", "image-edit"],
   imageAspectRatios: imageRatios,
-  imageSizes: ["1K", "2K", "4K"],
+  imageSizes: ["1K"],
   imageQualities: ["auto", "standard", "high"],
   imageFormats: ["png"],
   supportsImageInput: true,
@@ -153,7 +153,7 @@ const rawFallbackModelCatalog: ModelCatalogItem[] = [
   imageModel("google-nano-banana-2", "google", "gemini-3.1-flash-image-preview", "Nano Banana 2", "text-to-image", googleImageBase),
   imageModel("google-nano-banana-pro", "google", "gemini-3-pro-image-preview", "Nano Banana Pro", "text-to-image", {
     ...googleImageBase,
-    imageSizes: ["auto", "1024x1024", "1536x1024", "1024x1536", "2048x2048", "2048x1152", "1152x2048"],
+    imageSizes: ["1K"],
     imageQualities: ["auto", "high"]
   }),
   imageModel("google-nano-banana", "google", "gemini-2.5-flash-image", "Nano Banana", "text-to-image", googleImageBase),
