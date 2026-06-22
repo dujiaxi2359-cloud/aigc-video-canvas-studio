@@ -44,7 +44,8 @@ function endpointFrom(baseUrl: string, path: string) {
   const trimmedPath = path.trim();
   if (/^https?:\/\//i.test(trimmedPath)) return trimmedPath;
   const normalizedPath = trimmedPath ? (trimmedPath.startsWith("/") ? trimmedPath : `/${trimmedPath}`) : "/models";
-  if (normalizedPath === "/models" && !/\/v1$/i.test(trimmedBase)) return `${trimmedBase}/v1/models`;
+  const baseHasVersion = /\/(?:api\/)?v\d+(?:beta)?$/i.test(trimmedBase);
+  if (normalizedPath === "/models" && !baseHasVersion) return `${trimmedBase}/v1/models`;
   return `${trimmedBase}${normalizedPath}`;
 }
 
@@ -59,6 +60,9 @@ function placeholderApiBaseUrlMessage(apiBaseUrl: string) {
   try {
     const parsed = new URL(apiBaseUrl);
     const hostname = parsed.hostname.toLowerCase();
+    if (hostname === "console.volcengine.com" || hostname.endsWith(".console.volcengine.com")) {
+      return "你填写的是火山控制台网页地址，不是方舟 API Base URL。火山官方请填写 https://ark.cn-beijing.volces.com/api/v3。";
+    }
     if (hostname === "api.yourdomain.com" || hostname.endsWith(".yourdomain.com")) {
       return "你填写的是文档里的占位域名 api.yourdomain.com，不是真实中转地址。请在 Run API 控制台复制实际 Base URL。";
     }
@@ -388,6 +392,14 @@ export async function probeOpenAiCompatibleModels(input: { apiBaseUrl?: string; 
     };
   }
   const text = await response.text();
+  const contentType = response.headers.get("content-type")?.toLowerCase() ?? "";
+  if (contentType.includes("text/html") || /^\s*<!doctype html/i.test(text) || /^\s*<html[\s>]/i.test(text)) {
+    return {
+      success: false,
+      message: `验证失败：${endpoint} 返回的是网页 HTML，不是 API JSON。请填写真实 API Base URL；火山方舟应使用 https://ark.cn-beijing.volces.com/api/v3。`,
+      models: [] as string[]
+    };
+  }
   let payload: unknown = {};
   try {
     payload = text ? JSON.parse(text) : {};
