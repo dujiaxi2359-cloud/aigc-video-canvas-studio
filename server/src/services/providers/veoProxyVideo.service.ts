@@ -278,6 +278,20 @@ export function buildVeoProxyBody(input: {
   }
 
   if (protocol === "unified-create-query") {
+    if (isAi666Endpoint(input.endpoint)) {
+      const dimensions = relayDimensions(input.requestAspectRatio, input.requestResolution);
+      const orientation = input.requestAspectRatio === "9:16" ? "portrait" : "landscape";
+      return {
+        model: input.relayModel,
+        prompt: input.params.prompt,
+        images: input.images,
+        orientation,
+        ...(dimensions ? { size: `${dimensions.width}x${dimensions.height}` } : {}),
+        ...(input.params.duration ? { duration: input.params.duration } : {}),
+        ...(input.requestAspectRatio ? { aspect_ratio: input.requestAspectRatio } : {}),
+        enable_upsample: orientation === "landscape" && Boolean(input.requestResolution && input.requestResolution.toLowerCase() !== "720p")
+      };
+    }
     return {
       model: input.relayModel,
       prompt: input.params.prompt,
@@ -481,9 +495,6 @@ function findVideoUrl(value: unknown, preferred = false): string | undefined {
 }
 
 export async function generateVideoWithVeoProxy(params: VideoProviderParams): Promise<ProviderGenerateResult> {
-  const endpointCandidates = veoProxyCreateEndpointCandidates(params.apiBaseUrl);
-  let endpoint = endpointCandidates[0]!;
-  let protocol = relayProtocol(endpoint);
   const mode = params.videoMode ?? legacyInputModeToOfficialMode(params.inputMode, "google");
   const isOmni = params.modelName === "omni_flash-10s";
   if (!["text_to_video", "image_to_video_first_frame", "image_to_video_first_last_frame", "reference_images_to_video"].includes(mode)) {
@@ -494,9 +505,20 @@ export async function generateVideoWithVeoProxy(params: VideoProviderParams): Pr
   }
 
   try {
-    const relayModel = configuredRelayModelName(params);
     const requestAspectRatio = isOmni ? params.aspectRatio : params.aspectRatio ?? "16:9";
     const requestResolution = isOmni ? params.resolution : params.resolution ?? "720p";
+    const useAi666PortraitComponents = isAi666Endpoint(params.apiBaseUrl)
+      && mode === "reference_images_to_video"
+      && requestAspectRatio === "9:16";
+    const defaultEndpointCandidates = veoProxyCreateEndpointCandidates(params.apiBaseUrl);
+    const root = endpointRoot(params.apiBaseUrl);
+    const endpointCandidates = useAi666PortraitComponents
+      ? unique([`${root}/v1/video/create`, ...defaultEndpointCandidates])
+      : defaultEndpointCandidates;
+    let endpoint = endpointCandidates[0]!;
+    let protocol = relayProtocol(endpoint);
+    const configuredModel = configuredRelayModelName(params);
+    let relayModel = useAi666PortraitComponents ? "veo3.1-fast-components" : configuredModel;
     const requestSize = requestAspectRatio && requestResolution ? proxySize(requestAspectRatio, requestResolution) : undefined;
     const { images, audits: inputImageAudits } = await imageInputs(params.imageAssetIds, requestAspectRatio, Boolean(params.imageAssetIds?.length));
     let response: Response | undefined;
@@ -508,6 +530,9 @@ export async function generateVideoWithVeoProxy(params: VideoProviderParams): Pr
     for (const candidate of endpointCandidates) {
       endpoint = candidate;
       protocol = relayProtocol(endpoint);
+      relayModel = useAi666PortraitComponents && protocol === "unified-create-query"
+        ? "veo3.1-fast-components"
+        : configuredModel;
       const body = buildVeoProxyBody({
         endpoint,
         params,

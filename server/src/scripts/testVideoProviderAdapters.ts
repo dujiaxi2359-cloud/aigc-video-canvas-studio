@@ -308,6 +308,37 @@ const ai666PortraitReferenceBody = buildVeoProxyBody({
 }) as Record<string, any>;
 assert(ai666PortraitReferenceBody.size === "720x1280", "ai666 Veo proxy body should use documented portrait size");
 assert(Array.isArray(ai666PortraitReferenceBody.input_reference), "ai666 portrait reference mode should keep multiple reference images");
+const ai666UnifiedPortraitBody = buildVeoProxyBody({
+  endpoint: "https://ai.ai666.net/v1/video/create",
+  params: {
+    providerId: "google",
+    modelName: "veo_3_1-fast",
+    apiBaseUrl: "https://ai.ai666.net/v1",
+    apiKey: "sk-test-key",
+    prompt: "portrait reference test",
+    nodeId: "node",
+    modelConfigId: "model",
+    inputMode: "reference-to-video",
+    duration: 8,
+    aspectRatio: "9:16",
+    resolution: "720p",
+    generateCount: 1
+  },
+  relayModel: "veo3.1-fast-components",
+  images: ["https://assets.example/1.png", "https://assets.example/2.png"],
+  requestAspectRatio: "9:16",
+  requestResolution: "720p",
+  requestSize: "720x1280",
+  isOmni: false
+}) as Record<string, any>;
+assert(ai666UnifiedPortraitBody.model === "veo3.1-fast-components", "ai666 portrait references should use the documented components model");
+assert(ai666UnifiedPortraitBody.orientation === "portrait", "ai666 unified portrait requests should send portrait orientation");
+assert(ai666UnifiedPortraitBody.size === "720x1280", "ai666 unified portrait requests should send portrait dimensions");
+assert(ai666UnifiedPortraitBody.aspect_ratio === "9:16", "ai666 unified portrait requests should send 9:16 aspect ratio");
+assert(ai666UnifiedPortraitBody.duration === 8, "ai666 unified requests should send numeric duration");
+assert(ai666UnifiedPortraitBody.enable_upsample === false, "ai666 portrait requests must not enable landscape-only upsampling");
+assert(Array.isArray(ai666UnifiedPortraitBody.images) && ai666UnifiedPortraitBody.images.length === 2, "ai666 unified portrait requests should preserve reference images");
+assert(!("input_reference" in ai666UnifiedPortraitBody), "ai666 unified requests should not mix the OpenAI input_reference field");
 assert(ai666PortraitReferenceBody.images.length === 2, "ai666 portrait reference mode should preserve multi-reference images and request native 9:16 through size plus metadata");
 assert(
   configuredRelayModelName({ modelName: "veo_3_1" }) === "veo_3_1",
