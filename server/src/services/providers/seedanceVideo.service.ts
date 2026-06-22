@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { legacyInputModeToOfficialMode } from "../../types/videoModes.js";
-import { downloadGeneratedFile } from "../../utils/downloadGeneratedFile.js";
+import { downloadGeneratedFile, saveGeneratedBuffer } from "../../utils/downloadGeneratedFile.js";
 import { ProviderError, rawErrorMessage } from "../../utils/providerErrors.js";
 import { mapVideoDimensions, mapVideoSize, normalizeVideoAspectRatio, normalizeVideoResolution } from "../../utils/videoParams.js";
 import { getAsset } from "../asset.service.js";
@@ -816,10 +816,17 @@ type PollResult = {
 
 function pollHeaders(params: SeedanceProviderParams, json = false) {
   return compactObject({
-    Authorization: `Bearer ${params.apiKey}`,
+    ...authHeaders(params),
     Accept: "application/json",
     "Content-Type": json ? "application/json" : undefined
   }) as Record<string, string>;
+}
+
+function authHeaders(params: SeedanceProviderParams): Record<string, string> {
+  const authType = params.videoRequestConfig?.authType ?? "bearer";
+  if (authType === "none") return {};
+  if (authType === "api-key") return { "api-key": params.apiKey };
+  return { Authorization: `Bearer ${params.apiKey}` };
 }
 
 function runApiQueryEndpoint(params: SeedanceProviderParams) {
@@ -1099,6 +1106,37 @@ export function buildSeedance15Multipart(params: SeedanceProviderParams, refs: {
   return form;
 }
 
+export function buildOpenAiVideosMultipart(params: SeedanceProviderParams, refs: {
+  aspectRatio: string;
+  resolution: string;
+  seconds: string;
+}) {
+  const form = new FormData();
+  form.set("model", normalizeProxyVideoModelName(params));
+  form.set("prompt", params.prompt);
+  if (refs.seconds !== "auto") form.set("seconds", refs.seconds);
+  form.set("size", relayVideoSize(refs.aspectRatio, refs.resolution));
+  form.set("watermark", "false");
+  return form;
+}
+
+function openAiVideoContentEndpoint(params: SeedanceProviderParams, taskIdValue: string) {
+  const baseUrl = params.videoRequestConfig?.baseUrl ?? params.apiBaseUrl;
+  const root = relayEndpointRoot(baseUrl).replace(/\/$/g, "");
+  return `${root}/v1/videos/${encodeURIComponent(taskIdValue)}/content?variant=video`;
+}
+
+async function downloadOpenAiVideoContent(params: SeedanceProviderParams, taskIdValue: string) {
+  const endpoint = openAiVideoContentEndpoint(params, taskIdValue);
+  const response = await fetch(endpoint, { method: "GET", headers: authHeaders(params) });
+  if (!response.ok) {
+    throw new ProviderError("PROVIDER_ERROR", `${proxyVideoLabel(params)} 视频内容下载失败：${response.status} ${await response.text()}`, undefined, { endpoint, taskId: taskIdValue });
+  }
+  const contentType = response.headers.get("content-type");
+  const buffer = Buffer.from(await response.arrayBuffer());
+  return saveGeneratedBuffer({ buffer, prefix: "video_sora", contentType, extension: ".mp4" });
+}
+
 function maskKey(apiKey: string) {
   if (!apiKey) return "";
   if (apiKey.length <= 10) return `${apiKey.slice(0, 2)}***${apiKey.slice(-2)}`;
@@ -1209,7 +1247,7 @@ export async function generateVideoWithSeedance(params: SeedanceProviderParams):
     let createError: ProviderError | undefined;
     for (const candidate of configuredCreateEndpoints(params)) {
       endpoint = candidate;
-      const multipart = apiFamily === "doubao_seedance15";
+      const multipart = apiFamily === "doubao_seedance15" || params.videoRequestConfig?.requestFormat === "multipart";
       const bodyUsesSeedanceAssets = hasSeedanceAssetReferences(images, videos, audios);
       const jsonBodies = fallbackBody ? [
         { body, source: "seedance_asset" },
@@ -1224,10 +1262,12 @@ export async function generateVideoWithSeedance(params: SeedanceProviderParams):
           const response = await fetch(endpoint, {
             method: "POST",
             headers: multipart
-              ? { Authorization: `Bearer ${params.apiKey}`, Accept: "application/json" }
-              : { Authorization: `Bearer ${params.apiKey}`, "Content-Type": "application/json", Accept: "application/json" },
+              ? { ...authHeaders(params), Accept: "application/json" }
+              : { ...authHeaders(params), "Content-Type": "application/json", Accept: "application/json" },
             body: multipart
-              ? buildSeedance15Multipart(params, { files: multipartFiles, aspectRatio: normalizedRatio, resolution: normalizedResolution, seconds })
+              ? apiFamily === "doubao_seedance15"
+                ? buildSeedance15Multipart(params, { files: multipartFiles, aspectRatio: normalizedRatio, resolution: normalizedResolution, seconds })
+                : buildOpenAiVideosMultipart(params, { aspectRatio: normalizedRatio, resolution: normalizedResolution, seconds })
               : JSON.stringify(requestBody.body)
           });
           task = await responsePayload(response);
@@ -1384,6 +1424,28 @@ export async function generateVideoWithSeedance(params: SeedanceProviderParams):
     }
 
     if (!remoteUrl) {
+      if (id && apiFamily === "openai_videos" && params.videoRequestConfig?.requestFormat === "multipart") {
+        const saved = await downloadOpenAiVideoContent(params, id);
+        await saveGenerationTask({ id, status: "success", progress: 100, result: { ...task, contentEndpoint: openAiVideoContentEndpoint(params, id) } });
+        return {
+          status: "success",
+          outputUrl: saved.outputUrl,
+          localPath: saved.localPath,
+          rawResponse: task,
+          payloadSummary: {
+            endpoint,
+            taskId: id,
+            model: params.modelName,
+            mode,
+            requestedAspectRatio: normalizedRatio,
+            requestedResolution: normalizedResolution,
+            requestedDuration: seconds,
+            contentEndpoint: openAiVideoContentEndpoint(params, id),
+            watermark: false,
+            referenceBindingCount: params.referenceBindings?.length ?? 0
+          }
+        };
+      }
       if (id) await saveGenerationTask({ id, status: "completed_without_video_url", result: task, errorMessage: `${label} 中转任务已完成，但响应中没有视频 URL。` });
       throw new ProviderError("VEO_OPERATION_NO_VIDEO_IN_RESPONSE", `${label} 中转任务已完成，但响应中没有视频 URL。`, preview(task), {
         endpoint,

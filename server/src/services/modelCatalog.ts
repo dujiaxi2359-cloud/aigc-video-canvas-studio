@@ -8,6 +8,7 @@ const klingBase = "https://api.klingai.com";
 const grokBase = "https://api.x.ai/v1";
 const seedanceBase = "https://ark.cn-beijing.volces.com/api/v3";
 const minimaxBase = "https://api.minimaxi.com/v1";
+const soraRelayBase = "https://llm.guohe-sh.com/api/openai/v1";
 
 function model(input: Omit<ModelCatalogItem, "requiresApiKey">): ModelCatalogItem {
   return { ...input, requiresApiKey: true };
@@ -60,7 +61,7 @@ function image(
 
 function video(
   id: string,
-  providerId: "google" | "alibaba" | "kling" | "grok" | "seedance" | "minimax",
+  providerId: "google" | "alibaba" | "kling" | "grok" | "seedance" | "minimax" | "openai-video",
   name: string,
   displayName: string,
   modelType: "text-to-video" | "image-to-video" | "video-to-video",
@@ -72,9 +73,10 @@ function video(
     kling: "可灵 / Kling",
     grok: "Grok 视频",
     seedance: "Seedance / 火山方舟",
-    minimax: "MiniMax / Hailuo"
+    minimax: "MiniMax / Hailuo",
+    "openai-video": "OpenAI / Sora"
   }[providerId];
-  const base = { google: googleBase, alibaba: alibabaBase, kling: klingBase, grok: grokBase, seedance: seedanceBase, minimax: minimaxBase }[providerId];
+  const base = { google: googleBase, alibaba: alibabaBase, kling: klingBase, grok: grokBase, seedance: seedanceBase, minimax: minimaxBase, "openai-video": soraRelayBase }[providerId];
 
   return model({
     id,
@@ -269,6 +271,23 @@ const rawModelCatalog: ModelCatalogItem[] = [
     supportsMultiImageInput: true,
     supportsVideoInput: true,
     supportsAudio: true
+  }),
+  video("openai-sora-2", "openai-video", "sora-2", "Sora 2", "text-to-video", {
+    inputModes: ["text-to-video"],
+    duration: { type: "enum", values: [4, 8, 12] },
+    aspectRatios: ["16:9", "9:16"],
+    resolutions: ["720p", "1080p"],
+    provider: "sora",
+    channel: "proxy",
+    apiFamily: "openai_videos",
+    createEndpoint: "/v1/videos",
+    pollEndpoint: "/v1/videos/{taskId}",
+    authType: "api-key",
+    requestFormat: "multipart",
+    supportedInputs: ["text"],
+    imageTransport: "unsupported",
+    supportsAudio: true,
+    supportsWatermark: false
   }),
 
   video("alibaba-wan-2-7-t2v", "alibaba", "wan2.7-t2v", "Wan 2.7 文生视频", "text-to-video", { duration: { type: "range", min: 2, max: 15, step: 1 }, aspectRatios: wanRatios, resolutions: wanResolutions, inputModes: ["text-to-video"] }),

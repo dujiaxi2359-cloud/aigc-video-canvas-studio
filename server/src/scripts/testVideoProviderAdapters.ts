@@ -1,7 +1,7 @@
 import { grokCreateEndpoint, grokPollEndpoint, grokPollEndpointCandidates, grokRequestModelName, isAi666GrokRelay, isOfficialGrokEndpoint } from "../services/providers/grokVideo.service.js";
 import { klingBearerToken, klingCreateEndpoint, klingPollEndpoint, normalizeKlingPrompt } from "../services/providers/klingVideo.service.js";
 import { buildMiniMaxVideoBody, minimaxCreateEndpoint, minimaxCreateEndpointCandidates, minimaxQueryEndpoint, minimaxRetrieveEndpoint } from "../services/providers/minimaxVideo.service.js";
-import { buildProxyBody, buildSeedance15Multipart, isRetryableSeedancePollFailure, seedanceAssetUploadShouldFallback, seedanceAuthorizationValues, seedanceCreateEndpoint, seedancePollEndpoint } from "../services/providers/seedanceVideo.service.js";
+import { buildOpenAiVideosMultipart, buildProxyBody, buildSeedance15Multipart, isRetryableSeedancePollFailure, seedanceAssetUploadShouldFallback, seedanceAuthorizationValues, seedanceCreateEndpoint, seedancePollEndpoint } from "../services/providers/seedanceVideo.service.js";
 import { buildVeoProxyBody, configuredRelayModelName, veoProxyCreateEndpoint, veoProxyCreateEndpointCandidates } from "../services/providers/veoProxyVideo.service.js";
 import { joinUrl, resolveVideoRequestConfig } from "../services/providers/videoRequestAdapter.js";
 import { getVideoModelCapability } from "../config/videoModelCapabilities.js";
@@ -977,6 +977,61 @@ const runApiConfig = resolveVideoRequestConfig({
 });
 assert(runApiConfig.finalUrl === "https://runapi.co/v1/video/create", "RunAPI should submit video tasks to /v1/video/create");
 assert(runApiConfig.pollEndpoint === "/v1/videos/{taskId}", "RunAPI should query video tasks through /v1/videos/{taskId}");
+const soraConfig = resolveVideoRequestConfig({
+  providerId: "openai-video",
+  modelName: "sora-2",
+  apiBaseUrl: "https://llm.guohe-sh.com/api/openai/v1",
+  apiKey: "sk-test-key",
+  prompt: "test",
+  projectId: "project",
+  nodeId: "node",
+  modelConfigId: "model",
+  inputMode: "text-to-video",
+  duration: 4,
+  aspectRatio: "9:16",
+  resolution: "720p",
+  generateCount: 1
+}, {
+  inputModes: ["text-to-video"],
+  aspectRatios: ["16:9", "9:16"],
+  resolutions: ["720p", "1080p"],
+  duration: { type: "enum", values: [4, 8, 12] },
+  provider: "sora",
+  channel: "proxy",
+  apiFamily: "openai_videos",
+  createEndpoint: "/v1/videos",
+  pollEndpoint: "/v1/videos/{taskId}",
+  authType: "api-key",
+  requestFormat: "multipart",
+  supportedInputs: ["text"],
+  imageTransport: "unsupported"
+});
+assert(soraConfig.finalUrl === "https://llm.guohe-sh.com/api/openai/v1/videos", "Sora 2 should submit to the documented /v1/videos endpoint");
+assert(soraConfig.authType === "api-key", "Sora 2 should use the documented api-key auth header");
+assert(soraConfig.requestFormat === "multipart", "Sora 2 should use multipart form data");
+const soraForm = buildOpenAiVideosMultipart({
+  providerId: "openai-video",
+  modelName: "sora-2",
+  apiBaseUrl: "https://llm.guohe-sh.com/api/openai/v1",
+  apiKey: "sk-test-key",
+  prompt: "A video of a cool cat on a motorcycle in the night",
+  nodeId: "node",
+  modelConfigId: "model",
+  inputMode: "text-to-video",
+  duration: 4,
+  aspectRatio: "9:16",
+  resolution: "720p",
+  generateCount: 1,
+  videoRequestConfig: soraConfig
+}, {
+  aspectRatio: "9:16",
+  resolution: "720p",
+  seconds: "4"
+});
+assert(soraForm.get("model") === "sora-2", "Sora 2 multipart body should send model=sora-2");
+assert(soraForm.get("seconds") === "4", "Sora 2 multipart body should send seconds as a form field");
+assert(soraForm.get("size") === "720x1280", "Sora 2 9:16 720p should map to size=720x1280");
+assert(modelCatalog.some((item) => item.id === "openai-sora-2" && item.name === "sora-2"), "Sora 2 catalog entry should be available");
 const staleRunApiGrokConfig = resolveVideoRequestConfig({
   providerId: "grok",
   modelName: "grok-video-3",

@@ -49,8 +49,8 @@ export async function saveGeneratedBuffer(input: {
   };
 }
 
-export async function downloadGeneratedFile(remoteUrl: string, prefix = "generated") {
-  const response = await fetch(remoteUrl);
+export async function downloadGeneratedFile(remoteUrl: string, prefix = "generated", init?: RequestInit) {
+  const response = await fetch(remoteUrl, init);
   if (!response.ok) {
     throw new Error(`下载生成文件失败：${response.status} ${await response.text()}`);
   }
