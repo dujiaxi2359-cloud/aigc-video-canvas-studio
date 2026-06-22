@@ -278,6 +278,36 @@ assert(cy88VeoProxyBody.size === "720x1280", "cy88 Veo proxy body should include
 assert(cy88VeoProxyBody.width === 720 && cy88VeoProxyBody.height === 1280, "cy88 Veo proxy body should include portrait dimensions");
 assert(cy88VeoProxyBody.duration === 8, "cy88 Veo proxy body should include numeric duration");
 assert(cy88VeoProxyBody.seconds === "8", "cy88 Veo proxy body should include string seconds for Go relays");
+assert((cy88VeoProxyBody.metadata as any).output_config.aspect_ratio === "9:16", "cy88 Veo proxy body should include metadata output aspect ratio");
+const ai666PortraitReferenceBody = buildVeoProxyBody({
+  endpoint: "https://ai.ai666.net/v1/videos",
+  relayModel: "veo_3_1-fast",
+  images: ["https://assets.example/front.png", "https://assets.example/style.png"],
+  requestAspectRatio: "9:16",
+  requestResolution: "720p",
+  requestSize: "720x1280",
+  isOmni: false,
+  params: {
+    providerId: "google",
+    modelName: "veo_3_1-fast",
+    apiBaseUrl: "https://ai.ai666.net/v1",
+    apiKey: "sk-test-key",
+    prompt: "test",
+    nodeId: "node",
+    modelConfigId: "model",
+    inputMode: "reference-to-video",
+    videoMode: "reference_images_to_video",
+    imageAssetIds: ["asset1", "asset2"],
+    duration: 8,
+    aspectRatio: "9:16",
+    resolution: "720p",
+    generateCount: 1,
+    qualityMode: "full_quality"
+  }
+}) as Record<string, any>;
+assert(ai666PortraitReferenceBody.size === "720x1280", "ai666 Veo proxy body should use documented portrait size");
+assert(ai666PortraitReferenceBody.input_reference === "https://assets.example/front.png", "ai666 portrait reference mode should degrade to first-frame input to preserve 9:16");
+assert(ai666PortraitReferenceBody.images.length === 1, "ai666 portrait reference mode should not send multi-reference images that force 16:9");
 assert(
   configuredRelayModelName({ modelName: "veo_3_1" }) === "veo_3_1",
   "Veo relay requests should preserve the upstream model name"
