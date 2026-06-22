@@ -194,6 +194,7 @@ const runApiVeoProxyBody = buildVeoProxyBody({
   }
 }) as Record<string, any>;
 assert(runApiVeoProxyBody.duration === 8, "RunAPI Veo proxy duration should be numeric");
+assert(runApiVeoProxyBody.enable_upsample === false, "RunAPI Veo proxy enable_upsample should be boolean");
 assert(
   configuredRelayModelName({ modelName: "veo_3_1" }) === "veo_3_1",
   "Veo relay requests should preserve the upstream model name"

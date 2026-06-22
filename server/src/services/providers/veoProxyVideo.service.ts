@@ -204,7 +204,7 @@ export function buildVeoProxyBody(input: {
       images: input.images,
       ...(input.params.duration ? { duration: input.params.duration } : {}),
       enhance_prompt: input.params.promptExtend ?? true,
-      enable_upsample: input.requestResolution && input.requestResolution.toLowerCase() !== "720p" ? "true" : "false",
+      enable_upsample: Boolean(input.requestResolution && input.requestResolution.toLowerCase() !== "720p"),
       ...(input.requestAspectRatio ? { aspect_ratio: input.requestAspectRatio } : {}),
       ...(input.requestResolution ? { size: runApiRequestSize(input.requestResolution) } : {})
     };
