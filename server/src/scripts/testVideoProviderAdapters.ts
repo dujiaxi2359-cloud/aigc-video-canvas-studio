@@ -1175,6 +1175,10 @@ assert(
   "Seedance asset upload should fall back to public URLs when the current relay key has no seedance-asset permission"
 );
 assert(
+  seedanceAssetUploadShouldFallback(new ProviderError("SEEDANCE_ASSET_UPLOAD_FAILED", "Seedance 素材库接口调用失败：分组 auto 下模型 seedance-asset 的可用渠道不存在 (retry)", "{\"message\":\"分组 auto 下模型 seedance-asset 的可用渠道不存在 (retry)\"}", { upstreamStatus: 400 })),
+  "Seedance asset upload should fall back when the relay auto group has no seedance-asset channel"
+);
+assert(
   isRetryableSeedancePollFailure(new Response("{}", { status: 502 }), { code: "fail_to_fetch_task", message: "fail to fetch task" }),
   "Seedance poll should keep waiting when the relay returns fail_to_fetch_task with HTTP 502"
 );

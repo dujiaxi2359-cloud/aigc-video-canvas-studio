@@ -432,6 +432,7 @@ export function seedanceAssetUploadShouldFallback(error: unknown) {
     ? `${error.message}\n${error.debugMessage ?? ""}\n${preview(error.details)}`
     : rawErrorMessage(error);
   if (/no access to model\s+seedance-asset|seedance-asset.*(?:no access|unauthorized|forbidden|无权限|未开通|不可用)/i.test(text)) return true;
+  if (/seedance-asset.*(?:可用渠道不存在|渠道不存在|分组.*不存在|没有.*渠道)|(?:可用渠道不存在|渠道不存在).*seedance-asset/i.test(text)) return true;
   return /not found|not support|unsupported|method not allowed/i.test(text);
 }
 
