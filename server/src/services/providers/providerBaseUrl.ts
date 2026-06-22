@@ -7,7 +7,8 @@ export const defaultProviderApiBaseUrls: Record<string, string> = {
   google: "https://generativelanguage.googleapis.com/v1beta",
   kling: "https://api.klingai.com",
   grok: "https://api.x.ai/v1",
-  seedance: "https://ark.cn-beijing.volces.com/api/v3"
+  seedance: "https://ark.cn-beijing.volces.com/api/v3",
+  minimax: "https://api.minimaxi.com/v1"
 };
 
 export function resolveProviderApiBaseUrl(providerId?: string, apiBaseUrl?: string) {

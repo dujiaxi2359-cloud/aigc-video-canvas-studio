@@ -4,7 +4,7 @@ import { legacyInputModeToOfficialMode } from "../../types/videoModes.js";
 import type { VideoProviderParams } from "./providerTypes.js";
 import { normalizeVideoCapabilities } from "../videoCapabilityNormalization.js";
 
-export type VideoProviderName = "doubao" | "veo" | "kling" | "sora" | "wan" | "custom";
+export type VideoProviderName = "doubao" | "veo" | "kling" | "sora" | "wan" | "minimax" | "custom";
 export type VideoChannel = "official" | "proxy" | "legacy_custom";
 export type VideoRequestFormat = "json" | "multipart";
 export type VideoAuthType = "bearer" | "api-key" | "none";
@@ -105,6 +105,7 @@ function inferProvider(providerId: string, modelName: string): VideoProviderName
   if (/kling|可灵/.test(value)) return "kling";
   if (/sora|openai/.test(value)) return "sora";
   if (/wan|通义|alibaba/.test(value)) return "wan";
+  if (/minimax|hailuo|海螺/.test(value)) return "minimax";
   return "custom";
 }
 
@@ -116,6 +117,7 @@ function isOfficialEndpoint(providerId: string, baseUrl: string) {
   if (providerId === "kling") return /klingai|kwaivgi|kling/.test(value) && !/\/v1(?:\/|$)/.test(value);
   if (providerId === "alibaba") return /dashscope|aliyuncs|alibaba/.test(value);
   if (providerId === "seedance") return /volc|volces|ark|bytedance|byteplus/.test(value);
+  if (providerId === "minimax") return /api\.minimax\.io|api\.minimaxi\.com/.test(value);
   return false;
 }
 

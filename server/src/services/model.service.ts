@@ -17,6 +17,7 @@ import { generateTextWithGoogle } from "./providers/googleText.service.js";
 import { generateVideoWithGoogleVeo } from "./providers/googleVeo.service.js";
 import { generateVideoWithGrok } from "./providers/grokVideo.service.js";
 import { generateVideoWithKling } from "./providers/klingVideo.service.js";
+import { generateVideoWithMiniMax } from "./providers/minimaxVideo.service.js";
 import { generateImageWithMidjourney, isMidjourneyImageModel } from "./providers/midjourneyImage.service.js";
 import { generateImageWithOpenAI } from "./providers/openaiImage.service.js";
 import { generateVideoWithSeedance } from "./providers/seedanceVideo.service.js";
@@ -516,6 +517,7 @@ function videoProviderPriority(providerId?: string) {
   if (providerId === "seedance") return 3;
   if (providerId === "kling") return 4;
   if (providerId === "alibaba") return 5;
+  if (providerId === "minimax") return 6;
   return 9;
 }
 
@@ -566,6 +568,9 @@ async function callVideoProvider(input: {
   ) {
     return generateVideoWithGrok(providerParams);
   }
+  if (providerId === "minimax") {
+    return generateVideoWithMiniMax(providerParams);
+  }
   if (shouldUseProxyVideoAdapter(providerParams, capabilities)) {
     return generateVideoWithSeedance({
       ...providerParams,
@@ -584,6 +589,8 @@ async function callVideoProvider(input: {
       return generateVideoWithKling(providerParams);
     case "grok":
       return generateVideoWithGrok(providerParams);
+    case "minimax":
+      return generateVideoWithMiniMax(providerParams);
     case "seedance":
     case "openai-video":
       return generateVideoWithSeedance(providerParams);

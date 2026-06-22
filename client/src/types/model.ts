@@ -62,7 +62,7 @@ export type ModelCapabilities = {
   aspectRatios?: string[];
   resolutions?: string[];
   inputModes: ModelInputMode[];
-  provider?: "doubao" | "veo" | "kling" | "sora" | "wan" | "custom";
+  provider?: "doubao" | "veo" | "kling" | "sora" | "wan" | "minimax" | "custom";
   channel?: "official" | "proxy" | "legacy_custom";
   apiFamily?: "openai_videos" | "grok_video" | "doubao_seedance15" | "aigc_video_json" | "omni_fast" | "omni_fast_v2v" | "seedance2_native" | "unified_video_create" | "official_provider";
   endpoint?: string;
@@ -95,6 +95,7 @@ export type ModelCapabilities = {
   supportsFirstLastFrame?: boolean;
   supportsVideoInput?: boolean;
   supportsMotionControl?: boolean;
+  supportsPromptExtend?: boolean;
   contextWindow?: number;
   supportsNegativePrompt?: boolean;
   supportsSeed?: boolean;

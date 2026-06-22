@@ -1,5 +1,6 @@
 import { grokCreateEndpoint, grokPollEndpoint, grokPollEndpointCandidates, grokRequestModelName, isAi666GrokRelay, isOfficialGrokEndpoint } from "../services/providers/grokVideo.service.js";
 import { klingBearerToken, klingCreateEndpoint, klingPollEndpoint, normalizeKlingPrompt } from "../services/providers/klingVideo.service.js";
+import { buildMiniMaxVideoBody, minimaxCreateEndpoint, minimaxCreateEndpointCandidates, minimaxQueryEndpoint, minimaxRetrieveEndpoint } from "../services/providers/minimaxVideo.service.js";
 import { buildProxyBody, buildSeedance15Multipart, isRetryableSeedancePollFailure, seedanceAssetUploadShouldFallback, seedanceAuthorizationValues, seedanceCreateEndpoint, seedancePollEndpoint } from "../services/providers/seedanceVideo.service.js";
 import { buildVeoProxyBody, configuredRelayModelName, veoProxyCreateEndpoint, veoProxyCreateEndpointCandidates } from "../services/providers/veoProxyVideo.service.js";
 import { joinUrl, resolveVideoRequestConfig } from "../services/providers/videoRequestAdapter.js";
@@ -102,6 +103,52 @@ assert(
   seedanceCreateEndpoint("https://relay.example/v1/videos") === "https://relay.example/v1/videos",
   "Seedance unified relay videos endpoint should be used as-is"
 );
+assert(
+  minimaxCreateEndpoint("https://api.minimaxi.com/v1") === "https://api.minimaxi.com/v1/video_generation",
+  "MiniMax official base should append /video_generation"
+);
+assert(
+  minimaxCreateEndpoint("https://api.minimaxi.com/v1/video_generation") === "https://api.minimaxi.com/v1/video_generation",
+  "MiniMax full create endpoint should be preserved"
+);
+assert(
+  minimaxCreateEndpointCandidates("https://relay.example").includes("https://relay.example/v1/video_generation"),
+  "MiniMax relay should try the official-compatible /v1/video_generation path"
+);
+assert(
+  minimaxCreateEndpointCandidates("https://relay.example").includes("https://relay.example/v1/video/create"),
+  "MiniMax relay should fallback to unified video create when the relay uses generic routes"
+);
+assert(
+  minimaxQueryEndpoint("https://api.minimaxi.com/v1", "task/1") === "https://api.minimaxi.com/v1/query/video_generation?task_id=task%2F1",
+  "MiniMax query endpoint should encode task_id"
+);
+assert(
+  minimaxRetrieveEndpoint("https://api.minimaxi.com/v1", "176844028768320") === "https://api.minimaxi.com/v1/files/retrieve?file_id=176844028768320",
+  "MiniMax retrieve endpoint should set file_id"
+);
+const minimaxBody = buildMiniMaxVideoBody({
+  mode: "image_to_video_first_frame",
+  images: ["https://cdn.example/a.png"],
+  params: {
+    nodeId: "n1",
+    modelConfigId: "cfg",
+    inputMode: "image-to-video",
+    prompt: "move",
+    imageAssetIds: ["asset1"],
+    duration: 10,
+    aspectRatio: "9:16",
+    resolution: "1080P",
+    generateCount: 1,
+    apiKey: "sk",
+    apiBaseUrl: "https://api.minimaxi.com/v1",
+    modelName: "MiniMax-Hailuo-2.3-Fast",
+    providerId: "minimax"
+  }
+});
+assert(minimaxBody.duration === 6, "MiniMax 1080P requests should clamp duration to 6 seconds");
+assert(minimaxBody.resolution === "1080P", "MiniMax resolution should use official upper-case enum");
+assert(minimaxBody.first_frame_image === "https://cdn.example/a.png", "MiniMax image mode should send first_frame_image");
 assert(
   joinUrl("https://ai.ai666.net/v1", "/v1/videos") === "https://ai.ai666.net/v1/videos",
   "joinUrl should not duplicate /v1 for OpenAI-compatible relay bases"

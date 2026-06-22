@@ -1,8 +1,8 @@
 import type { OfficialVideoCategory, OfficialVideoMode } from "../types/videoModes.js";
 import { categoryForOfficialVideoMode } from "../types/videoModes.js";
 
-export type VideoProviderId = "alibaba" | "google" | "seedance" | "kling" | "grok";
-export type VideoFamily = "happyhorse" | "wan2.7" | "veo" | "omni" | "seedance" | "kling" | "grok";
+export type VideoProviderId = "alibaba" | "google" | "seedance" | "kling" | "grok" | "minimax";
+export type VideoFamily = "happyhorse" | "wan2.7" | "veo" | "omni" | "seedance" | "kling" | "grok" | "minimax";
 
 export type VideoInputRequirement =
   | "prompt"
@@ -165,6 +165,47 @@ const grokModes = [
   mode({ mode: "video_edit", label: "视频编辑", requiredInputs: ["prompt", "video"], minVideos: 1, maxVideos: 1 }),
   mode({ mode: "video_extension", label: "视频延展", requiredInputs: ["prompt", "video"], minVideos: 1, maxVideos: 1 })
 ];
+
+const minimaxText = mode({ mode: "text_to_video", label: "文生视频", requiredInputs: ["prompt"], supportedDurations: [6, 10], optionalInputs: ["camera_motion"] });
+const minimaxI2v = mode({ mode: "image_to_video_first_frame", label: "图生视频", requiredInputs: ["prompt", "first_frame"], supportedDurations: [6, 10], minImages: 1, maxImages: 1, optionalInputs: ["camera_motion"] });
+
+function minimaxCapability(input: {
+  modelId: string;
+  modelName: string;
+  displayName: string;
+  officialMode: OfficialVideoMode;
+  qualityTier: "full" | "fast";
+  supportedModes: VideoModeCapability[];
+}) {
+  return capability({
+    providerId: "minimax",
+    family: "minimax",
+    modelId: input.modelId,
+    modelName: input.modelName,
+    displayName: input.displayName,
+    officialMode: input.officialMode,
+    officialDocsUrl: "https://platform.minimaxi.com/docs/api-reference/video-generation-i2v",
+    adapterName: "minimaxVideo",
+    runtimeStatus: "verified",
+    qualityTier: input.qualityTier,
+    supportedModes: input.supportedModes,
+    supportedAspectRatios: ["16:9", "9:16", "1:1", "4:3", "3:4", "5:2", "2:5"],
+    supportedDurations: [6, 10],
+    supportedResolutions: ["768P", "1080P"],
+    defaultAspectRatio: "16:9",
+    defaultDuration: 6,
+    defaultResolution: "768P",
+    supportsAudio: false,
+    supportsNegativePrompt: false,
+    supportsPromptExtend: true,
+    supportsSeed: false,
+    supportsReferenceImages: true,
+    maxReferenceImages: 1,
+    maxImages: 1,
+    resultType: "async_task",
+    optionalInputs: ["camera_motion"]
+  });
+}
 
 function grokCapability(input: { modelId: string; modelName: string; displayName: string; supportedDurations?: number[]; defaultDuration?: number; qualityTier?: "standard" | "full" | "fast" | "lite" | "turbo" }) {
   const supportedDurations = input.supportedDurations ?? range(1, 15);
@@ -384,6 +425,22 @@ export const videoModelCapabilities: VideoModelCapability[] = [
   veoCapability({ modelId: "google-veo-3-1-extension", modelName: "veo-3.1-generate-preview", displayName: "Veo 3.1 视频延展", officialMode: "video_extension", qualityTier: "standard", maxReferenceImages: 3 }),
   veoCapability({ modelId: "google-veo-3-1-fast", modelName: "veo-3.1-fast-generate-preview", displayName: "Veo 3.1 Fast 文生视频", officialMode: "text_to_video", qualityTier: "fast", defaultResolution: "720p", maxReferenceImages: 3 }),
   veoCapability({ modelId: "google-veo-3-1-lite", modelName: "veo-3.1-lite-generate-preview", displayName: "Veo 3.1 Lite 文生视频", officialMode: "text_to_video", qualityTier: "lite", defaultResolution: "720p", supportedModes: [veoText, veoI2v, veoFirstLast], supportedResolutions: ["720p", "1080p"], supportsReferenceImages: false }),
+  minimaxCapability({
+    modelId: "minimax-hailuo-2-3",
+    modelName: "MiniMax-Hailuo-2.3",
+    displayName: "MiniMax Hailuo 2.3",
+    officialMode: "text_to_video",
+    qualityTier: "full",
+    supportedModes: [minimaxText, minimaxI2v]
+  }),
+  minimaxCapability({
+    modelId: "minimax-hailuo-2-3-fast",
+    modelName: "MiniMax-Hailuo-2.3-Fast",
+    displayName: "MiniMax Hailuo 2.3 Fast",
+    officialMode: "image_to_video_first_frame",
+    qualityTier: "fast",
+    supportedModes: [minimaxI2v]
+  }),
   capability({
     providerId: "google",
     family: "omni",

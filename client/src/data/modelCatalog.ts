@@ -7,6 +7,7 @@ const deepseekBase = "https://api.deepseek.com";
 const klingBase = "https://api.klingai.com";
 const grokBase = "https://api.x.ai/v1";
 const seedanceBase = "https://ark.cn-beijing.volces.com/api/v3";
+const minimaxBase = "https://api.minimaxi.com/v1";
 
 function item(partial: Omit<ModelCatalogItem, "requiresApiKey">): ModelCatalogItem {
   return { ...partial, requiresApiKey: true };
@@ -59,7 +60,7 @@ function imageModel(
 
 function videoModel(
   id: string,
-  providerId: "google" | "alibaba" | "kling" | "grok" | "seedance",
+  providerId: "google" | "alibaba" | "kling" | "grok" | "seedance" | "minimax",
   name: string,
   displayName: string,
   modelType: "text-to-video" | "image-to-video" | "video-to-video",
@@ -70,9 +71,10 @@ function videoModel(
     alibaba: "Alibaba / Wan",
     kling: "Kling",
     grok: "Grok Video",
-    seedance: "Seedance / Volcengine"
+    seedance: "Seedance / Volcengine",
+    minimax: "MiniMax / Hailuo"
   } as const;
-  const baseMap = { google: googleBase, alibaba: alibabaBase, kling: klingBase, grok: grokBase, seedance: seedanceBase } as const;
+  const baseMap = { google: googleBase, alibaba: alibabaBase, kling: klingBase, grok: grokBase, seedance: seedanceBase, minimax: minimaxBase } as const;
 
   return item({
     id,
@@ -136,6 +138,8 @@ const openaiImageBase: ModelCapabilities = {
 const wanRatios = ["16:9", "9:16", "1:1"];
 const wanResolutions = ["720P", "1080P"];
 const klingRatios = ["16:9", "9:16", "1:1"];
+const minimaxRatios = ["16:9", "9:16", "1:1", "4:3", "3:4", "5:2", "2:5"];
+const minimaxResolutions = ["768P", "1080P"];
 
 const rawFallbackModelCatalog: ModelCatalogItem[] = [
   textModel("deepseek-chat", "deepseek", "deepseek-chat", "DeepSeek Chat"),
@@ -345,6 +349,46 @@ const hiddenLegacyVideoModelIds = new Set([
 
 export const fallbackModelCatalog: ModelCatalogItem[] = [
   ...rawFallbackModelCatalog.filter((item) => !hiddenLegacyVideoModelIds.has(item.id)),
+  videoModel("minimax-hailuo-2-3", "minimax", "MiniMax-Hailuo-2.3", "MiniMax Hailuo 2.3", "text-to-video", {
+    inputModes: ["text-to-video", "image-to-video"],
+    supportedInputs: ["text", "image", "first_frame"],
+    imageTransport: "url_or_asset",
+    duration: { type: "enum", values: [6, 10] },
+    aspectRatios: minimaxRatios,
+    resolutions: minimaxResolutions,
+    supportsReferenceImage: true,
+    supportsPromptExtend: true,
+    supportsCameraControl: true,
+    supportsWatermark: true,
+    maxReferenceImages: 1,
+    constraints: [
+      {
+        when: { resolution: ["1080P"] },
+        forceDuration: 6,
+        reason: "MiniMax Hailuo 2.3 official 1080P only supports 6s."
+      }
+    ]
+  }),
+  videoModel("minimax-hailuo-2-3-fast", "minimax", "MiniMax-Hailuo-2.3-Fast", "MiniMax Hailuo 2.3 Fast", "image-to-video", {
+    inputModes: ["image-to-video"],
+    supportedInputs: ["image", "first_frame"],
+    imageTransport: "url_or_asset",
+    duration: { type: "enum", values: [6, 10] },
+    aspectRatios: minimaxRatios,
+    resolutions: minimaxResolutions,
+    supportsReferenceImage: true,
+    supportsPromptExtend: true,
+    supportsCameraControl: true,
+    supportsWatermark: true,
+    maxReferenceImages: 1,
+    constraints: [
+      {
+        when: { resolution: ["1080P"] },
+        forceDuration: 6,
+        reason: "MiniMax Hailuo 2.3 Fast official 1080P only supports 6s."
+      }
+    ]
+  }),
   videoModel("alibaba-happyhorse-1-0-t2v", "alibaba", "happyhorse-1.0-t2v", "HappyHorse 1.0 文生视频", "text-to-video", {
     duration: { type: "range", min: 3, max: 15, step: 1 },
     aspectRatios: ["16:9", "9:16"],

@@ -7,6 +7,7 @@ const deepseekBase = "https://api.deepseek.com";
 const klingBase = "https://api.klingai.com";
 const grokBase = "https://api.x.ai/v1";
 const seedanceBase = "https://ark.cn-beijing.volces.com/api/v3";
+const minimaxBase = "https://api.minimaxi.com/v1";
 
 function model(input: Omit<ModelCatalogItem, "requiresApiKey">): ModelCatalogItem {
   return { ...input, requiresApiKey: true };
@@ -59,7 +60,7 @@ function image(
 
 function video(
   id: string,
-  providerId: "google" | "alibaba" | "kling" | "grok" | "seedance",
+  providerId: "google" | "alibaba" | "kling" | "grok" | "seedance" | "minimax",
   name: string,
   displayName: string,
   modelType: "text-to-video" | "image-to-video" | "video-to-video",
@@ -70,9 +71,10 @@ function video(
     alibaba: "阿里 / 通义 / 万相",
     kling: "可灵 / Kling",
     grok: "Grok 视频",
-    seedance: "Seedance / 火山方舟"
+    seedance: "Seedance / 火山方舟",
+    minimax: "MiniMax / Hailuo"
   }[providerId];
-  const base = { google: googleBase, alibaba: alibabaBase, kling: klingBase, grok: grokBase, seedance: seedanceBase }[providerId];
+  const base = { google: googleBase, alibaba: alibabaBase, kling: klingBase, grok: grokBase, seedance: seedanceBase, minimax: minimaxBase }[providerId];
 
   return model({
     id,
@@ -96,6 +98,8 @@ const klingRatios = ["16:9", "9:16", "1:1"];
 const grokRatios: NonNullable<ModelCapabilities["aspectRatios"]> = ["16:9", "9:16", "1:1", "2:3", "3:2", "3:4", "4:3"];
 const grokAi666Ratios: NonNullable<ModelCapabilities["aspectRatios"]> = ["16:9", "9:16", "2:3", "3:2", "1:1"];
 const grokInputModes: ModelCapabilities["inputModes"] = ["text-to-video", "image-to-video", "reference-to-video", "first-last-frame", "video-to-video"];
+const minimaxRatios = ["16:9", "9:16", "1:1", "4:3", "3:4", "5:2", "2:5"];
+const minimaxResolutions = ["768P", "1080P"];
 
 function grokVideo(id: string, name: string, displayName: string, duration: ModelCapabilities["duration"]) {
   return video(id, "grok", name, displayName, "text-to-video", {
@@ -317,6 +321,46 @@ export const modelCatalog: ModelCatalogItem[] = [
     inputModes: ["text-to-video"],
     supportsNegativePrompt: true,
     supportsSeed: true
+  }),
+  video("minimax-hailuo-2-3", "minimax", "MiniMax-Hailuo-2.3", "MiniMax Hailuo 2.3", "text-to-video", {
+    duration: { type: "enum", values: [6, 10] },
+    aspectRatios: minimaxRatios,
+    resolutions: minimaxResolutions,
+    inputModes: ["text-to-video", "image-to-video"],
+    supportedInputs: ["text", "image", "first_frame"],
+    imageTransport: "url_or_asset",
+    supportsReferenceImage: true,
+    supportsPromptExtend: true,
+    supportsCameraControl: true,
+    supportsWatermark: true,
+    maxReferenceImages: 1,
+    constraints: [
+      {
+        when: { resolution: ["1080P"] },
+        forceDuration: 6,
+        reason: "MiniMax Hailuo 2.3 官方 1080P 仅支持 6 秒。"
+      }
+    ]
+  }),
+  video("minimax-hailuo-2-3-fast", "minimax", "MiniMax-Hailuo-2.3-Fast", "MiniMax Hailuo 2.3 Fast", "image-to-video", {
+    duration: { type: "enum", values: [6, 10] },
+    aspectRatios: minimaxRatios,
+    resolutions: minimaxResolutions,
+    inputModes: ["image-to-video"],
+    supportedInputs: ["image", "first_frame"],
+    imageTransport: "url_or_asset",
+    supportsReferenceImage: true,
+    supportsPromptExtend: true,
+    supportsCameraControl: true,
+    supportsWatermark: true,
+    maxReferenceImages: 1,
+    constraints: [
+      {
+        when: { resolution: ["1080P"] },
+        forceDuration: 6,
+        reason: "MiniMax Hailuo 2.3 Fast 官方 1080P 仅支持 6 秒。"
+      }
+    ]
   }),
   video("alibaba-wan-2-7-i2v-official", "alibaba", "wan2.7-i2v-2026-04-25", "Wan 2.7 图生视频", "image-to-video", {
     duration: { type: "range", min: 2, max: 15, step: 1 },

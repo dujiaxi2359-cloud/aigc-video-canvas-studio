@@ -1,5 +1,5 @@
 export type ProviderCatalogItem = {
-  id: "deepseek" | "openai" | "azure-openai" | "alibaba" | "google" | "kling" | "grok" | "seedance";
+  id: "deepseek" | "openai" | "azure-openai" | "alibaba" | "google" | "kling" | "grok" | "seedance" | "minimax";
   name: string;
   displayName: string;
   defaultApiBaseUrl: string;
@@ -87,6 +87,16 @@ export const providerCatalog: ProviderCatalogItem[] = [
     defaultApiBaseUrl: "https://ark.cn-beijing.volces.com/api/v3",
     requiresApiBaseUrl: false,
     apiKeyLabel: "火山方舟 API Key",
+    authType: "bearer",
+    categories: ["video"]
+  },
+  {
+    id: "minimax",
+    name: "MiniMax",
+    displayName: "MiniMax / Hailuo",
+    defaultApiBaseUrl: "https://api.minimaxi.com/v1",
+    requiresApiBaseUrl: false,
+    apiKeyLabel: "MiniMax API Key / 中转 Token",
     authType: "bearer",
     categories: ["video"]
   }

@@ -31,6 +31,12 @@ export const providerAssetStrategies: Record<string, AssetInputStrategy> = {
     supportsMultipart: true,
     supportsPublicUrl: true,
     prefer: "multipart"
+  },
+  minimax: {
+    supportsBase64: true,
+    supportsMultipart: false,
+    supportsPublicUrl: true,
+    prefer: "publicUrl"
   }
 };
 
