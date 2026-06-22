@@ -597,6 +597,16 @@ assert(omniConfig.imageField === "first_image_url", "Omni-fast should keep its c
 assert(omniConfig.supportedInputs.includes("image"), "/v1/videos must not force Omni-fast to text-only");
 assert(omniConfig.supportedDurations.includes(30), "Omni-fast should accept the documented 4-30 second range");
 assert(omniConfig.supportedResolutions.includes("4k"), "Omni-fast should accept the documented 4k resolution");
+const legacyOmniFlash = normalizeVideoCapabilities({
+  inputModes: ["text-to-video", "image-to-video", "reference-to-video"],
+  aspectRatios: ["16:9", "9:16"],
+  resolutions: ["720p"],
+  duration: { type: "fixed", value: 10 },
+  supportsReferenceImage: true,
+  supportsMultiImageInput: true
+}, "google", "omni_flash-10s");
+assert(legacyOmniFlash.duration?.type === "fixed" && legacyOmniFlash.duration.value === 10, "Legacy Omni Flash 10s must remain fixed at 10 seconds");
+assert(!legacyOmniFlash.inputModes.includes("video-to-video"), "Legacy Omni Flash 10s must not expose video extension mode");
 const omniReferenceBody = buildProxyBody({
   providerId: "google",
   modelName: "omni-flash",

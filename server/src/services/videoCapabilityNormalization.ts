@@ -24,7 +24,8 @@ export function isVeoLikeVideoModel(providerId?: string, modelName?: string, cap
 
 export function isOmniFastVideoModel(modelName?: string, capabilities?: ModelCapabilities) {
   const identity = `${modelName ?? ""} ${capabilities?.modelCapability?.model ?? ""} ${capabilities?.apiFamily ?? ""}`.toLowerCase();
-  return /omni[-_]?fast|omni[-_]?flash/.test(identity) && !/omni[-_]?fast[-_]?v2v/.test(identity);
+  if (/omni[-_]?flash[-_]?10s/.test(identity)) return false;
+  return /omni[-_]?fast(?:$|\s|[-_])/.test(identity) && !/omni[-_]?fast[-_]?v2v/.test(identity);
 }
 
 function modelIdentity(providerId?: string, modelName?: string, capabilities?: ModelCapabilities) {
