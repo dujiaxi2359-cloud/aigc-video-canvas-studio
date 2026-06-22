@@ -273,13 +273,10 @@ const cy88VeoProxyBody = buildVeoProxyBody({
   }
 }) as Record<string, any>;
 assert(cy88VeoProxyBody.aspect_ratio === "9:16", "cy88 Veo proxy body should include aspect_ratio");
-assert(cy88VeoProxyBody.ratio === "9:16", "cy88 Veo proxy body should include ratio alias");
 assert(cy88VeoProxyBody.size === "720x1280", "cy88 Veo proxy body should include portrait widthxheight size");
 assert(cy88VeoProxyBody.orientation === "portrait", "cy88 Veo proxy body should include documented portrait orientation");
-assert(cy88VeoProxyBody.width === 720 && cy88VeoProxyBody.height === 1280, "cy88 Veo proxy body should include portrait dimensions");
 assert(cy88VeoProxyBody.duration === 8, "cy88 Veo proxy body should include numeric duration");
-assert(cy88VeoProxyBody.seconds === "8", "cy88 Veo proxy body should include string seconds for Go relays");
-assert((cy88VeoProxyBody.metadata as any).output_config.aspect_ratio === "9:16", "cy88 Veo proxy body should include metadata output aspect ratio");
+assert(!("ratio" in cy88VeoProxyBody) && !("seconds" in cy88VeoProxyBody) && !("metadata" in cy88VeoProxyBody), "cy88 unified body should not mix OpenAI compatibility aliases");
 const ai666PortraitReferenceBody = buildVeoProxyBody({
   endpoint: "https://ai.ai666.net/v1/videos",
   relayModel: "veo_3_1-fast",
@@ -339,6 +336,33 @@ assert(ai666UnifiedPortraitBody.duration === 8, "ai666 unified requests should s
 assert(ai666UnifiedPortraitBody.enable_upsample === false, "ai666 portrait requests must not enable landscape-only upsampling");
 assert(Array.isArray(ai666UnifiedPortraitBody.images) && ai666UnifiedPortraitBody.images.length === 2, "ai666 unified portrait requests should preserve reference images");
 assert(!("input_reference" in ai666UnifiedPortraitBody), "ai666 unified requests should not mix the OpenAI input_reference field");
+const cy88UnifiedPortraitBody = buildVeoProxyBody({
+  endpoint: "https://ai.cy88.ai/v1/video/create",
+  params: {
+    providerId: "google",
+    modelName: "veo_3_1-fast",
+    apiBaseUrl: "https://ai.cy88.ai/v1",
+    apiKey: "sk-test-key",
+    prompt: "portrait reference test",
+    nodeId: "node",
+    modelConfigId: "model",
+    inputMode: "reference-to-video",
+    duration: 8,
+    aspectRatio: "9:16",
+    resolution: "720p",
+    generateCount: 1
+  },
+  relayModel: "veo3.1-fast-components",
+  images: ["https://assets.example/1.png", "https://assets.example/2.png"],
+  requestAspectRatio: "9:16",
+  requestResolution: "720p",
+  requestSize: "720x1280",
+  isOmni: false
+}) as Record<string, any>;
+assert(cy88UnifiedPortraitBody.model === "veo3.1-fast-components", "cy88 portrait references should use the components model");
+assert(cy88UnifiedPortraitBody.orientation === "portrait", "cy88 portrait references should send portrait orientation");
+assert(cy88UnifiedPortraitBody.size === "720x1280", "cy88 portrait references should send portrait dimensions");
+assert(cy88UnifiedPortraitBody.aspect_ratio === "9:16", "cy88 portrait references should send 9:16 aspect ratio");
 assert(ai666PortraitReferenceBody.images.length === 2, "ai666 portrait reference mode should preserve multi-reference images and request native 9:16 through size plus metadata");
 assert(
   configuredRelayModelName({ modelName: "veo_3_1" }) === "veo_3_1",

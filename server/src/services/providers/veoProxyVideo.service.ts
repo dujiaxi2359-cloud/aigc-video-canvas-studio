@@ -278,7 +278,7 @@ export function buildVeoProxyBody(input: {
   }
 
   if (protocol === "unified-create-query") {
-    if (isAi666Endpoint(input.endpoint)) {
+    if (isAi666Endpoint(input.endpoint) || isCy88Endpoint(input.endpoint)) {
       const dimensions = relayDimensions(input.requestAspectRatio, input.requestResolution);
       const orientation = input.requestAspectRatio === "9:16" ? "portrait" : "landscape";
       return {
@@ -507,18 +507,18 @@ export async function generateVideoWithVeoProxy(params: VideoProviderParams): Pr
   try {
     const requestAspectRatio = isOmni ? params.aspectRatio : params.aspectRatio ?? "16:9";
     const requestResolution = isOmni ? params.resolution : params.resolution ?? "720p";
-    const useAi666PortraitComponents = isAi666Endpoint(params.apiBaseUrl)
+    const useUnifiedPortraitComponents = (isAi666Endpoint(params.apiBaseUrl) || isCy88Endpoint(params.apiBaseUrl))
       && mode === "reference_images_to_video"
       && requestAspectRatio === "9:16";
     const defaultEndpointCandidates = veoProxyCreateEndpointCandidates(params.apiBaseUrl);
     const root = endpointRoot(params.apiBaseUrl);
-    const endpointCandidates = useAi666PortraitComponents
+    const endpointCandidates = useUnifiedPortraitComponents
       ? unique([`${root}/v1/video/create`, ...defaultEndpointCandidates])
       : defaultEndpointCandidates;
     let endpoint = endpointCandidates[0]!;
     let protocol = relayProtocol(endpoint);
     const configuredModel = configuredRelayModelName(params);
-    let relayModel = useAi666PortraitComponents ? "veo3.1-fast-components" : configuredModel;
+    let relayModel = useUnifiedPortraitComponents ? "veo3.1-fast-components" : configuredModel;
     const requestSize = requestAspectRatio && requestResolution ? proxySize(requestAspectRatio, requestResolution) : undefined;
     const { images, audits: inputImageAudits } = await imageInputs(params.imageAssetIds, requestAspectRatio, Boolean(params.imageAssetIds?.length));
     let response: Response | undefined;
@@ -530,7 +530,7 @@ export async function generateVideoWithVeoProxy(params: VideoProviderParams): Pr
     for (const candidate of endpointCandidates) {
       endpoint = candidate;
       protocol = relayProtocol(endpoint);
-      relayModel = useAi666PortraitComponents && protocol === "unified-create-query"
+      relayModel = useUnifiedPortraitComponents && protocol === "unified-create-query"
         ? "veo3.1-fast-components"
         : configuredModel;
       const body = buildVeoProxyBody({
