@@ -270,6 +270,41 @@ async function migrateAi666VideoProtocols(database: AppDatabase) {
   }
 }
 
+async function migrateVolcengineImageProtocols(database: AppDatabase) {
+  const rows = await database.all<Array<{ id: string; provider: string; provider_id: string | null; category: string | null; model_type: string; model_name: string; capabilities_json: string }>>(
+    "SELECT id, provider, provider_id, category, model_type, model_name, capabilities_json FROM model_configs WHERE lower(model_name) LIKE '%seedream%' OR lower(model_name) LIKE '%doubao-seedream%'"
+  );
+  for (const row of rows) {
+    const capabilities = JSON.parse(row.capabilities_json) as Record<string, unknown>;
+    const inputModes = Array.isArray(capabilities.inputModes) && capabilities.inputModes.length
+      ? capabilities.inputModes
+      : ["text-to-image", "image-to-image", "image-edit"];
+    const nextCapabilities = {
+      ...capabilities,
+      inputModes,
+      imageAspectRatios: capabilities.imageAspectRatios ?? ["1:1", "3:4", "4:3", "9:16", "16:9", "2:3", "3:2", "21:9"],
+      imageSizes: capabilities.imageSizes ?? ["auto", "1024x1024", "1536x1024", "1024x1536", "1920x1080", "1080x1920"],
+      imageQualities: capabilities.imageQualities ?? ["auto", "standard", "high"],
+      imageFormats: capabilities.imageFormats ?? ["png", "jpeg", "webp"],
+      supportsImageInput: capabilities.supportsImageInput ?? true,
+      supportsMultiImageInput: capabilities.supportsMultiImageInput ?? true,
+      supportsReferenceImage: capabilities.supportsReferenceImage ?? true
+    };
+    await database.run(
+      `UPDATE model_configs
+       SET provider = ?, provider_id = ?, category = ?, model_type = ?, capabilities_json = ?, updated_at = ?
+       WHERE id = ?`,
+      "Seedream / 火山方舟",
+      "seedance",
+      "image",
+      row.model_type.includes("image") ? row.model_type : "text-to-image",
+      JSON.stringify(nextCapabilities),
+      Date.now(),
+      row.id
+    );
+  }
+}
+
 export async function getDb() {
   if (db) return db;
 
@@ -302,6 +337,7 @@ export async function getDb() {
     await db.exec("ALTER TABLE model_configs ADD COLUMN created_by_user_id TEXT");
   }
   await migrateAi666VideoProtocols(db);
+  await migrateVolcengineImageProtocols(db);
   const database = db;
   const ensureColumn = async (table: string, name: string, sql: string) => {
     const columns = await database.all<Array<{ name: string }>>(`PRAGMA table_info(${table})`);

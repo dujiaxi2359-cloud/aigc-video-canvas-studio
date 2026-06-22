@@ -83,12 +83,12 @@ export const providerCatalog: ProviderCatalogItem[] = [
   {
     id: "seedance",
     name: "Seedance",
-    displayName: "Seedance / 火山方舟",
+    displayName: "Seedance / Seedream / 火山方舟",
     defaultApiBaseUrl: "https://ark.cn-beijing.volces.com/api/v3",
     requiresApiBaseUrl: false,
     apiKeyLabel: "火山方舟 API Key",
     authType: "bearer",
-    categories: ["video"]
+    categories: ["image", "video"]
   },
   {
     id: "minimax",

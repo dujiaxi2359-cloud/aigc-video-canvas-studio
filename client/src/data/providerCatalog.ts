@@ -17,6 +17,6 @@ export const providerCatalog: ProviderCatalogItem[] = [
   { id: "google", name: "Google", displayName: "谷歌 / Gemini", defaultApiBaseUrl: "https://generativelanguage.googleapis.com/v1beta", requiresApiBaseUrl: false, apiKeyLabel: "Google API Key", authType: "custom", categories: ["text", "image", "video"] },
   { id: "kling", name: "Kling", displayName: "可灵 / Kling", defaultApiBaseUrl: "https://api.klingai.com", requiresApiBaseUrl: false, apiKeyLabel: "AccessKey:SecretKey / 中转 Token", authType: "bearer", categories: ["video"] },
   { id: "grok", name: "Grok", displayName: "Grok 视频", defaultApiBaseUrl: "https://api.x.ai/v1", requiresApiBaseUrl: false, apiKeyLabel: "Grok API Key", authType: "bearer", categories: ["video"] },
-  { id: "seedance", name: "Seedance", displayName: "Seedance / 火山方舟", defaultApiBaseUrl: "https://ark.cn-beijing.volces.com/api/v3", requiresApiBaseUrl: false, apiKeyLabel: "火山方舟 API Key", authType: "bearer", categories: ["video"] },
+  { id: "seedance", name: "Seedance", displayName: "Seedance / Seedream / 火山方舟", defaultApiBaseUrl: "https://ark.cn-beijing.volces.com/api/v3", requiresApiBaseUrl: false, apiKeyLabel: "火山方舟 API Key", authType: "bearer", categories: ["image", "video"] },
   { id: "minimax", name: "MiniMax", displayName: "MiniMax / Hailuo", defaultApiBaseUrl: "https://api.minimaxi.com/v1", requiresApiBaseUrl: false, apiKeyLabel: "MiniMax API Key / 中转 Token", authType: "bearer", categories: ["video"] }
 ];

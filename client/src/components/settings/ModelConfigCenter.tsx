@@ -380,9 +380,10 @@ function inferModel(modelName: string): Pick<ModelConfig, "provider" | "provider
   const category = classifyModel(modelName);
   if (category === "image") {
     const isGeminiImage = /gemini.*image|image.*gemini/.test(name);
+    const isVolcengineImage = /seedream|doubao[-_]?seedream/.test(name);
     return {
-      provider: isGeminiImage ? "Gemini 图像中转" : "OpenAI 兼容图像中转",
-      providerId: isGeminiImage ? "google" : "openai",
+      provider: isVolcengineImage ? "Seedream / 火山方舟" : isGeminiImage ? "Gemini 图像中转" : "OpenAI 兼容图像中转",
+      providerId: isVolcengineImage ? "seedance" : isGeminiImage ? "google" : "openai",
       category,
       modelType: "text-to-image",
       capabilities: defaultImageCapabilities,

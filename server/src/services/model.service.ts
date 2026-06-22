@@ -187,6 +187,7 @@ function isOfficialProviderBaseUrl(model: ActiveModelConfig) {
     if (providerId === "google") return hostname === "generativelanguage.googleapis.com";
     if (providerId === "azure-openai") return true;
     if (providerId === "alibaba") return hostname.endsWith("dashscope.aliyuncs.com");
+    if (providerId === "seedance") return hostname.endsWith("volces.com") || hostname.endsWith("volcengineapi.com");
     if (providerId === "grok") return hostname === "api.x.ai";
     return false;
   } catch {
@@ -369,8 +370,9 @@ function isRetryableImageRelayError(error: unknown) {
 function imageProviderPriority(providerId?: string) {
   if (providerId === "openai") return 0;
   if (providerId === "google") return 1;
-  if (providerId === "alibaba") return 2;
-  if (providerId === "azure-openai") return 3;
+  if (providerId === "seedance") return 2;
+  if (providerId === "alibaba") return 3;
+  if (providerId === "azure-openai") return 4;
   return 9;
 }
 
@@ -383,7 +385,7 @@ async function listImageFallbackModels(primary: ActiveModelConfig) {
        AND id <> ?
        AND encrypted_api_key IS NOT NULL
        AND (category = 'image' OR model_type LIKE '%image%')
-       AND provider_id IN ('openai', 'google', 'alibaba', 'azure-openai')
+       AND provider_id IN ('openai', 'google', 'seedance', 'alibaba', 'azure-openai')
      ORDER BY
        CASE WHEN provider_id = ? THEN 0 ELSE 1 END,
        CASE WHEN api_base_url = ? THEN 0 ELSE 1 END,
@@ -415,6 +417,8 @@ async function callImageProvider(input: {
   }
   switch (providerId) {
     case "openai":
+      return generateImageWithOpenAI(providerParams);
+    case "seedance":
       return generateImageWithOpenAI(providerParams);
     case "azure-openai":
       return generateImageWithAzureOpenAI(providerParams);
