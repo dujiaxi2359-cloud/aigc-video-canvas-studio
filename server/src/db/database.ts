@@ -122,7 +122,7 @@ async function migrateAi666VideoProtocols(database: AppDatabase) {
           supportedInputs: ["text", "image", "first_frame", "reference_image", "first_last_frame", "video"]
         }
       });
-    } else if (/doubao[-_]?seedance[-_]?1[-_]?5/.test(name) && (!oldFamily || oldFamily === "openai_videos" || oldFamily === "seedance2_native" || !hasOfficialModel)) {
+    } else if (/(?:doubao[-_]?seedance|seedance)[-_ .]?1[-_ .]?5/.test(name) && (!oldFamily || oldFamily === "openai_videos" || oldFamily === "seedance2_native" || !hasOfficialModel || JSON.stringify(capabilities).includes("reference-to-video") || JSON.stringify(capabilities).includes("reference_image"))) {
       assignDisplayName("Seedance 1.5 Pro");
       assign({
         inputModes: ["text-to-video", "image-to-video", "first-last-frame"],

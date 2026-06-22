@@ -69,6 +69,10 @@ function isSeedanceModel(model?: ModelConfig) {
   return /seedance|doubao/.test(modelIdentity(model));
 }
 
+function isSeedance15Model(model?: ModelConfig) {
+  return /seedance[-_ .]?1[-_ .]?5|doubao[-_]?seedance[-_]?1[-_]?5/.test(modelIdentity(model));
+}
+
 function isVeoModel(model?: ModelConfig) {
   return /\b(?:google|gemini|veo|omni)\b|veo[-_ .]?\d|veo_/.test(modelIdentity(model));
 }
@@ -79,7 +83,7 @@ function isKlingOmniModel(model?: ModelConfig) {
 }
 
 function supportsUniversalReference(model?: ModelConfig) {
-  return isSeedanceModel(model) || isKlingOmniModel(model);
+  return (isSeedanceModel(model) && !isSeedance15Model(model)) || isKlingOmniModel(model);
 }
 
 function videoModeLabelForModel(model: ModelConfig | undefined, mode: OfficialVideoMode, fallback?: string) {
@@ -149,6 +153,7 @@ function maxImagesForMode(model: ModelConfig | undefined, mode: OfficialVideoMod
     if (model.modelName === "omni_flash-10s") return 7;
     if (model.providerId === "grok") return 7;
     if (model.providerId === "kling") return 4;
+    if (isSeedance15Model(model)) return 2;
     if (isSeedanceModel(model)) return model.capabilities.maxReferenceImages ?? 9;
     if (isVeoModel(model) || model.providerId === "google") return model.capabilities.maxReferenceImages ?? 3;
     if (model.modelName === "happyhorse-1.0-r2v" || model.modelName === "wan2.7-r2v") return 5;

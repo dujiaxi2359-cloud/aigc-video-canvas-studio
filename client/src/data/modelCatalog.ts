@@ -334,7 +334,7 @@ const rawFallbackModelCatalog: ModelCatalogItem[] = [
     maxReferenceFiles: 12,
     supportsCameraControl: true
   }),
-  videoModel("seedance-1-5-pro", "seedance", "seedance-1.5-pro", "Seedance 1.5 Pro", "text-to-video", { inputModes: ["text-to-video", "image-to-video", "reference-to-video"], duration: { type: "enum", values: [5, 10, 15] }, aspectRatios: ["16:9", "9:16", "1:1"], resolutions: ["720P", "1080P"], supportsReferenceImage: true, supportsCameraControl: true }),
+  videoModel("seedance-1-5-pro", "seedance", "seedance-1.5-pro", "Seedance 1.5 Pro", "text-to-video", { inputModes: ["text-to-video", "image-to-video", "first-last-frame"], duration: { type: "enum", values: [5, 10, 15] }, aspectRatios: ["16:9", "9:16", "1:1"], resolutions: ["720P", "1080P"], supportsReferenceImage: true, supportsFirstLastFrame: true, supportsCameraControl: true, maxReferenceImages: 2 }),
   videoModel("seedance-1-0-pro", "seedance", "seedance-1.0-pro", "Seedance 1.0 Pro", "text-to-video", { inputModes: ["text-to-video", "image-to-video"], duration: { type: "enum", values: [5, 10] }, aspectRatios: ["16:9", "9:16", "1:1"], resolutions: ["720P", "1080P"] })
 ];
 

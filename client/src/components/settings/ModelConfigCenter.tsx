@@ -596,6 +596,10 @@ export function ModelConfigCenter() {
   const selectedActiveGroupCount = useMemo(() => (
     groupedFetchedModels[activeCategory].filter((group) => group.models.some((model) => selectedModels.has(model))).length
   ), [activeCategory, groupedFetchedModels, selectedModels]);
+  const manualActiveModelCount = useMemo(() => (
+    uniqueModels(manualModel.split(/[\n,，\s]+/)).filter((model) => classifyModel(model) === activeCategory).length
+  ), [activeCategory, manualModel]);
+  const saveCandidateCount = selectedActiveModels.length || manualActiveModelCount;
 
   function toggleModelGroup(group: FetchedModelGroup) {
     setSelectedModels((current) => {
@@ -923,13 +927,16 @@ export function ModelConfigCenter() {
                       <Input className="h-11 rounded-[11px] bg-black/35" value={manualModel} onChange={(event) => setManualModel(event.target.value)} placeholder={`手动添加${categoryMeta[activeCategory].label}上游模型 ID`} />
                       <Button className="h-11 rounded-full" onClick={addManualModelsToActiveCategory}><Plus size={15} /> 添加</Button>
                     </div>
-                    <div className="mt-4 flex justify-end">
+                    <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+                      <div className={`text-[12px] ${saveCandidateCount ? "text-emerald-100/70" : "text-amber-100/70"}`}>
+                        {saveCandidateCount ? `将保存并启用 ${saveCandidateCount} 个${categoryMeta[activeCategory].label}模型。` : "还没有选中模型：请先勾选上方模型，或手动添加当前分类的上游模型 ID。"}
+                      </div>
                       <Button
-                        className="h-10 rounded-full bg-white text-black hover:bg-white/90"
+                        className={`h-10 min-w-[176px] rounded-full ${saveCandidateCount ? "bg-white text-black hover:bg-white/90" : "border-amber-200/25 bg-amber-300/10 text-amber-100 disabled:opacity-100"}`}
                         onClick={() => void saveModels()}
-                        disabled={busy === "save" || (!selectedActiveModels.length && !manualModel.trim())}
+                        disabled={busy === "save" || saveCandidateCount === 0}
                       >
-                        {busy === "save" ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />} 保存并启用 {selectedActiveModels.length || uniqueModels(manualModel.split(/[\n,，\s]+/)).filter((model) => classifyModel(model) === activeCategory).length} 个模型
+                        {busy === "save" ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />} {saveCandidateCount ? `保存并启用 ${saveCandidateCount} 个模型` : "先选择模型"}
                       </Button>
                     </div>
                   </div>
