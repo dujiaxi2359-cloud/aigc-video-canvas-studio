@@ -800,6 +800,14 @@ function isRunApiVideoCreate(params: SeedanceProviderParams) {
   return /runapi\.co/.test(value);
 }
 
+function normalizeProxyVideoModelName(params: SeedanceProviderParams) {
+  const model = params.modelName?.trim() || "";
+  if (!/omni[-_]?flash|omni[-_]?fast/i.test(model)) return model;
+  if (isRunApiVideoCreate(params)) return "omni-flash";
+  if (/omni[-_]?flash/i.test(model)) return "omni-fast";
+  return model;
+}
+
 type PollResult = {
   endpoint: string;
   response: Response;
@@ -937,7 +945,7 @@ export function buildProxyBody(params: SeedanceProviderParams, refs: {
   seconds: string;
 }) {
   const base = {
-    model: params.modelName
+    model: normalizeProxyVideoModelName(params)
   };
   if (refs.apiFamily === "seedance2_native") {
     const content: Record<string, unknown>[] = [{ type: "text", text: params.prompt }];
@@ -1017,7 +1025,6 @@ export function buildProxyBody(params: SeedanceProviderParams, refs: {
     const images = refs.images.slice(0, 5);
     return compactObject({
       ...base,
-      model: /omni[-_]?flash/i.test(params.modelName) ? "omni-fast" : params.modelName,
       prompt: params.prompt,
       first_image_url: refs.mode === "image_to_video_first_frame" || refs.mode === "image_to_video_first_last_frame" ? images[0] : undefined,
       last_image_url: refs.mode === "image_to_video_first_last_frame" ? images[1] : undefined,

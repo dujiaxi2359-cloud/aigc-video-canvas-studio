@@ -926,6 +926,34 @@ const runApiBody = buildProxyBody({
 assert(runApiBody.images[0] === "https://assets.example/frame.png", "RunAPI video create should send images as string[]");
 assert(runApiBody.duration === 8, "RunAPI video create should send numeric duration");
 assert(runApiBody.size === "720P", "RunAPI video create should send size");
+const runApiOmniFlashBody = buildProxyBody({
+  providerId: "google",
+  modelName: "omni_flash-10s",
+  apiBaseUrl: "https://runapi.co/v1",
+  apiKey: "sk-test-key",
+  prompt: "omni flash test",
+  projectId: "project",
+  nodeId: "node",
+  modelConfigId: "model",
+  inputMode: "reference-to-video",
+  imageAssetIds: ["asset"],
+  duration: 10,
+  aspectRatio: "9:16",
+  resolution: "720p",
+  generateCount: 1
+}, {
+  apiFamily: "unified_video_create",
+  mode: "reference_images_to_video",
+  images: ["https://assets.example/omni-1.png", "https://assets.example/omni-2.png"],
+  videos: [],
+  audios: [],
+  aspectRatio: "9:16",
+  resolution: "720p",
+  seconds: "10"
+}) as Record<string, any>;
+assert(runApiOmniFlashBody.model === "omni-flash", "RunAPI Omni Flash must use the documented omni-flash model name");
+assert(runApiOmniFlashBody.aspect_ratio === "9:16", "RunAPI Omni Flash should preserve the selected portrait ratio");
+assert(runApiOmniFlashBody.images[0] === "https://assets.example/omni-1.png", "RunAPI Omni Flash should send reference images as URL strings");
 const runApiConfig = resolveVideoRequestConfig({
   providerId: "google",
   modelName: "veo3.1-fast",
