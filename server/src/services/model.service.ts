@@ -507,7 +507,7 @@ async function tryImageFallback(input: {
 
 function isRetryableVideoRelayError(error: unknown) {
   const text = error instanceof Error ? `${error.message}\n${error.stack ?? ""}` : safeStringify(error);
-  return /中转接口|Invalid URL|没有返回任务 id|task_not_exist|OPENAI_COMPAT_NON_JSON_RESPONSE|HTML 页面|Cloudflare|网关|gateway|route|path|not found|method not allowed|unsupported endpoint|fetch failed|network|timeout|ECONN|502|503|504/i.test(text)
+  return /中转接口|不支持原生 9:16|Invalid URL|没有返回任务 id|task_not_exist|OPENAI_COMPAT_NON_JSON_RESPONSE|HTML 页面|Cloudflare|网关|gateway|route|path|not found|method not allowed|unsupported endpoint|fetch failed|network|timeout|ECONN|502|503|504/i.test(text)
     && !/unauthorized|forbidden|invalid api key|incorrect api key|quota|credit|balance|insufficient|no access|permission|额度|余额|无权限|未开通/i.test(text);
 }
 
@@ -559,6 +559,18 @@ async function callVideoProvider(input: {
   const providerId = model.provider_id ?? "";
   await assertSelectedVideoChannelSupportsAssets(model, providerParams, capabilities);
   const videoRequestConfig = validateVideoRequestConfig(providerParams, capabilities);
+  if (
+    /runapi\.co/i.test(model.api_base_url)
+    && providerParams.videoMode === "reference_images_to_video"
+    && providerParams.aspectRatio === "9:16"
+  ) {
+    throw new ProviderError(
+      "MODEL_PARAM_UNSUPPORTED",
+      "RunAPI 的 Veo 参考图模式不支持原生 9:16（文档限定为 8 秒、16:9）。系统不会裁剪视频，正在尝试其他支持竖屏的中转通道。",
+      undefined,
+      { provider: "runapi", mode: providerParams.videoMode, requestedAspectRatio: providerParams.aspectRatio, nativeAspectRatioRequired: true }
+    );
+  }
   if (
     providerId === "google"
     && videoRequestConfig.apiFamily !== "omni_fast"

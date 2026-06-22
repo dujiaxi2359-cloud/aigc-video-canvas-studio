@@ -595,7 +595,7 @@ export async function generateVideoWithVeoProxy(params: VideoProviderParams): Pr
           requestedAspectRatio: requestAspectRatio,
           requestedResolution: requestResolution,
           requestedDuration: params.duration,
-          nativeAspectRatioRequired: (isAi666Endpoint(endpoint) || isCy88Endpoint(endpoint)) && requestAspectRatio === "9:16",
+          nativeAspectRatioRequired: requestAspectRatio === "9:16",
           inputImageCount: images.length,
           inputImages: inputImageAudits,
           directResult: true
@@ -686,7 +686,7 @@ export async function generateVideoWithVeoProxy(params: VideoProviderParams): Pr
         requestedAspectRatio: requestAspectRatio,
         requestedResolution: requestResolution,
         requestedDuration: params.duration,
-        nativeAspectRatioRequired: (isAi666Endpoint(endpoint) || isCy88Endpoint(endpoint)) && requestAspectRatio === "9:16",
+        nativeAspectRatioRequired: requestAspectRatio === "9:16",
         inputImageCount: images.length,
         inputImages: inputImageAudits
       }
