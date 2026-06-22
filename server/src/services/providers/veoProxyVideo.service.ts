@@ -6,6 +6,7 @@ import { ProviderError, rawErrorMessage } from "../../utils/providerErrors.js";
 import { getAsset } from "../asset.service.js";
 import { ensureAssetLocalFile } from "../assets/ensureAssetLocalFile.service.js";
 import { prepareVideoFrameForAspectRatio } from "../assets/prepareVideoFrame.service.js";
+import { resolveRemoteAsset } from "../assets/resolveRemoteAsset.service.js";
 import { saveGenerationTask } from "../generationTask.service.js";
 import type { ProviderGenerateResult, VideoProviderParams } from "./providerTypes.js";
 
@@ -25,8 +26,17 @@ export function isVeoProxyEndpoint(apiBaseUrl?: string) {
   }
 }
 
+function isRunApiEndpoint(apiBaseUrl: string) {
+  return /runapi\.co/i.test(apiBaseUrl);
+}
+
 export function veoProxyCreateEndpoint(apiBaseUrl: string) {
   const base = apiBaseUrl.trim().replace(/^(?:POST|GET|PUT|PATCH|DELETE)\s+/i, "").replace(/\/$/, "");
+  if (isRunApiEndpoint(base)) {
+    if (/\/v1\/video\/create$/i.test(base)) return base;
+    if (/\/v1$/i.test(base)) return `${base}/video/create`;
+    return `${base}/v1/video/create`;
+  }
   if (/\/v1\/videos$/i.test(base) || /\/v1\/video\/create$/i.test(base)) return base;
   if (/\/v1$/i.test(base)) return `${base}/videos`;
   return `${base}/v1/videos`;
@@ -39,7 +49,7 @@ function mimeTypeFromPath(filePath: string) {
   return "image/jpeg";
 }
 
-async function imageDataUris(assetIds?: string[], aspectRatio?: string) {
+async function imageInputs(assetIds?: string[], aspectRatio?: string, preferPublicUrl = false) {
   const images: string[] = [];
   const audits: Array<Record<string, unknown>> = [];
   for (const assetId of assetIds ?? []) {
@@ -50,11 +60,50 @@ async function imageDataUris(assetIds?: string[], aspectRatio?: string) {
     const inputPath = prepared?.localPath ?? asset.localPath;
     const stat = fs.statSync(inputPath);
     const mimeType = prepared?.transformed ? "image/png" : asset.mimeType || mimeTypeFromPath(inputPath);
-    images.push(`data:${mimeType};base64,${fs.readFileSync(inputPath).toString("base64")}`);
+    let imageValue: string;
+    let inputFileSource: string | undefined = asset.localFileSource;
+    if (preferPublicUrl) {
+      const resolved = await resolveRemoteAsset(
+        {
+          id: asset.id,
+          localPath: inputPath,
+          url: prepared?.transformed ? undefined : asset.url,
+          publicUrl: prepared?.transformed ? undefined : asset.publicUrl,
+          filename: asset.originalName,
+          originalName: asset.originalName,
+          mimeType,
+          projectId: asset.projectId,
+          storageKey: prepared?.transformed ? undefined : asset.storageKey,
+          storageProvider: asset.storageProvider,
+          storageBucket: asset.storageBucket,
+          storageRegion: asset.storageRegion,
+          storageFileType: asset.storageFileType
+        },
+        "veo-proxy",
+        "video-reference",
+        {
+          strategy: {
+            supportsBase64: false,
+            supportsMultipart: false,
+            supportsPublicUrl: true,
+            prefer: "publicUrl"
+          },
+          signedUrlExpiresSeconds: 3600
+        }
+      );
+      if (resolved.type !== "url" || !resolved.url) {
+        throw new ProviderError("PUBLIC_URL_REQUIRED", "RunAPI Veo 参考图需要公网可访问 URL，请检查素材上传和 COS/OSS 配置。");
+      }
+      imageValue = resolved.url;
+      inputFileSource = resolved.source ?? inputFileSource;
+    } else {
+      imageValue = `data:${mimeType};base64,${fs.readFileSync(inputPath).toString("base64")}`;
+    }
+    images.push(imageValue);
     audits.push({
       assetId,
       inputImageSource: prepared?.transformed ? "smartCropAspectRatio" : "localPath",
-      inputFileSource: asset.localFileSource,
+      inputFileSource,
       requestedAspectRatio: aspectRatio,
       inputImageWidth: prepared?.width,
       inputImageHeight: prepared?.height,
@@ -82,6 +131,13 @@ function unifiedQueryEndpoint(endpoint: string, taskId: string) {
   parsed.search = "";
   parsed.searchParams.set("id", taskId);
   return parsed.toString();
+}
+
+function runApiRequestSize(resolution?: string) {
+  const normalized = resolution?.toLowerCase();
+  if (normalized === "1080p") return "1080P";
+  if (normalized === "4k") return "4K";
+  return "720P";
 }
 
 function taskIdFromResponse(payload: Record<string, unknown>): string | undefined {
@@ -224,6 +280,7 @@ function findVideoUrl(value: unknown, preferred = false): string | undefined {
 export async function generateVideoWithVeoProxy(params: VideoProviderParams): Promise<ProviderGenerateResult> {
   const endpoint = veoProxyCreateEndpoint(params.apiBaseUrl);
   const protocol = relayProtocol(endpoint);
+  const isRunApi = isRunApiEndpoint(endpoint);
   const mode = params.videoMode ?? legacyInputModeToOfficialMode(params.inputMode, "google");
   const isOmni = params.modelName === "omni_flash-10s";
   if (!["text_to_video", "image_to_video_first_frame", "image_to_video_first_last_frame", "reference_images_to_video"].includes(mode)) {
@@ -238,8 +295,19 @@ export async function generateVideoWithVeoProxy(params: VideoProviderParams): Pr
     const requestAspectRatio = isOmni ? params.aspectRatio : params.aspectRatio ?? "16:9";
     const requestResolution = isOmni ? params.resolution : params.resolution ?? "720p";
     const requestSize = requestAspectRatio && requestResolution ? proxySize(requestAspectRatio, requestResolution) : undefined;
-    const { images, audits: inputImageAudits } = await imageDataUris(params.imageAssetIds, requestAspectRatio);
-    const body = protocol === "unified-create-query"
+    const { images, audits: inputImageAudits } = await imageInputs(params.imageAssetIds, requestAspectRatio, isRunApi);
+    const body = isRunApi
+      ? {
+          model: relayModel,
+          prompt: params.prompt,
+          images,
+          ...(params.duration ? { duration: String(params.duration) } : {}),
+          enhance_prompt: params.promptExtend ?? true,
+          enable_upsample: requestResolution && requestResolution.toLowerCase() !== "720p" ? "true" : "false",
+          ...(requestAspectRatio ? { aspect_ratio: requestAspectRatio } : {}),
+          ...(requestResolution ? { size: runApiRequestSize(requestResolution) } : {})
+        }
+      : protocol === "unified-create-query"
       ? {
           model: relayModel,
           prompt: params.prompt,

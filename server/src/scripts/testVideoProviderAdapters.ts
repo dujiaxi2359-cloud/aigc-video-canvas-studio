@@ -147,6 +147,14 @@ assert(
   "Google full videos relay endpoint should be used as-is"
 );
 assert(
+  veoProxyCreateEndpoint("https://runapi.co") === "https://runapi.co/v1/video/create",
+  "RunAPI Veo proxy root should use /v1/video/create"
+);
+assert(
+  veoProxyCreateEndpoint("https://runapi.co/v1") === "https://runapi.co/v1/video/create",
+  "RunAPI Veo proxy v1 base should use /v1/video/create"
+);
+assert(
   configuredRelayModelName({ modelName: "veo_3_1" }) === "veo_3_1",
   "Veo relay requests should preserve the upstream model name"
 );
