@@ -202,6 +202,10 @@ assert(
   "RunAPI Veo proxy v1 base should use /v1/video/create"
 );
 assert(
+  veoProxyCreateEndpoint("https://ai.cy88.ai/v1") === "https://ai.cy88.ai/v1/video/create",
+  "cy88 Veo relay should prefer the unified create endpoint that its console reports"
+);
+assert(
   JSON.stringify(veoProxyCreateEndpointCandidates("https://runapi.co/v1")) === JSON.stringify([
     "https://runapi.co/v1/video/create",
     "https://runapi.co/v1/videos",
@@ -242,6 +246,38 @@ const runApiVeoProxyBody = buildVeoProxyBody({
 }) as Record<string, any>;
 assert(runApiVeoProxyBody.duration === 8, "RunAPI Veo proxy duration should be numeric");
 assert(runApiVeoProxyBody.enable_upsample === false, "RunAPI Veo proxy enable_upsample should be boolean");
+const cy88VeoProxyBody = buildVeoProxyBody({
+  endpoint: "https://ai.cy88.ai/v1/video/create",
+  relayModel: "veo_3_1-fast",
+  images: ["https://assets.example/frame.png"],
+  requestAspectRatio: "9:16",
+  requestResolution: "720p",
+  requestSize: "720x1280",
+  isOmni: false,
+  params: {
+    providerId: "google",
+    modelName: "veo_3_1-fast",
+    apiBaseUrl: "https://ai.cy88.ai/v1",
+    apiKey: "sk-test-key",
+    prompt: "test",
+    nodeId: "node",
+    modelConfigId: "model",
+    inputMode: "reference-to-video",
+    videoMode: "reference_images_to_video",
+    imageAssetIds: ["asset"],
+    duration: 8,
+    aspectRatio: "9:16",
+    resolution: "720p",
+    generateCount: 1,
+    qualityMode: "full_quality"
+  }
+}) as Record<string, any>;
+assert(cy88VeoProxyBody.aspect_ratio === "9:16", "cy88 Veo proxy body should include aspect_ratio");
+assert(cy88VeoProxyBody.ratio === "9:16", "cy88 Veo proxy body should include ratio alias");
+assert(cy88VeoProxyBody.size === "720x1280", "cy88 Veo proxy body should include portrait widthxheight size");
+assert(cy88VeoProxyBody.width === 720 && cy88VeoProxyBody.height === 1280, "cy88 Veo proxy body should include portrait dimensions");
+assert(cy88VeoProxyBody.duration === 8, "cy88 Veo proxy body should include numeric duration");
+assert(cy88VeoProxyBody.seconds === "8", "cy88 Veo proxy body should include string seconds for Go relays");
 assert(
   configuredRelayModelName({ modelName: "veo_3_1" }) === "veo_3_1",
   "Veo relay requests should preserve the upstream model name"

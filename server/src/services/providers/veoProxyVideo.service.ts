@@ -3,6 +3,7 @@ import path from "node:path";
 import { legacyInputModeToOfficialMode, type OfficialVideoMode } from "../../types/videoModes.js";
 import { downloadGeneratedFile } from "../../utils/downloadGeneratedFile.js";
 import { ProviderError, rawErrorMessage } from "../../utils/providerErrors.js";
+import { mapVideoDimensions } from "../../utils/videoParams.js";
 import { getAsset } from "../asset.service.js";
 import { ensureAssetLocalFile } from "../assets/ensureAssetLocalFile.service.js";
 import { prepareVideoFrameForAspectRatio } from "../assets/prepareVideoFrame.service.js";
@@ -30,6 +31,10 @@ function isRunApiEndpoint(apiBaseUrl: string) {
   return /runapi\.co/i.test(apiBaseUrl);
 }
 
+function isCy88Endpoint(apiBaseUrl: string) {
+  return /(?:^|\.)cy88\.ai/i.test(apiBaseUrl);
+}
+
 function cleanEndpoint(value: string) {
   return value.trim().replace(/^(?:POST|GET|PUT|PATCH|DELETE)\s+/i, "").replace(/\/$/, "");
 }
@@ -37,6 +42,11 @@ function cleanEndpoint(value: string) {
 export function veoProxyCreateEndpoint(apiBaseUrl: string) {
   const base = cleanEndpoint(apiBaseUrl);
   if (isRunApiEndpoint(base)) {
+    if (/\/v1\/video\/create$/i.test(base)) return base;
+    if (/\/v1$/i.test(base)) return `${base}/video/create`;
+    return `${base}/v1/video/create`;
+  }
+  if (isCy88Endpoint(base)) {
     if (/\/v1\/video\/create$/i.test(base)) return base;
     if (/\/v1$/i.test(base)) return `${base}/video/create`;
     return `${base}/v1/video/create`;
@@ -70,6 +80,15 @@ export function veoProxyCreateEndpointCandidates(apiBaseUrl: string) {
       `${root}/v1/videos`,
       `${root}/v1/videos/generations`,
       `${root}/v1/video/generations`
+    ]);
+  }
+  if (isCy88Endpoint(apiBaseUrl)) {
+    return unique([
+      primary,
+      `${root}/v1/video/create`,
+      `${root}/v1/videos`,
+      `${root}/v1/video/generations`,
+      `${root}/v1/videos/generations`
     ]);
   }
   return unique([
@@ -185,6 +204,29 @@ function runApiRequestSize(resolution?: string) {
   return "720P";
 }
 
+function relayDuration(input: VideoProviderParams) {
+  return input.duration && input.duration > 0 ? input.duration : undefined;
+}
+
+function relayDimensions(aspectRatio?: string, resolution?: string) {
+  if (!aspectRatio || !resolution) return undefined;
+  return mapVideoDimensions(aspectRatio, resolution);
+}
+
+function relayAspectFields(aspectRatio?: string, resolution?: string) {
+  const dimensions = relayDimensions(aspectRatio, resolution);
+  return {
+    ...(aspectRatio ? { aspect_ratio: aspectRatio, aspectRatio, ratio: aspectRatio } : {}),
+    ...(resolution ? { resolution } : {}),
+    ...(dimensions ? { size: `${dimensions.width}x${dimensions.height}`, width: dimensions.width, height: dimensions.height } : {})
+  };
+}
+
+function relayDurationFields(params: VideoProviderParams) {
+  const duration = relayDuration(params);
+  return duration ? { duration, seconds: String(duration) } : {};
+}
+
 export function buildVeoProxyBody(input: {
   endpoint: string;
   params: VideoProviderParams;
@@ -215,8 +257,8 @@ export function buildVeoProxyBody(input: {
       model: input.relayModel,
       prompt: input.params.prompt,
       images: input.images,
-      ...(input.requestAspectRatio ? { aspect_ratio: input.requestAspectRatio } : {}),
-      ...(input.requestResolution ? { size: input.requestResolution } : {}),
+      ...relayAspectFields(input.requestAspectRatio, input.requestResolution),
+      ...relayDurationFields(input.params),
       enhance_prompt: input.params.promptExtend ?? true,
       ...(input.requestResolution ? { enable_upsample: input.requestResolution.toLowerCase() !== "720p" } : {})
     };
@@ -226,9 +268,9 @@ export function buildVeoProxyBody(input: {
     model: input.relayModel,
     prompt: input.params.prompt,
     ...(input.requestSize ? { size: input.requestSize } : {}),
-    ...(input.requestAspectRatio ? { aspect_ratio: input.requestAspectRatio, aspectRatio: input.requestAspectRatio } : {}),
+    ...relayAspectFields(input.requestAspectRatio, input.requestResolution),
     ...(input.requestResolution ? { resolution: input.requestResolution } : {}),
-    ...(input.params.duration ? { duration: input.params.duration, seconds: input.params.duration } : {}),
+    ...relayDurationFields(input.params),
     images: input.images
   };
 }
