@@ -22,7 +22,7 @@ import { generateImageWithOpenAI } from "./providers/openaiImage.service.js";
 import { generateVideoWithSeedance } from "./providers/seedanceVideo.service.js";
 import { channelSupportsImage, resolveVideoRequestConfig, shouldUseProxyVideoAdapter, validateVideoRequestConfig } from "./providers/videoRequestAdapter.js";
 import { resolveProviderApiBaseUrl } from "./providers/providerBaseUrl.js";
-import { isGrokLikeVideoModel, normalizeVideoCapabilities } from "./videoCapabilityNormalization.js";
+import { isGrokLikeVideoModel, isVeoLikeVideoModel, normalizeVideoCapabilities } from "./videoCapabilityNormalization.js";
 import { ensureVideoAspectRatio } from "./assets/ensureVideoAspectRatio.service.js";
 import { ensureImageAspectRatio } from "./assets/ensureImageAspectRatio.service.js";
 import type { ImageInputMode, ModelCapabilities, ModelCatalogItem, VideoNodeContext } from "../types/model.js";
@@ -556,6 +556,9 @@ async function callVideoProvider(input: {
   const providerId = model.provider_id ?? "";
   await assertSelectedVideoChannelSupportsAssets(model, providerParams, capabilities);
   const videoRequestConfig = validateVideoRequestConfig(providerParams, capabilities);
+  if (providerId === "google" && isVeoLikeVideoModel(model.provider_id, model.model_name, capabilities)) {
+    return generateVideoWithGoogleVeo(providerParams);
+  }
   if (
     isGrokLikeVideoModel(model.provider_id, model.model_name, capabilities)
     && videoRequestConfig.apiFamily !== "unified_video_create"
