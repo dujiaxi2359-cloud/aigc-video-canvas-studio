@@ -503,6 +503,172 @@ async function tryImageFallback(input: {
   return undefined;
 }
 
+function isRetryableVideoRelayError(error: unknown) {
+  const text = error instanceof Error ? `${error.message}\n${error.stack ?? ""}` : safeStringify(error);
+  return /中转接口|Invalid URL|没有返回任务 id|task_not_exist|OPENAI_COMPAT_NON_JSON_RESPONSE|HTML 页面|Cloudflare|网关|gateway|route|path|not found|method not allowed|unsupported endpoint|fetch failed|network|timeout|ECONN|502|503|504/i.test(text)
+    && !/unauthorized|forbidden|invalid api key|incorrect api key|quota|credit|balance|insufficient|no access|permission|额度|余额|无权限|未开通/i.test(text);
+}
+
+function videoProviderPriority(providerId?: string) {
+  if (providerId === "google") return 0;
+  if (providerId === "grok") return 1;
+  if (providerId === "openai-video") return 2;
+  if (providerId === "seedance") return 3;
+  if (providerId === "kling") return 4;
+  if (providerId === "alibaba") return 5;
+  return 9;
+}
+
+async function listVideoFallbackModels(primary: ActiveModelConfig) {
+  const db = await getDb();
+  const rows = await db.all<ActiveModelConfig[]>(
+    `SELECT * FROM model_configs
+     WHERE workspace_id = ?
+       AND enabled = 1
+       AND id <> ?
+       AND encrypted_api_key IS NOT NULL
+       AND (category = 'video' OR model_type LIKE '%video%')
+     ORDER BY
+       CASE WHEN provider_id = ? THEN 0 ELSE 1 END,
+       CASE WHEN api_base_url = ? THEN 0 ELSE 1 END,
+       updated_at DESC`,
+    primary.workspace_id,
+    primary.id,
+    primary.provider_id,
+    primary.api_base_url
+  );
+  return rows.sort((a, b) => videoProviderPriority(a.provider_id) - videoProviderPriority(b.provider_id));
+}
+
+async function callVideoProvider(input: {
+  model: ActiveModelConfig;
+  providerParams: GenerateVideoRequest & {
+    videoMode: OfficialVideoMode;
+    apiKey: string;
+    apiBaseUrl: string;
+    modelName: string;
+    providerId: string;
+    qualityMode: "full_quality" | "balanced" | "fast";
+  };
+  capabilities: ModelCapabilities;
+}) {
+  const { model, providerParams, capabilities } = input;
+  const providerId = model.provider_id ?? "";
+  await assertSelectedVideoChannelSupportsAssets(model, providerParams, capabilities);
+  const videoRequestConfig = validateVideoRequestConfig(providerParams, capabilities);
+  if (
+    isGrokLikeVideoModel(model.provider_id, model.model_name, capabilities)
+    && videoRequestConfig.apiFamily !== "unified_video_create"
+    && !/runapi\.co/i.test(model.api_base_url)
+  ) {
+    return generateVideoWithGrok(providerParams);
+  }
+  if (shouldUseProxyVideoAdapter(providerParams, capabilities)) {
+    return generateVideoWithSeedance({
+      ...providerParams,
+      apiBaseUrl: videoRequestConfig.finalUrl,
+      imageTransport: videoRequestConfig.imageTransport,
+      videoTransport: videoRequestConfig.videoTransport,
+      videoRequestConfig
+    });
+  }
+  switch (providerId) {
+    case "google":
+      return generateVideoWithGoogleVeo(providerParams);
+    case "alibaba":
+      return generateVideoWithAlibabaWan(providerParams);
+    case "kling":
+      return generateVideoWithKling(providerParams);
+    case "grok":
+      return generateVideoWithGrok(providerParams);
+    case "seedance":
+    case "openai-video":
+      return generateVideoWithSeedance(providerParams);
+    default:
+      return generateVideoWithSeedance(providerParams);
+  }
+}
+
+async function tryVideoFallback(input: {
+  primaryModel: ActiveModelConfig;
+  request: GenerateVideoRequest;
+  primaryError: unknown;
+}) {
+  if (!isRetryableVideoRelayError(input.primaryError)) return undefined;
+  const candidates = await listVideoFallbackModels(input.primaryModel);
+  for (const candidate of candidates) {
+    try {
+      const configuredCapabilities = JSON.parse(candidate.capabilities_json) as ModelCapabilities;
+      const capabilities = normalizeVideoCapabilities(configuredCapabilities, candidate.provider_id, candidate.model_name);
+      const candidateRequest: GenerateVideoRequest = { ...input.request };
+      validateVideoRequest(capabilities, candidateRequest, candidate.provider_id, candidate.model_name);
+      const apiKey = candidate.encrypted_api_key ? decryptApiKey(candidate.encrypted_api_key) : "";
+      if (!apiKey) continue;
+      const providerId = candidate.provider_id ?? "";
+      const modelName = candidate.model_name ?? "";
+      const officialVideoMode = candidateRequest.videoMode ?? legacyInputModeToOfficialMode(candidateRequest.inputMode, providerId);
+      const providerParams = {
+        ...candidateRequest,
+        videoMode: officialVideoMode,
+        apiKey,
+        apiBaseUrl: apiBaseUrlFor(candidate),
+        modelName,
+        providerId,
+        qualityMode: candidateRequest.qualityMode ?? "full_quality"
+      };
+      const preflightSummary = buildPayloadSummary({
+        providerId,
+        selectedModelId: candidate.id,
+        actualModelName: modelName,
+        inputMode: officialVideoMode,
+        aspectRatio: candidateRequest.aspectRatio,
+        mappedResolution: candidateRequest.resolution,
+        duration: candidateRequest.duration,
+        quality: candidateRequest.qualityMode ?? "full_quality",
+        qualityMode: candidateRequest.qualityMode ?? "full_quality",
+        hasImageInput: Boolean(candidateRequest.imageAssetIds?.length),
+        imageInputCount: candidateRequest.imageAssetIds?.length ?? 0,
+        prompt: candidateRequest.prompt,
+        negativePrompt: candidateRequest.negativePrompt,
+        isMock: false,
+        qualityAudit: {
+          videoMode: officialVideoMode,
+          qualityMode: candidateRequest.qualityMode ?? "full_quality",
+          promptExtend: candidateRequest.promptExtend ?? true,
+          seed: candidateRequest.seed,
+          isFallback: true
+        },
+        payloadSummary: {
+          stage: "fallback-preflight",
+          fallbackFromModelConfigId: input.primaryModel.id,
+          fallbackFromModel: input.primaryModel.model_name,
+          fallbackFromBaseUrl: input.primaryModel.api_base_url
+        }
+      });
+      console.warn("[video fallback] retrying with alternate model", {
+        fromModelConfigId: input.primaryModel.id,
+        fromModelName: input.primaryModel.model_name,
+        toModelConfigId: candidate.id,
+        toModelName: candidate.model_name,
+        toProviderId: candidate.provider_id,
+        toApiBaseUrl: candidate.api_base_url
+      });
+      logOfficialPayload(preflightSummary);
+      let result = await callVideoProvider({ model: candidate, providerParams, capabilities });
+      result = await enforceVideoAspectRatio(result, candidateRequest.aspectRatio, candidateRequest.resolution);
+      return { model: candidate, request: candidateRequest, result, preflightSummary };
+    } catch (fallbackError) {
+      console.warn("[video fallback] candidate failed", {
+        modelConfigId: candidate.id,
+        modelName: candidate.model_name,
+        providerId: candidate.provider_id,
+        message: fallbackError instanceof Error ? fallbackError.message : String(fallbackError)
+      });
+    }
+  }
+  return undefined;
+}
+
 async function writeMockAsset(input: { nodeId: string; kind: "image" | "video"; payload: Record<string, unknown> }) {
   const uploadRoot = process.env.UPLOAD_DIR ?? "./uploads";
   const outputDir = path.resolve(process.cwd(), uploadRoot, "generated");
@@ -710,7 +876,9 @@ export async function generateVideo(input: GenerateVideoRequest) {
       qualityMode: inputForGeneration.qualityMode ?? "full_quality"
     };
 
-    const preflightSummary = buildPayloadSummary({
+    let activeModel = model;
+    let activeInputForGeneration = inputForGeneration;
+    let preflightSummary = buildPayloadSummary({
       providerId,
       selectedModelId: model.id,
       actualModelName: modelName,
@@ -735,73 +903,47 @@ export async function generateVideo(input: GenerateVideoRequest) {
       payloadSummary: { stage: "preflight", legacyInputMode: inputForGeneration.inputMode, officialMode: officialVideoMode }
     });
     logOfficialPayload(preflightSummary);
-    await assertSelectedVideoChannelSupportsAssets(model, providerParams, capabilities);
-    const videoRequestConfig = validateVideoRequestConfig(providerParams, capabilities);
 
     let result: ProviderGenerateResult;
-    if (
-      isGrokLikeVideoModel(model.provider_id, model.model_name, capabilities)
-      && videoRequestConfig.apiFamily !== "unified_video_create"
-      && !/runapi\.co/i.test(model.api_base_url)
-    ) {
-      // Grok relay endpoints use their multipart input_reference/input_video
-      // contract. Sending them through the generic OpenAI-video JSON adapter
-      // drops reference files and can incorrectly classify the channel as text-only.
-      // Match the model identity too because older workspaces may still carry
-      // the historical `openai-video` provider id for Grok Imagine models.
-      result = await generateVideoWithGrok(providerParams);
-    } else if (shouldUseProxyVideoAdapter(providerParams, capabilities)) {
-      result = await generateVideoWithSeedance({
-        ...providerParams,
-        apiBaseUrl: videoRequestConfig.finalUrl,
-        imageTransport: videoRequestConfig.imageTransport,
-        videoTransport: videoRequestConfig.videoTransport,
-        videoRequestConfig
-      });
-    } else switch (providerId) {
-      case "google":
-        result = await generateVideoWithGoogleVeo(providerParams);
-        break;
-      case "alibaba":
-        result = await generateVideoWithAlibabaWan(providerParams);
-        break;
-      case "kling":
-        result = await generateVideoWithKling(providerParams);
-        break;
-      case "grok":
-        result = await generateVideoWithGrok(providerParams);
-        break;
-      case "seedance":
-        result = await generateVideoWithSeedance(providerParams);
-        break;
-      case "openai-video":
-        result = await generateVideoWithSeedance(providerParams);
-        break;
-      default:
-        result = await generateVideoWithSeedance(providerParams);
+    try {
+      result = await callVideoProvider({ model, providerParams, capabilities });
+      result = await enforceVideoAspectRatio(result, inputForGeneration.aspectRatio, inputForGeneration.resolution);
+    } catch (primaryError) {
+      const fallback = await tryVideoFallback({ primaryModel: model, request: inputForGeneration, primaryError });
+      if (!fallback) throw primaryError;
+      activeModel = fallback.model;
+      activeInputForGeneration = fallback.request;
+      preflightSummary = fallback.preflightSummary;
+      result = fallback.result;
+      result.payloadSummary = {
+        ...(result.payloadSummary && typeof result.payloadSummary === "object" ? result.payloadSummary as Record<string, unknown> : {}),
+        fallbackFromModelConfigId: model.id,
+        fallbackFromModelDisplayName: model.display_name,
+        fallbackToModelConfigId: activeModel.id,
+        fallbackToModelDisplayName: activeModel.display_name
+      };
     }
-    result = await enforceVideoAspectRatio(result, inputForGeneration.aspectRatio, inputForGeneration.resolution);
 
-    const asset = await createGeneratedAssetFromProvider(result, `video_${inputForGeneration.nodeId}.mp4`, {
-      providerId,
-      modelId: model.id,
-      nodeId: inputForGeneration.nodeId,
-      projectId: inputForGeneration.projectId,
-      prompt: inputForGeneration.prompt,
-      negativePrompt: inputForGeneration.negativePrompt
+    const asset = await createGeneratedAssetFromProvider(result, `video_${activeInputForGeneration.nodeId}.mp4`, {
+      providerId: activeModel.provider_id ?? "",
+      modelId: activeModel.id,
+      nodeId: activeInputForGeneration.nodeId,
+      projectId: activeInputForGeneration.projectId,
+      prompt: activeInputForGeneration.prompt,
+      negativePrompt: activeInputForGeneration.negativePrompt
     });
     const payloadSummary = await enrichPayloadSummaryWithOutput(preflightSummary, result);
     await addHistory({
       generationType: "video",
-      projectId: inputForGeneration.projectId,
-      nodeId: inputForGeneration.nodeId,
-      modelConfigId: inputForGeneration.modelConfigId,
-      modelDisplayName: model.display_name,
-      inputMode: inputForGeneration.inputMode,
-      prompt: inputForGeneration.prompt,
-      duration: inputForGeneration.duration,
-      aspectRatio: inputForGeneration.aspectRatio,
-      resolution: inputForGeneration.resolution,
+      projectId: activeInputForGeneration.projectId,
+      nodeId: activeInputForGeneration.nodeId,
+      modelConfigId: activeModel.id,
+      modelDisplayName: activeModel.display_name,
+      inputMode: activeInputForGeneration.inputMode,
+      prompt: activeInputForGeneration.prompt,
+      duration: activeInputForGeneration.duration,
+      aspectRatio: activeInputForGeneration.aspectRatio,
+      resolution: activeInputForGeneration.resolution,
       status: "success",
       outputPath: asset?.localPath ?? result.localPath,
       outputUrl: asset?.url ?? result.outputUrl

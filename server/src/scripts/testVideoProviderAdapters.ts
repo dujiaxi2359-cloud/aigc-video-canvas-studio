@@ -1,7 +1,7 @@
 import { grokCreateEndpoint, grokPollEndpoint, grokPollEndpointCandidates, grokRequestModelName, isAi666GrokRelay, isOfficialGrokEndpoint } from "../services/providers/grokVideo.service.js";
 import { klingBearerToken, klingCreateEndpoint, klingPollEndpoint, normalizeKlingPrompt } from "../services/providers/klingVideo.service.js";
 import { buildProxyBody, buildSeedance15Multipart, isRetryableSeedancePollFailure, seedanceAssetUploadShouldFallback, seedanceAuthorizationValues, seedanceCreateEndpoint, seedancePollEndpoint } from "../services/providers/seedanceVideo.service.js";
-import { configuredRelayModelName, veoProxyCreateEndpoint } from "../services/providers/veoProxyVideo.service.js";
+import { configuredRelayModelName, veoProxyCreateEndpoint, veoProxyCreateEndpointCandidates } from "../services/providers/veoProxyVideo.service.js";
 import { joinUrl, resolveVideoRequestConfig } from "../services/providers/videoRequestAdapter.js";
 import { getVideoModelCapability } from "../config/videoModelCapabilities.js";
 import { modelCatalog } from "../services/modelCatalog.js";
@@ -153,6 +153,19 @@ assert(
 assert(
   veoProxyCreateEndpoint("https://runapi.co/v1") === "https://runapi.co/v1/video/create",
   "RunAPI Veo proxy v1 base should use /v1/video/create"
+);
+assert(
+  JSON.stringify(veoProxyCreateEndpointCandidates("https://runapi.co/v1")) === JSON.stringify([
+    "https://runapi.co/v1/video/create",
+    "https://runapi.co/v1/videos",
+    "https://runapi.co/v1/videos/generations",
+    "https://runapi.co/v1/video/generations"
+  ]),
+  "RunAPI Veo proxy should keep compatible endpoint fallbacks"
+);
+assert(
+  veoProxyCreateEndpointCandidates("https://relay.example/v1")[1] === "https://relay.example/v1/video/create",
+  "Generic Veo proxy should fallback from OpenAI videos to unified create"
 );
 assert(
   configuredRelayModelName({ modelName: "veo_3_1" }) === "veo_3_1",
