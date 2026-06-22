@@ -185,7 +185,7 @@ function runApiRequestSize(resolution?: string) {
   return "720P";
 }
 
-function buildVeoProxyBody(input: {
+export function buildVeoProxyBody(input: {
   endpoint: string;
   params: VideoProviderParams;
   relayModel: string;
@@ -202,7 +202,7 @@ function buildVeoProxyBody(input: {
       model: input.relayModel,
       prompt: input.params.prompt,
       images: input.images,
-      ...(input.params.duration ? { duration: String(input.params.duration) } : {}),
+      ...(input.params.duration ? { duration: input.params.duration } : {}),
       enhance_prompt: input.params.promptExtend ?? true,
       enable_upsample: input.requestResolution && input.requestResolution.toLowerCase() !== "720p" ? "true" : "false",
       ...(input.requestAspectRatio ? { aspect_ratio: input.requestAspectRatio } : {}),

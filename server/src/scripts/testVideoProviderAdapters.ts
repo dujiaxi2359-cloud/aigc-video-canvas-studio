@@ -1,7 +1,7 @@
 import { grokCreateEndpoint, grokPollEndpoint, grokPollEndpointCandidates, grokRequestModelName, isAi666GrokRelay, isOfficialGrokEndpoint } from "../services/providers/grokVideo.service.js";
 import { klingBearerToken, klingCreateEndpoint, klingPollEndpoint, normalizeKlingPrompt } from "../services/providers/klingVideo.service.js";
 import { buildProxyBody, buildSeedance15Multipart, isRetryableSeedancePollFailure, seedanceAssetUploadShouldFallback, seedanceAuthorizationValues, seedanceCreateEndpoint, seedancePollEndpoint } from "../services/providers/seedanceVideo.service.js";
-import { configuredRelayModelName, veoProxyCreateEndpoint, veoProxyCreateEndpointCandidates } from "../services/providers/veoProxyVideo.service.js";
+import { buildVeoProxyBody, configuredRelayModelName, veoProxyCreateEndpoint, veoProxyCreateEndpointCandidates } from "../services/providers/veoProxyVideo.service.js";
 import { joinUrl, resolveVideoRequestConfig } from "../services/providers/videoRequestAdapter.js";
 import { getVideoModelCapability } from "../config/videoModelCapabilities.js";
 import { modelCatalog } from "../services/modelCatalog.js";
@@ -167,6 +167,33 @@ assert(
   veoProxyCreateEndpointCandidates("https://relay.example/v1")[1] === "https://relay.example/v1/video/create",
   "Generic Veo proxy should fallback from OpenAI videos to unified create"
 );
+const runApiVeoProxyBody = buildVeoProxyBody({
+  endpoint: "https://runapi.co/v1/video/create",
+  relayModel: "veo3.1-fast",
+  images: ["https://assets.example/frame.png"],
+  requestAspectRatio: "9:16",
+  requestResolution: "720p",
+  requestSize: "720x1280",
+  isOmni: false,
+  params: {
+    providerId: "google",
+    modelName: "veo3.1-fast",
+    apiBaseUrl: "https://runapi.co/v1",
+    apiKey: "sk-test-key",
+    prompt: "test",
+    nodeId: "node",
+    modelConfigId: "model",
+    inputMode: "reference-to-video",
+    videoMode: "reference_images_to_video",
+    imageAssetIds: ["asset"],
+    duration: 8,
+    aspectRatio: "9:16",
+    resolution: "720p",
+    generateCount: 1,
+    qualityMode: "full_quality"
+  }
+}) as Record<string, any>;
+assert(runApiVeoProxyBody.duration === 8, "RunAPI Veo proxy duration should be numeric");
 assert(
   configuredRelayModelName({ modelName: "veo_3_1" }) === "veo_3_1",
   "Veo relay requests should preserve the upstream model name"
