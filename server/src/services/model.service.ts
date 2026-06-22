@@ -507,7 +507,7 @@ async function tryImageFallback(input: {
 
 function isRetryableVideoRelayError(error: unknown) {
   const text = error instanceof Error ? `${error.message}\n${error.stack ?? ""}` : safeStringify(error);
-  return /中转接口|不支持原生 9:16|Invalid URL|没有返回任务 id|task_not_exist|OPENAI_COMPAT_NON_JSON_RESPONSE|HTML 页面|Cloudflare|网关|gateway|route|path|not found|method not allowed|unsupported endpoint|fetch failed|network|timeout|ECONN|502|503|504/i.test(text)
+  return /中转接口|Invalid URL|没有返回任务 id|task_not_exist|OPENAI_COMPAT_NON_JSON_RESPONSE|HTML 页面|Cloudflare|网关|gateway|route|path|not found|method not allowed|unsupported endpoint|fetch failed|network|timeout|ECONN|502|503|504/i.test(text)
     && !/unauthorized|forbidden|invalid api key|incorrect api key|quota|credit|balance|insufficient|no access|permission|额度|余额|无权限|未开通/i.test(text);
 }
 
@@ -560,18 +560,6 @@ async function callVideoProvider(input: {
   await assertSelectedVideoChannelSupportsAssets(model, providerParams, capabilities);
   const videoRequestConfig = validateVideoRequestConfig(providerParams, capabilities);
   if (
-    /(?:^|\.)cy88\.ai/i.test(model.api_base_url)
-    && providerParams.videoMode === "reference_images_to_video"
-    && providerParams.aspectRatio === "9:16"
-  ) {
-    throw new ProviderError(
-      "MODEL_PARAM_UNSUPPORTED",
-      "cy88 当前 Veo 3.1 多参考图通道不支持原生 9:16，系统将尝试 RunAPI 或 ai666 unified 竖屏通道。",
-      undefined,
-      { provider: "cy88", mode: providerParams.videoMode, requestedAspectRatio: providerParams.aspectRatio, nativeAspectRatioRequired: true }
-    );
-  }
-  if (
     providerId === "google"
     && videoRequestConfig.apiFamily !== "omni_fast"
     && videoRequestConfig.apiFamily !== "omni_fast_v2v"
@@ -623,13 +611,7 @@ async function tryVideoFallback(input: {
   primaryError: unknown;
 }) {
   if (!isRetryableVideoRelayError(input.primaryError)) return undefined;
-  const primaryErrorText = input.primaryError instanceof Error ? input.primaryError.message : safeStringify(input.primaryError);
-  let candidates = await listVideoFallbackModels(input.primaryModel);
-  if (/cy88.*不支持原生 9:16/i.test(primaryErrorText)) {
-    candidates = candidates
-      .filter((candidate) => /runapi\.co|ai666\.net/i.test(candidate.api_base_url))
-      .sort((a, b) => Number(!/runapi\.co/i.test(a.api_base_url)) - Number(!/runapi\.co/i.test(b.api_base_url)));
-  }
+  const candidates = await listVideoFallbackModels(input.primaryModel);
   for (const candidate of candidates) {
     try {
       const configuredCapabilities = JSON.parse(candidate.capabilities_json) as ModelCapabilities;
@@ -797,12 +779,20 @@ async function enforceVideoAspectRatio(result: ProviderGenerateResult, aspectRat
     const matchesNative = Boolean(outputWidth && outputHeight)
       && Math.abs((outputWidth! / outputHeight!) - (target.width / target.height)) < 0.02;
     if (!matchesNative) {
-      throw new ProviderError(
-        "MODEL_PARAM_UNSUPPORTED",
-        `当前中转没有按 ${normalizeVideoAspectRatio(aspectRatio)} 原生比例返回视频。系统未裁剪画面；请切换支持原生 ${normalizeVideoAspectRatio(aspectRatio)} 的通道，或改用普通图生/首尾帧模式。`,
-        JSON.stringify({ requestedAspectRatio: aspectRatio, requestedResolution: resolution, output: metadata, provider: payloadSummary.proxyEndpoint ?? payloadSummary.endpoint }),
-        { ...payloadSummary, output: metadata, nativeAspectRatioMismatch: true }
-      );
+      const actualAspectRatio = outputWidth && outputHeight ? `${outputWidth}:${outputHeight}` : "unknown";
+      return {
+        ...result,
+        payloadSummary: {
+          ...payloadSummary,
+          requestedAspectRatio: normalizeVideoAspectRatio(aspectRatio),
+          outputAspectRatio: actualAspectRatio,
+          outputAspectRatioTransformed: false,
+          outputAspectRatioFitMode: "provider_original_mismatch",
+          nativeAspectRatioMismatch: true,
+          modelNativeOutput: metadata,
+          deliveryWarning: `上游已成功生成视频，但实际比例为 ${actualAspectRatio}，与请求的 ${normalizeVideoAspectRatio(aspectRatio)} 不一致。画布保留原视频，未进行裁剪。`
+        }
+      };
     }
     return {
       ...result,
