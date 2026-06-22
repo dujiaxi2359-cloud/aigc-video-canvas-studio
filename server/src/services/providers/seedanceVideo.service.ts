@@ -433,6 +433,7 @@ export function seedanceAssetUploadShouldFallback(error: unknown) {
     : rawErrorMessage(error);
   if (/no access to model\s+seedance-asset|seedance-asset.*(?:no access|unauthorized|forbidden|无权限|未开通|不可用)/i.test(text)) return true;
   if (/seedance-asset.*(?:可用渠道不存在|渠道不存在|分组.*不存在|没有.*渠道)|(?:可用渠道不存在|渠道不存在).*seedance-asset/i.test(text)) return true;
+  if (/seedance-asset/i.test(text) && /fail_to_fetch_task|failed?\s+to\s+fetch\s+task|task.*(?:not\s+ready|not\s+found|not\s+exist)|任务.*(?:不存在|查询失败|暂未|稍后)/i.test(text)) return true;
   return /not found|not support|unsupported|method not allowed/i.test(text);
 }
 
@@ -917,10 +918,11 @@ function seedanceTaskFetchPending(payload: Record<string, unknown>) {
 }
 
 export function isRetryableSeedancePollFailure(response: Response, payload: Record<string, unknown>) {
+  const text = JSON.stringify(payload);
+  if (/panic detected|assignment to entry in nil map|nil map|please contact us/i.test(text)) return true;
   const payloadStatus = Number(payload.status_code ?? payload.statusCode ?? payload.code_status ?? 0);
   const status = response.ok && payloadStatus ? payloadStatus : response.status;
   if (![404, 408, 409, 425, 429, 500, 502, 503, 504].includes(status)) return false;
-  const text = JSON.stringify(payload);
   return seedanceTaskFetchPending(payload) || /capacity|fully loaded|try again later|rate limit|too many|busy|queue|queued|pending|processing|timeout|temporar|upstream/i.test(text);
 }
 

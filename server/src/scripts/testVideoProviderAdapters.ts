@@ -1179,12 +1179,20 @@ assert(
   "Seedance asset upload should fall back when the relay auto group has no seedance-asset channel"
 );
 assert(
+  seedanceAssetUploadShouldFallback(new ProviderError("SEEDANCE_ASSET_UPLOAD_FAILED", "Seedance 素材库接口调用失败：fail_to_fetch_task", "{\"model\":\"seedance-asset\",\"status_code\":502,\"code\":\"fail_to_fetch_task\"}", { upstreamStatus: 502 })),
+  "Seedance asset upload should fall back when seedance-asset task fetching is unstable"
+);
+assert(
   isRetryableSeedancePollFailure(new Response("{}", { status: 502 }), { code: "fail_to_fetch_task", message: "fail to fetch task" }),
   "Seedance poll should keep waiting when the relay returns fail_to_fetch_task with HTTP 502"
 );
 assert(
   isRetryableSeedancePollFailure(new Response("{}", { status: 200 }), { status_code: 502, code: "fail_to_fetch_task", message: "fail to fetch task" }),
   "Seedance poll should keep waiting when the relay wraps fail_to_fetch_task inside a 200 JSON body"
+);
+assert(
+  isRetryableSeedancePollFailure(new Response("{}", { status: 400 }), { message: "Panic detected, error: assignment to entry in nil map. Please contact us" }),
+  "Seedance poll should keep waiting when the relay query endpoint returns a transient server panic"
 );
 const seedanceNativeBody = buildProxyBody({
   modelName: "doubao-seedance-2-0-260128",
