@@ -134,6 +134,7 @@ export function CommercialAdminPanel() {
   const [data, setData] = useState<Overview>(emptyOverview);
   const [error, setError] = useState("");
   const [code, setCode] = useState("");
+  const [cancelCode, setCancelCode] = useState("");
   const [busy, setBusy] = useState("");
 
   async function load() {
@@ -205,6 +206,24 @@ export function CommercialAdminPanel() {
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "更新邀请码失败");
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function cancelInviteByCode() {
+    const normalizedCode = cancelCode.trim().toUpperCase();
+    if (!normalizedCode) {
+      setError("请输入要取消的邀请码");
+      return;
+    }
+    try {
+      setBusy("cancelInvite");
+      await api.post<AdminInvite>("/api/admin/invite-codes/cancel", { code: normalizedCode });
+      setCancelCode("");
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "取消邀请码失败");
     } finally {
       setBusy("");
     }
@@ -284,6 +303,12 @@ export function CommercialAdminPanel() {
             <input className="h-11 rounded-[13px] border border-white/[0.08] bg-black/35 px-3 text-[13px] uppercase text-white outline-none placeholder:text-white/25 focus:border-cyan-200/35" value={code} onChange={(event) => setCode(event.target.value.toUpperCase())} placeholder="留空自动生成，或输入自定义邀请码" />
             <button type="button" disabled={busy === "invite"} onClick={() => void createInvite()} className="inline-flex h-11 items-center justify-center gap-2 rounded-[13px] border border-white/[0.08] bg-white/[0.06] px-4 text-[13px] font-medium text-white hover:bg-white/[0.1] disabled:opacity-60">
               {busy === "invite" ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />} 创建
+            </button>
+          </div>
+          <div className="mt-3 grid gap-2 rounded-[16px] border border-red-200/10 bg-red-300/[0.035] p-3 md:grid-cols-[1fr_auto]">
+            <input className="h-10 rounded-[12px] border border-white/[0.08] bg-black/30 px-3 text-[12px] uppercase text-white outline-none placeholder:text-white/25 focus:border-red-200/35" value={cancelCode} onChange={(event) => setCancelCode(event.target.value.toUpperCase())} placeholder="粘贴邀请码，一键取消/作废" />
+            <button type="button" disabled={busy === "cancelInvite" || !cancelCode.trim()} onClick={() => void cancelInviteByCode()} className="inline-flex h-10 items-center justify-center gap-2 rounded-[12px] border border-red-200/15 bg-red-300/[0.09] px-4 text-[12px] font-medium text-red-100 hover:bg-red-300/[0.14] disabled:opacity-45">
+              {busy === "cancelInvite" ? <Loader2 size={14} className="animate-spin" /> : <KeyRound size={14} />} 取消邀请码
             </button>
           </div>
           <div className="mt-4 max-h-[278px] space-y-2 overflow-auto pr-1">

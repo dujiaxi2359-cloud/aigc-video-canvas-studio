@@ -109,6 +109,17 @@ adminRouter.post("/invite-codes/batch", async (req, res) => {
   res.status(201).json({ invites: created });
 });
 
+adminRouter.post("/invite-codes/cancel", async (req, res) => {
+  const db = await getDb();
+  const code = String(req.body?.code || "").trim().toUpperCase();
+  if (!code) return res.status(400).json({ errorCode: "INVITE_CODE_REQUIRED", errorMessage: "请输入要取消的邀请码。" });
+  const invite = await db.get<any>("SELECT * FROM invite_codes WHERE code = ?", code);
+  if (!invite) return res.status(404).json({ errorCode: "INVITE_NOT_FOUND", errorMessage: "没有找到这个邀请码。" });
+  if (invite.status === "disabled") return res.json(invite);
+  await db.run("UPDATE invite_codes SET status = 'disabled', updated_at = ? WHERE id = ?", now(), invite.id);
+  res.json(await db.get("SELECT * FROM invite_codes WHERE id = ?", invite.id));
+});
+
 adminRouter.patch("/invite-codes/:id", async (req, res) => {
   const db = await getDb();
   await db.run("UPDATE invite_codes SET status = COALESCE(?, status), max_uses = COALESCE(?, max_uses), expires_at = COALESCE(?, expires_at), updated_at = ? WHERE id = ?", req.body?.status, req.body?.maxUses, req.body?.expiresAt, now(), req.params.id);
