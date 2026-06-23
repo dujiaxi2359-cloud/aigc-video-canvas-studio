@@ -47,6 +47,7 @@ export type GenerateTextRequest = {
 };
 
 export type GenerateVideoRequest = {
+  clientRequestId?: string;
   projectId?: string;
   nodeId: string;
   modelConfigId: string;

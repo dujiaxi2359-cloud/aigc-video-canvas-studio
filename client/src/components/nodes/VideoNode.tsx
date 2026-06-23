@@ -6,6 +6,7 @@ import { Select } from "../common/Select";
 import { Textarea } from "../common/Textarea";
 import { MediaPreview } from "../media/MediaPreview";
 import { generationApi } from "../../services/generationApi";
+import { historyApi } from "../../services/historyApi";
 import { modelConfigApi } from "../../services/modelConfigApi";
 import { useCanvasStore } from "../../store/canvasStore";
 import { useModelConfigStore } from "../../store/modelConfigStore";
@@ -391,6 +392,7 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
   const [pendingMentionRange, setPendingMentionRange] = useState<MentionRange | null>(null);
   const isComposingRef = useRef(false);
   const generatingRef = useRef(false);
+  const lastRequestKeyRef = useRef("");
   const promptTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const parameterAnchorRef = useRef<HTMLDivElement | null>(null);
 
@@ -580,6 +582,61 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
   const veoSafePrompt = typeof veoSafetyDetails.suggestion === "string" ? veoSafetyDetails.suggestion : typeof veoSafetyDetails.sanitizedPrompt === "string" ? veoSafetyDetails.sanitizedPrompt : "";
   const veoProductOnlyPrompt = typeof veoSafetyDetails.productOnlyPrompt === "string" ? veoSafetyDetails.productOnlyPrompt : "clean product-only commercial video, no human face, no voice, no dangerous action, studio lighting, realistic camera movement";
 
+  function videoRequestKey(input: {
+    prompt: string;
+    videoMode: OfficialVideoMode;
+    imageAssetIds: string[];
+    videoAssetIds: string[];
+    audioAssetIds: string[];
+  }) {
+    return JSON.stringify({
+      nodeId: props.id,
+      modelConfigId: props.data.modelConfigId,
+      inputMode: props.data.inputMode,
+      videoMode: input.videoMode,
+      prompt: input.prompt,
+      imageAssetIds: input.imageAssetIds,
+      videoAssetIds: input.videoAssetIds,
+      audioAssetIds: input.audioAssetIds,
+      duration: selectedDuration,
+      aspectRatio: selectedAspectRatio,
+      resolution: selectedResolution
+    });
+  }
+
+  async function recoverVideoFromHistory(startedAt: number) {
+    const deadline = Date.now() + 150_000;
+    while (Date.now() < deadline) {
+      await new Promise((resolve) => window.setTimeout(resolve, 5000));
+      try {
+        const histories = await historyApi.list();
+        const latest = histories.find((item) =>
+          item.nodeId === props.id &&
+          item.status === "success" &&
+          Boolean(item.outputUrl) &&
+          item.createdAt >= startedAt - 5000
+        );
+        if (latest?.outputUrl) {
+          update(props.id, {
+            status: "success",
+            outputUrl: latest.outputUrl,
+            aspectRatio: selectedAspectRatio ?? props.data.aspectRatio,
+            resolution: selectedResolution ?? props.data.resolution,
+            duration: selectedDuration ?? props.data.duration,
+            errorCode: undefined,
+            errorMessage: undefined,
+            debugMessage: undefined
+          });
+          setLocalError("");
+          return true;
+        }
+      } catch {
+        // The original request may still be running behind the proxy; keep polling quietly.
+      }
+    }
+    return false;
+  }
+
   function retryWithPrompt(prompt: string) {
     setLocalPrompt(prompt);
     update(props.id, { prompt, status: "idle", errorCode: undefined, errorMessage: undefined, debugMessage: undefined });
@@ -626,6 +683,7 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
   async function generate(promptOverride?: string) {
     if (generatingRef.current || props.data.status === "generating") return;
     generatingRef.current = true;
+    const startedAt = Date.now();
     if (!props.data.modelConfigId || !selectedModel) {
       update(props.id, { errorMessage: "暂无可用模型，请先到设置中心配置 API。", status: "error" });
       generatingRef.current = false;
@@ -674,17 +732,29 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
       if (videoMode === "image_to_video_first_last_frame" && !requestInputs.hasLastFrame) throw new Error("首尾帧模式已连接首帧，还需要一张尾帧图片。");
       if ((videoMode === "video_to_video" || videoMode === "video_edit" || videoMode === "video_continuation" || videoMode === "video_extension") && !requestInputs.hasVideoInput) throw new Error("当前模式需要连接视频素材。");
       if (videoMode === "audio_driven_video" && !requestInputs.audioInputs.length) throw new Error("音频驱动视频需要连接驱动音频。");
+      const imageAssetIds = compactAssetIds(requestInputs.imageInputs);
+      const videoAssetIds = compactAssetIds(requestInputs.videoInputs);
+      const audioAssetIds = compactAssetIds(requestInputs.audioInputs);
+      const clientRequestId = videoRequestKey({
+        prompt: promptForProvider,
+        videoMode,
+        imageAssetIds,
+        videoAssetIds,
+        audioAssetIds
+      });
+      lastRequestKeyRef.current = clientRequestId;
 
       const result = await generationApi.video({
+        clientRequestId,
         nodeId: props.id,
         modelConfigId: props.data.modelConfigId,
         inputMode: props.data.inputMode,
         videoMode,
         prompt: promptForProvider,
         referenceBindings,
-        imageAssetIds: compactAssetIds(requestInputs.imageInputs),
-        videoAssetIds: compactAssetIds(requestInputs.videoInputs),
-        audioAssetIds: compactAssetIds(requestInputs.audioInputs),
+        imageAssetIds,
+        videoAssetIds,
+        audioAssetIds,
         ...(selectedDuration !== undefined ? { duration: selectedDuration } : {}),
         ...(selectedAspectRatio ? { aspectRatio: selectedAspectRatio } : {}),
         ...(selectedResolution ? { resolution: selectedResolution } : {}),
@@ -720,8 +790,16 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
       );
     } catch (error) {
       const message = humanizeError(error);
-      setLocalError(message);
-      update(props.id, { status: "error", errorMessage: message });
+      if (/网络请求失败|Failed to fetch|Load failed|NetworkError/i.test(message)) {
+        const waitingMessage = "任务可能已提交到中转，正在等待成功结果回填到画布。";
+        setLocalError(waitingMessage);
+        update(props.id, { status: "generating", errorMessage: waitingMessage });
+        const recovered = await recoverVideoFromHistory(startedAt);
+        if (!recovered) update(props.id, { status: "error", errorMessage: message });
+      } else {
+        setLocalError(message);
+        update(props.id, { status: "error", errorMessage: message });
+      }
     } finally {
       generatingRef.current = false;
     }
@@ -874,15 +952,13 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
             { label: "生成方式", description: (props.data.videoMode ?? legacyInputModeToOfficialMode(props.data.inputMode)) === "reference_images_to_video" ? universalReferenceDescription(selectedModel) : undefined, value: props.data.videoMode ?? legacyInputModeToOfficialMode(props.data.inputMode), options: availableVideoModes, format: (value) => videoModeLabelForModel(selectedModel, value as OfficialVideoMode, dynamicOptions?.videoModeLabels?.[value as OfficialVideoMode]), onChange: (value) => update(props.id, { videoMode: value, inputMode: officialModeToLegacyInputMode(value as OfficialVideoMode) }) },
             { label: "比例", value: selectedAspectRatio, options: availableRatios, onChange: (value) => update(props.id, { aspectRatio: value }) },
             { label: "清晰度", value: selectedResolution, options: availableResolutions, onChange: (value) => update(props.id, { resolution: value }) },
-            { label: "生成时长", value: selectedDuration, options: availableDurations, format: durationLabel, onChange: (value) => update(props.id, { duration: Number(value) }) },
-            { label: "生成数量", value: 1, options: [1], format: (value) => `${value} 个`, onChange: () => update(props.id, { generateCount: 1 }) }
+            { label: "生成时长", value: selectedDuration, options: availableDurations, format: durationLabel, onChange: (value) => update(props.id, { duration: Number(value) }) }
           ]} />
           </div>
         </div>
         <div className="creation-dock-actions">
           <button type="button" title="语音输入" className={listening ? "is-active" : ""} onClick={() => setListening((value) => !value)}><Mic size={14} /></button>
           <div className="creation-video-generate-cluster">
-            <button type="button" className="creation-video-count-button" title="视频生成固定单次提交" onClick={() => update(props.id, { generateCount: 1 })}>1x</button>
             <button type="button" title={props.data.status === "idle" ? "生成" : generateButtonLabel(props.data.status)} aria-label={props.data.status === "idle" ? "生成" : generateButtonLabel(props.data.status)} className="creation-generate-button creation-video-generate-button" disabled={!selectedModel || availableVideoModes.length === 0 || props.data.status === "generating"} onClick={() => void generate()}><ArrowUp size={19} strokeWidth={2.3} /></button>
           </div>
         </div>

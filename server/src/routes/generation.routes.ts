@@ -6,6 +6,36 @@ import { assertCreditsAvailable, assertWorkspaceFeature, consumeCredits } from "
 
 export const generationRouter = Router();
 
+const VIDEO_IDEMPOTENCY_TTL_MS = 5 * 60 * 1000;
+const inflightVideoRequests = new Map<string, { createdAt: number; promise: Promise<unknown> }>();
+
+function videoIdempotencyKey(body: any) {
+  const clientRequestId = typeof body?.clientRequestId === "string" ? body.clientRequestId : "";
+  const nodeId = typeof body?.nodeId === "string" ? body.nodeId : "";
+  const modelConfigId = typeof body?.modelConfigId === "string" ? body.modelConfigId : "";
+  if (!clientRequestId || !nodeId || !modelConfigId) return "";
+  return `${nodeId}:${modelConfigId}:${clientRequestId}`;
+}
+
+function rememberVideoRequest<T>(key: string, create: () => Promise<T>) {
+  const now = Date.now();
+  for (const [entryKey, entry] of inflightVideoRequests) {
+    if (now - entry.createdAt > VIDEO_IDEMPOTENCY_TTL_MS) inflightVideoRequests.delete(entryKey);
+  }
+  if (!key) return create();
+  const existing = inflightVideoRequests.get(key);
+  if (existing) return existing.promise as Promise<T>;
+  const promise = create();
+  inflightVideoRequests.set(key, { createdAt: now, promise });
+  promise.finally(() => {
+    setTimeout(() => {
+      const entry = inflightVideoRequests.get(key);
+      if (entry?.promise === promise) inflightVideoRequests.delete(key);
+    }, VIDEO_IDEMPOTENCY_TTL_MS);
+  }).catch(() => undefined);
+  return promise;
+}
+
 function isQuotaError(text: string) {
   return /PUBLIC_ERROR_USER_QUOTA_REACHED|USER_QUOTA_REACHED|RESOURCE_EXHAUSTED|token quota|quota is not enough|quota|credit|balance|insufficient|exhausted|余额不足|额度不足|额度耗尽/i.test(text);
 }
@@ -46,9 +76,12 @@ function generationError(error: unknown) {
 
 generationRouter.post("/video", async (req, res) => {
   try {
-    await assertWorkspaceFeature("video_generation"); await assertCreditsAvailable(1);
-    const result = await generateVideo(req.body);
-    if ((result as any)?.status !== "error") await consumeCredits({ actionType: "video_generation", provider: req.body?.provider, modelId: req.body?.modelId || req.body?.modelConfigId, metadata: { projectId: req.body?.projectId, nodeId: req.body?.nodeId } });
+    const result = await rememberVideoRequest(videoIdempotencyKey(req.body), async () => {
+      await assertWorkspaceFeature("video_generation"); await assertCreditsAvailable(1);
+      const generated = await generateVideo(req.body);
+      if ((generated as any)?.status !== "error") await consumeCredits({ actionType: "video_generation", provider: req.body?.provider, modelId: req.body?.modelId || req.body?.modelConfigId, metadata: { projectId: req.body?.projectId, nodeId: req.body?.nodeId } });
+      return generated;
+    });
     res.json(result);
   } catch (error) {
     if (error instanceof Error && error.message === "INSUFFICIENT_CREDITS") return res.status(402).json({ status: "error", errorCode: "INSUFFICIENT_CREDITS", errorMessage: "当前工作空间额度不足。" });
