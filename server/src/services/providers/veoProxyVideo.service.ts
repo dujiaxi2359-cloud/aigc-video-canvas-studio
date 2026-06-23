@@ -81,26 +81,20 @@ export function veoProxyCreateEndpointCandidates(apiBaseUrl: string) {
     return unique([
       primary,
       `${root}/v1/video/create`,
-      `${root}/v1/videos`,
-      `${root}/v1/videos/generations`,
-      `${root}/v1/video/generations`
+      `${root}/v1/videos`
     ]);
   }
   if (isCy88Endpoint(apiBaseUrl)) {
     return unique([
       primary,
       `${root}/v1/video/create`,
-      `${root}/v1/videos`,
-      `${root}/v1/video/generations`,
-      `${root}/v1/videos/generations`
+      `${root}/v1/videos`
     ]);
   }
   return unique([
     primary,
     `${root}/v1/videos`,
-    `${root}/v1/video/create`,
-    `${root}/v1/videos/generations`,
-    `${root}/v1/video/generations`
+    `${root}/v1/video/create`
   ]);
 }
 

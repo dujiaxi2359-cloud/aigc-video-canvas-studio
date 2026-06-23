@@ -177,20 +177,48 @@ function relayEndpointRoot(value: string) {
   }
 }
 
-function relayCreateEndpointCandidates(params: SeedanceProviderParams) {
+function endpointMatchesProtocol(endpoint: string | undefined, apiFamily: VideoApiFamily) {
+  if (!endpoint) return false;
+  const value = endpoint.toLowerCase().replace(/\/+$/g, "");
+  if (apiFamily === "seedance2_native") return /\/(?:v1\/video\/generations|video\/generations)$/.test(value);
+  if (apiFamily === "unified_video_create") return /\/v1\/video\/create$/.test(value);
+  if (apiFamily === "omni_fast" || apiFamily === "omni_fast_v2v" || apiFamily === "openai_videos") {
+    return /\/(?:v1\/videos|videos|v1\/video\/create)$/.test(value);
+  }
+  return !/\/v1\/videos\/generations$/.test(value);
+}
+
+function protocolCreateEndpointCandidates(params: SeedanceProviderParams) {
+  const apiFamily = params.videoRequestConfig?.apiFamily ?? "openai_videos";
+  const baseUrl = params.videoRequestConfig?.baseUrl ?? params.apiBaseUrl;
+  const root = relayEndpointRoot(baseUrl);
+  const configured = params.videoRequestConfig?.finalUrl;
+  const endpoints: (string | undefined)[] = [];
+  if (endpointMatchesProtocol(configured, apiFamily)) endpoints.push(configured);
+
+  if (apiFamily === "seedance2_native") {
+    endpoints.push(joinUrl(root, "/v1/video/generations"), joinUrl(root, "/video/generations"));
+  } else if (apiFamily === "unified_video_create") {
+    endpoints.push(joinUrl(root, "/v1/video/create"), joinUrl(root, "/v1/videos"));
+  } else if (apiFamily === "omni_fast" || apiFamily === "omni_fast_v2v" || apiFamily === "openai_videos") {
+    endpoints.push(joinUrl(root, "/v1/videos"), joinUrl(root, "/v1/video/create"));
+  } else {
+    endpoints.push(
+      ...seedanceEndpointCandidates(params.apiBaseUrl),
+      joinUrl(root, "/v1/videos"),
+      joinUrl(root, "/v1/video/create"),
+      joinUrl(root, "/v1/video/generations")
+    );
+  }
+
+  return Array.from(new Set(endpoints.filter(Boolean) as string[]));
+}
+
+export function relayCreateEndpointCandidates(params: SeedanceProviderParams) {
   if (params.videoRequestConfig?.apiFamily === "agnes_video" || params.videoRequestConfig?.apiFamily === "zhipu_video") {
     return [params.videoRequestConfig.finalUrl];
   }
-  const baseUrl = params.videoRequestConfig?.baseUrl ?? params.apiBaseUrl;
-  const root = relayEndpointRoot(baseUrl);
-  return Array.from(new Set([
-    params.videoRequestConfig?.finalUrl,
-    ...seedanceEndpointCandidates(params.apiBaseUrl),
-    joinUrl(root, "/v1/videos"),
-    joinUrl(root, "/v1/video/create"),
-    joinUrl(root, "/v1/video/generations"),
-    joinUrl(root, "/v1/videos/generations")
-  ].filter(Boolean) as string[]));
+  return protocolCreateEndpointCandidates(params);
 }
 
 function parseJsonCandidate(text: string): unknown | undefined {
@@ -1176,6 +1204,24 @@ export function buildProxyBody(params: SeedanceProviderParams, refs: {
   return body;
 }
 
+function protocolFallbackBodies(primaryBody: Record<string, unknown>, refs: {
+  apiFamily: VideoApiFamily;
+  mode: string;
+  images: string[];
+}) {
+  if (refs.apiFamily !== "omni_fast") return [];
+  if (refs.mode !== "reference_images_to_video") return [];
+  if (refs.images.length < 2) return [];
+  if (!Array.isArray(primaryBody.images)) return [];
+  const fallback = compactObject({
+    ...primaryBody,
+    images: undefined,
+    first_image_url: refs.images[0],
+    last_image_url: refs.images[1]
+  }) as Record<string, unknown>;
+  return [{ body: fallback, source: "protocol_first_last_fallback" }];
+}
+
 export function buildSeedance15Multipart(params: SeedanceProviderParams, refs: {
   files: Array<{ localPath: string; mimeType: string; filename: string }>;
   aspectRatio: string;
@@ -1341,10 +1387,13 @@ export async function generateVideoWithSeedance(params: SeedanceProviderParams):
       endpoint = candidate;
       const multipart = apiFamily === "doubao_seedance15" || params.videoRequestConfig?.requestFormat === "multipart";
       const bodyUsesSeedanceAssets = hasSeedanceAssetReferences(images, videos, audios);
-      const jsonBodies = fallbackBody ? [
-        { body, source: "seedance_asset" },
-        { body: fallbackBody, source: "public_url_fallback" }
-      ] : [{ body, source: bodyUsesSeedanceAssets ? "seedance_asset" : "primary" }];
+      const primaryJsonBodies = [
+        { body, source: bodyUsesSeedanceAssets ? "seedance_asset" : "primary" },
+        ...protocolFallbackBodies(body, { apiFamily, mode, images })
+      ];
+      const jsonBodies = fallbackBody
+        ? [...primaryJsonBodies, { body: fallbackBody, source: "public_url_fallback" }]
+        : primaryJsonBodies;
       for (const requestBody of multipart ? [{ body, source: "multipart" }] : jsonBodies) {
         const createAttempts = requestBody.source === "seedance_asset"
           ? Math.max(1, Number(process.env.SEEDANCE_ASSET_CREATE_RETRY_ATTEMPTS || 4))

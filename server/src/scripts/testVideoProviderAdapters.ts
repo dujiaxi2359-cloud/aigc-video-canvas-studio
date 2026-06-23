@@ -1,7 +1,7 @@
 import { grokCreateEndpoint, grokPollEndpoint, grokPollEndpointCandidates, grokRequestModelName, isAi666GrokRelay, isOfficialGrokEndpoint } from "../services/providers/grokVideo.service.js";
 import { klingBearerToken, klingCreateEndpoint, klingPollEndpoint, normalizeKlingPrompt } from "../services/providers/klingVideo.service.js";
 import { buildMiniMaxVideoBody, minimaxCreateEndpoint, minimaxCreateEndpointCandidates, minimaxQueryEndpoint, minimaxRetrieveEndpoint } from "../services/providers/minimaxVideo.service.js";
-import { buildOpenAiVideosMultipart, buildProxyBody, buildSeedance15Multipart, isRetryableSeedancePollFailure, seedanceAssetUploadShouldFallback, seedanceAuthorizationValues, seedanceCreateEndpoint, seedancePollEndpoint } from "../services/providers/seedanceVideo.service.js";
+import { buildOpenAiVideosMultipart, buildProxyBody, buildSeedance15Multipart, isRetryableSeedancePollFailure, relayCreateEndpointCandidates, seedanceAssetUploadShouldFallback, seedanceAuthorizationValues, seedanceCreateEndpoint, seedancePollEndpoint } from "../services/providers/seedanceVideo.service.js";
 import { buildVeoProxyBody, configuredRelayModelName, veoProxyCreateEndpoint, veoProxyCreateEndpointCandidates } from "../services/providers/veoProxyVideo.service.js";
 import { joinUrl, resolveVideoRequestConfig } from "../services/providers/videoRequestAdapter.js";
 import { getVideoModelCapability } from "../config/videoModelCapabilities.js";
@@ -236,11 +236,14 @@ assert(
 assert(
   JSON.stringify(veoProxyCreateEndpointCandidates("https://runapi.co/v1")) === JSON.stringify([
     "https://runapi.co/v1/video/create",
-    "https://runapi.co/v1/videos",
-    "https://runapi.co/v1/videos/generations",
-    "https://runapi.co/v1/video/generations"
+    "https://runapi.co/v1/videos"
   ]),
-  "RunAPI Veo proxy should keep compatible endpoint fallbacks"
+  "RunAPI Veo proxy should only keep compatible task-create fallbacks"
+);
+assert(
+  !veoProxyCreateEndpointCandidates("https://api.newtoken.club/v1")
+    .some((endpoint) => /\/v1\/videos\/generations$/i.test(endpoint)),
+  "Generic Veo relays should not try the official /v1/videos/generations endpoint"
 );
 assert(
   veoProxyCreateEndpointCandidates("https://relay.example/v1")[1] === "https://relay.example/v1/video/create",
@@ -775,6 +778,52 @@ assert(omniFirstLastBody.first_image_url === "https://assets.example/start.png",
 assert(omniFirstLastBody.last_image_url === "https://assets.example/end.png", "Omni-fast first-last mode should send last_image_url");
 assert(omniFirstLastBody.watermark === false, "Omni-fast first-last mode should request watermark-free output");
 assert((omniFirstLastBody.metadata as any).watermark === false, "Omni-fast first-last mode should also disable watermark in metadata");
+const newtokenOmniConfig = resolveVideoRequestConfig({
+  providerId: "google",
+  modelName: "veo-omni-flash-vip",
+  apiBaseUrl: "https://api.newtoken.club/v1",
+  apiKey: "sk-test-key",
+  prompt: "newtoken omni test",
+  projectId: "project",
+  nodeId: "node",
+  modelConfigId: "model",
+  inputMode: "reference-to-video",
+  imageAssetIds: ["asset-1", "asset-2"],
+  duration: 8,
+  aspectRatio: "16:9",
+  resolution: "720p",
+  generateCount: 1
+}, {
+  inputModes: ["text-to-video", "image-to-video", "reference-to-video"],
+  aspectRatios: ["16:9", "9:16"],
+  resolutions: ["720p"],
+  duration: { type: "enum", values: [8] },
+  channel: "proxy"
+});
+assert(newtokenOmniConfig.channel === "proxy", "newtoken.club should be recognized as a video relay");
+assert(newtokenOmniConfig.apiFamily === "omni_fast", "veo-omni-flash should use the Omni video protocol");
+assert(newtokenOmniConfig.finalUrl === "https://api.newtoken.club/v1/videos", "Omni relays should create tasks with /v1/videos");
+const newtokenOmniCandidates = relayCreateEndpointCandidates({
+  providerId: "google",
+  modelName: "veo-omni-flash-vip",
+  apiBaseUrl: "https://api.newtoken.club/v1/videos/generations",
+  apiKey: "sk-test-key",
+  prompt: "newtoken omni test",
+  nodeId: "node",
+  modelConfigId: "model",
+  inputMode: "reference-to-video",
+  duration: 8,
+  aspectRatio: "16:9",
+  resolution: "720p",
+  generateCount: 1,
+  videoRequestConfig: {
+    ...newtokenOmniConfig,
+    baseUrl: "https://api.newtoken.club/v1/videos/generations",
+    finalUrl: "https://api.newtoken.club/v1/videos/generations"
+  }
+} as never);
+assert(newtokenOmniCandidates[0] === "https://api.newtoken.club/v1/videos", "Omni relay candidates should prefer /v1/videos even if an old bad endpoint was saved");
+assert(!newtokenOmniCandidates.some((endpoint) => /\/v1\/videos\/generations$/i.test(endpoint)), "Omni relay candidates must not try the incompatible /v1/videos/generations path");
 const configurableOpenAiVideos = resolveVideoRequestConfig({
   providerId: "grok",
   modelName: "grok-video-proxy",

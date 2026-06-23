@@ -130,7 +130,7 @@ function isOfficialEndpoint(providerId: string, baseUrl: string) {
 function isOpenAiCompatibleVideoEndpoint(baseUrl: string) {
   if (!baseUrl) return false;
   const value = baseUrl.toLowerCase().replace(/\/+$/g, "");
-  if (/ai666\.net|cy88\.ai|runapi\.co/.test(value)) return true;
+  if (/ai666\.net|cy88\.ai|runapi\.co|newtoken\.club/.test(value)) return true;
   try {
     const url = new URL(value);
     return /\/(?:v1|v1\/videos|v1\/video\/create|videos|video\/create)$/.test(url.pathname.replace(/\/+$/g, ""));
@@ -160,7 +160,7 @@ function inferApiFamily(channel: VideoChannel, baseUrl: string, modelName: strin
 }
 
 function knownRelayBase(baseUrl: string) {
-  return /(?:ai\.)?(?:cy88\.ai|ai666\.net)|runapi\.co/i.test(baseUrl);
+  return /(?:ai\.)?(?:cy88\.ai|ai666\.net)|runapi\.co|newtoken\.club/i.test(baseUrl);
 }
 
 function defaultCreateEndpoint(channel: VideoChannel, baseUrl: string, capabilities: ModelCapabilities, apiFamily: VideoApiFamily) {
