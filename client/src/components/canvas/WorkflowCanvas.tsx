@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
-import ReactFlow, { ConnectionLineType, Panel, useReactFlow, type ReactFlowInstance } from "reactflow";
-import { CircleHelp, Grid3X3, Map, Scan } from "lucide-react";
+import ReactFlow, { ConnectionLineType, MiniMap, Panel, useReactFlow, type ReactFlowInstance } from "reactflow";
+import { CircleHelp, Grid3X3, Magnet, Map, Scan } from "lucide-react";
 import { ConnectionCreateMenu, type ConnectionCreateMenuState } from "./ConnectionCreateMenu";
 import { nodeTypes } from "./nodeTypes";
 import { StudioEdge } from "./StudioEdge";
@@ -27,7 +27,14 @@ const ReactFlowWithExtras = ReactFlow as unknown as React.ComponentType<any>;
 const edgeTypes = { studioEdge: StudioEdge };
 const nodeDragHandleSelector = ".drag-handle, .node-drag-handle";
 
-function ZoomControls({ showGrid, onToggleGrid }: { showGrid: boolean; onToggleGrid: () => void }) {
+function ZoomControls({ showGrid, showMiniMap, snapToGrid, onToggleGrid, onToggleMiniMap, onToggleSnap }: {
+  showGrid: boolean;
+  showMiniMap: boolean;
+  snapToGrid: boolean;
+  onToggleGrid: () => void;
+  onToggleMiniMap: () => void;
+  onToggleSnap: () => void;
+}) {
   const { fitView, zoomTo } = useReactFlow();
   const [zoom, setZoom] = useState(0.85);
   const zoomFrameRef = useRef<number | null>(null);
@@ -42,13 +49,25 @@ function ZoomControls({ showGrid, onToggleGrid }: { showGrid: boolean; onToggleG
     });
   }
 
+  useEffect(() => {
+    function handleKeydown(event: KeyboardEvent) {
+      if (!event.altKey || event.key.toLowerCase() !== "f") return;
+      event.preventDefault();
+      fitView({ padding: 0.28 });
+    }
+    window.addEventListener("keydown", handleKeydown);
+    return () => window.removeEventListener("keydown", handleKeydown);
+  }, [fitView]);
+
   return (
     <Panel position="bottom-left" className="!bottom-1 !left-1 !m-0">
       <div className="canvas-view-controls">
-        <button title="小地图"><Map size={16} /></button>
+        <button title="画布小地图" className={showMiniMap ? "is-active" : ""} onClick={onToggleMiniMap}><Map size={16} /></button>
         <button title={showGrid ? "隐藏点阵" : "显示点阵"} className={showGrid ? "is-active" : ""} onClick={onToggleGrid}><Grid3X3 size={16} /></button>
-        <button title="适应画布" onClick={() => fitView({ padding: 0.28 })}><Scan size={16} /></button>
+        <button title="整理画布 ⌥F" onClick={() => fitView({ padding: 0.28 })}><Scan size={16} /></button>
+        <button title="网格吸附" className={snapToGrid ? "is-active" : ""} onClick={onToggleSnap}><Magnet size={16} /></button>
         <input title="缩放" type="range" min="30" max="140" value={Math.round(zoom * 100)} onChange={handleZoomChange} />
+        <span className="canvas-view-zoom-readout">{Math.round(zoom * 100)}%</span>
         <button title="帮助" onClick={() => window.dispatchEvent(new CustomEvent("studio:open-help"))}><CircleHelp size={16} /></button>
       </div>
     </Panel>
@@ -102,6 +121,8 @@ export function WorkflowCanvas({ showGrid = true, onToggleGrid = () => undefined
   const [pendingConnection, setPendingConnection] = useState<PendingConnection | null>(null);
   const [connectionMenuOpen, setConnectionMenuOpen] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
+  const [showMiniMap, setShowMiniMap] = useState(false);
+  const [snapToGrid, setSnapToGrid] = useState(false);
   const [isCanvasInteracting, setIsCanvasInteracting] = useState(false);
   const isCanvasInteractingRef = useRef(false);
   const interactionTimeoutRef = useRef<number | null>(null);
@@ -378,13 +399,32 @@ export function WorkflowCanvas({ showGrid = true, onToggleGrid = () => undefined
         defaultViewport={{ x: 120, y: 80, zoom: 0.85 }}
         minZoom={0.3}
         maxZoom={1.4}
+        snapToGrid={snapToGrid}
+        snapGrid={[24, 24]}
         connectionLineType={ConnectionLineType.Bezier}
         connectionLineComponent={StudioConnectionLine}
         connectionRadius={44}
         proOptions={{ hideAttribution: true }}
         defaultEdgeOptions={defaultEdgeOptions}
       >
-        <ZoomControls showGrid={showGrid} onToggleGrid={onToggleGrid} />
+        <ZoomControls
+          showGrid={showGrid}
+          showMiniMap={showMiniMap}
+          snapToGrid={snapToGrid}
+          onToggleGrid={onToggleGrid}
+          onToggleMiniMap={() => setShowMiniMap((value) => !value)}
+          onToggleSnap={() => setSnapToGrid((value) => !value)}
+        />
+        {showMiniMap && (
+          <MiniMap
+            className="canvas-mini-map"
+            nodeBorderRadius={8}
+            nodeStrokeWidth={2}
+            maskColor="rgba(0,0,0,0.42)"
+            pannable
+            zoomable
+          />
+        )}
       </ReactFlowWithExtras>
 
       {connectionMenuOpen && menu && (

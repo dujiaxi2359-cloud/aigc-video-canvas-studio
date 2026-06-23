@@ -24,7 +24,7 @@ function frameWidth(type: string | undefined, cardWidth: number, hasDock: boolea
   return Math.max(cardWidth, hasDock ? 640 : 520);
 }
 
-function CreationNodeFrameComponent({ id, type, selected, title, ratio, status, preview, toolbar, dock }: {
+function CreationNodeFrameComponent({ id, type, selected, title, ratio, status, preview, toolbar, floatingToolbar, dock }: {
   id: string;
   type?: string;
   selected?: boolean;
@@ -33,6 +33,7 @@ function CreationNodeFrameComponent({ id, type, selected, title, ratio, status, 
   status?: string;
   preview: ReactNode;
   toolbar?: ReactNode;
+  floatingToolbar?: ReactNode;
   dock?: ReactNode;
 }) {
   const deleteNode = useCanvasStore((state) => state.deleteNode);
@@ -45,6 +46,7 @@ function CreationNodeFrameComponent({ id, type, selected, title, ratio, status, 
   return (
     <div className={`creation-node ${selected ? "is-selected" : ""}`} data-node-type={type} style={{ width: containerWidth }}>
       <div className="creation-node-preview-wrap">
+        {floatingToolbar}
         <div className="creation-node-label node-floating-label drag-handle mb-2 flex cursor-grab items-center gap-1.5 active:cursor-grabbing"><span className="h-2.5 w-2.5 rounded-[3px] border border-white/20" />{title}</div>
         <div
           className="creation-preview-card drag-handle group"

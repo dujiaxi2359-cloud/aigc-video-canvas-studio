@@ -44,7 +44,7 @@ type State = {
   selectedNodeId?: string;
   addNode: (type: WorkflowNodeType, position?: { x: number; y: number }) => void;
   addAssetNode: (asset: { assetId: string; type: string; url?: string; filePath?: string; thumbnailUrl?: string; width?: number; height?: number; aspectRatio?: string; duration?: number }, position?: { x: number; y: number }) => void;
-  addConnectedNode: (sourceId: string, type: WorkflowNodeType, position?: { x: number; y: number }) => void;
+  addConnectedNode: (sourceId: string, type: WorkflowNodeType, position?: { x: number; y: number }, data?: Record<string, unknown>) => void;
   updateNodeData: (id: string, data: Record<string, unknown>) => void;
   deleteNode: (id: string) => void;
   duplicateNode: (id: string) => void;
@@ -154,7 +154,7 @@ export const useCanvasStore = create<State>((set, get) => ({
         ]
       };
     }),
-  addConnectedNode: (sourceId, type, position) =>
+  addConnectedNode: (sourceId, type, position, dataOverride) =>
     set((state) => {
       const source = state.nodes.find((node) => node.id === sourceId);
       if (!source) return {};
@@ -168,7 +168,8 @@ export const useCanvasStore = create<State>((set, get) => ({
         position: targetPosition,
         data: {
           ...(defaults[type] as Record<string, unknown>),
-          referencedFrom: { sourceNodeId: sourceId, sourceNodeType: source.type }
+          referencedFrom: { sourceNodeId: sourceId, sourceNodeType: source.type },
+          ...(dataOverride ?? {})
         }
       };
       const nextNodes = [...state.nodes, targetNode];

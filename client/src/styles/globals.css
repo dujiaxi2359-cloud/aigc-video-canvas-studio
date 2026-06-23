@@ -6836,6 +6836,156 @@ select optgroup {
   opacity: 0 !important;
 }
 
+.image-asset-production-toolbar {
+  position: absolute;
+  left: 50%;
+  top: -58px;
+  z-index: 70;
+  display: inline-flex;
+  width: max-content;
+  max-width: min(780px, calc(100vw - 64px));
+  align-items: center;
+  gap: 5px;
+  border: 1px solid rgba(226, 232, 240, 0.13);
+  border-radius: 13px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.062), rgba(255, 255, 255, 0.025)),
+    rgba(29, 30, 32, 0.94);
+  padding: 5px;
+  color: rgba(255, 255, 255, 0.78);
+  box-shadow:
+    0 18px 48px rgba(0, 0, 0, 0.42),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(18px) saturate(1.05);
+  transform: translateX(-50%);
+}
+
+.image-asset-tool,
+.image-asset-icon-tool {
+  display: inline-flex;
+  height: 30px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  padding: 0 9px;
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 12px;
+  line-height: 1;
+  white-space: nowrap;
+  transition: background 140ms ease, color 140ms ease, transform 140ms ease;
+}
+
+.image-asset-icon-tool {
+  width: 30px;
+  padding: 0;
+}
+
+.image-asset-tool:hover,
+.image-asset-icon-tool:hover,
+.image-asset-tool-menu.is-open > .image-asset-tool {
+  background: rgba(255, 255, 255, 0.09);
+  color: #fff;
+  transform: translateY(-1px);
+}
+
+.image-asset-tool.is-emphasis small {
+  border-radius: 999px;
+  background: rgba(34, 211, 238, 0.2);
+  padding: 3px 6px;
+  color: #67e8f9;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.image-asset-tool.compact span {
+  max-width: 34px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.image-asset-tool-divider {
+  width: 1px;
+  height: 24px;
+  margin: 0 3px;
+  background: rgba(226, 232, 240, 0.12);
+}
+
+.image-asset-tool-menu {
+  position: relative;
+}
+
+.image-asset-tool-popover {
+  position: absolute;
+  left: 0;
+  top: calc(100% + 9px);
+  z-index: 90;
+  display: grid;
+  min-width: 188px;
+  overflow: hidden;
+  border: 1px solid rgba(226, 232, 240, 0.13);
+  border-radius: 12px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.026)),
+    rgba(38, 39, 41, 0.98);
+  padding: 6px;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.44);
+  backdrop-filter: blur(18px);
+}
+
+.image-asset-tool-popover button {
+  display: flex;
+  height: 34px;
+  align-items: center;
+  gap: 9px;
+  border-radius: 8px;
+  padding: 0 10px;
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 12px;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.image-asset-tool-popover button:hover {
+  background: rgba(255, 255, 255, 0.09);
+  color: white;
+}
+
+.canvas-view-zoom-readout {
+  min-width: 38px;
+  padding: 0 4px;
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.canvas-mini-map {
+  right: 18px !important;
+  bottom: 18px !important;
+  width: 182px !important;
+  height: 122px !important;
+  overflow: hidden !important;
+  border: 1px solid rgba(226, 232, 240, 0.13) !important;
+  border-radius: 14px !important;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.025)),
+    rgba(20, 21, 23, 0.9) !important;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.4) !important;
+  backdrop-filter: blur(18px);
+}
+
+.canvas-mini-map .react-flow__minimap-mask {
+  fill: rgba(255, 255, 255, 0.08) !important;
+}
+
+.canvas-mini-map .react-flow__minimap-node {
+  fill: rgba(148, 163, 184, 0.55) !important;
+  stroke: rgba(255, 255, 255, 0.28) !important;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .home-page-ferrofluid {
     opacity: 0.7;
