@@ -8,7 +8,9 @@ export const defaultProviderApiBaseUrls: Record<string, string> = {
   kling: "https://api.klingai.com",
   grok: "https://api.x.ai/v1",
   seedance: "https://ark.cn-beijing.volces.com/api/v3",
-  minimax: "https://api.minimaxi.com/v1"
+  minimax: "https://api.minimaxi.com/v1",
+  agnes: "https://apihub.agnes-ai.com",
+  zhipu: "https://open.bigmodel.cn/api/paas/v4"
 };
 
 export function resolveProviderApiBaseUrl(providerId?: string, apiBaseUrl?: string) {

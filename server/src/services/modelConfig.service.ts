@@ -6,6 +6,7 @@ import { defaultCapabilities } from "./modelCatalog.js";
 import { inferImageModelType, inferImageProvider, normalizeImageCapabilities } from "./imageCapabilityNormalization.js";
 import { normalizeVideoCapabilities } from "./videoCapabilityNormalization.js";
 import { grsaiImageModels, isGrsaiImageEndpoint, normalizeGrsaiImageBaseUrl } from "./providers/grsaiImageProtocol.js";
+import { isZhipuOfficialEndpoint, normalizeZhipuBaseUrl, zhipuImageModels, zhipuVideoModels } from "./providers/zhipuProtocol.js";
 import type { ModelCapabilities, ModelConfig } from "../types/model.js";
 import { requireRequestContext } from "./requestContext.js";
 
@@ -45,6 +46,7 @@ function submittedApiKey(apiKey?: string) {
 function normalizeApiBaseUrlForStorage(apiBaseUrl?: string) {
   const trimmed = apiBaseUrl?.trim().replace(/\/+$/, "");
   if (!trimmed) return "";
+  if (isZhipuOfficialEndpoint(trimmed)) return normalizeZhipuBaseUrl(trimmed);
   return isGrsaiImageEndpoint(trimmed) ? normalizeGrsaiImageBaseUrl(trimmed) : trimmed;
 }
 
@@ -166,8 +168,14 @@ function normalizeModelConfigInput(input: Partial<ModelConfig> & { apiKey?: stri
   const modelName = input.modelName?.trim() || fallback?.model_name || "mock-model";
   const apiBaseUrl = normalizeApiBaseUrlForStorage(input.apiBaseUrl ?? fallback?.api_base_url ?? "");
   const displayName = input.displayName ?? fallback?.display_name ?? "未命名模型";
-  const provider = isGrsaiImageEndpoint(apiBaseUrl) ? "Grsai 图片中转" : input.provider ?? fallback?.provider;
-  const providerId = isGrsaiImageEndpoint(apiBaseUrl) ? "grsai" : input.providerId ?? fallback?.provider_id ?? undefined;
+  const zhipuOfficial = isZhipuOfficialEndpoint(apiBaseUrl);
+  const agnesOfficial = /apihub\.agnes-ai\.com/i.test(apiBaseUrl);
+  const provider = isGrsaiImageEndpoint(apiBaseUrl)
+    ? "Grsai 图片中转"
+    : zhipuOfficial ? "智普 BigModel 官方" : agnesOfficial ? "Agnes AI 官方" : input.provider ?? fallback?.provider;
+  const providerId = isGrsaiImageEndpoint(apiBaseUrl)
+    ? "grsai"
+    : zhipuOfficial ? "zhipu" : agnesOfficial ? "agnes" : input.providerId ?? fallback?.provider_id ?? undefined;
   const category = input.category ?? fallback?.category ?? inferCategory(input.modelType ?? fallback?.model_type ?? "text-to-video");
   const baseCapabilities = input.capabilities ?? (fallback ? JSON.parse(fallback.capabilities_json) as ModelCapabilities : defaultCapabilities());
 
@@ -191,6 +199,8 @@ function normalizeModelConfigInput(input: Partial<ModelConfig> & { apiKey?: stri
     return {
       ...input,
       apiBaseUrl,
+      providerId,
+      provider,
       category: "video" as const,
       capabilities: normalizeVideoCapabilities(baseCapabilities, providerId, modelName)
     };
@@ -461,7 +471,6 @@ export async function probeOpenAiCompatibleModels(input: { apiBaseUrl?: string; 
       models: category === "image" || !category ? [...grsaiImageModels] : []
     };
   }
-
   const endpoint = endpointFrom(apiBaseUrl, validationPath);
   let response: Response;
   try {
@@ -505,10 +514,21 @@ export async function probeOpenAiCompatibleModels(input: { apiBaseUrl?: string; 
     return { success: false, message: `验证失败：HTTP ${response.status}${message ? ` · ${message.slice(0, 160)}` : ""}`, models: [] as string[] };
   }
 
-  const models = input.pullModels === false ? [] : extractModels(payload);
+  const zhipuOfficial = isZhipuOfficialEndpoint(apiBaseUrl);
+  const models = input.pullModels === false
+    ? []
+    : zhipuOfficial
+      ? category === "image"
+        ? [...zhipuImageModels]
+        : category === "video" ? [...zhipuVideoModels] : [...zhipuImageModels, ...zhipuVideoModels]
+      : extractModels(payload);
   return {
     success: true,
-    message: input.pullModels === false
+    message: zhipuOfficial
+      ? input.pullModels === false
+        ? "智普 BigModel 官方地址与 API Key 验证通过。"
+        : `智普 BigModel 官方接口验证通过，已按官方能力目录加载 ${models.length} 个${category === "image" ? "图片" : category === "video" ? "视频" : "图像与视频"}模型。`
+      : input.pullModels === false
       ? "地址与 API Key 验证通过。请继续拉取模型，或直接手动添加上游模型 ID。"
       : models.length
         ? `验证通过，已拉取 ${models.length} 个模型。`

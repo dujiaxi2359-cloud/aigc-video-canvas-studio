@@ -10,6 +10,7 @@ import { hasSubmittedRemoteVideoTask, shouldUseVideoFallbackCandidate } from "..
 import { isGrokLikeVideoModel, normalizeVideoCapabilities } from "../services/videoCapabilityNormalization.js";
 import { ProviderError } from "../utils/providerErrors.js";
 import { mapVideoDimensions, normalizeVideoAspectRatio } from "../utils/videoParams.js";
+import { isZhipuImageModel, isZhipuOfficialEndpoint, normalizeZhipuBaseUrl, zhipuImageModels, zhipuVideoModels } from "../services/providers/zhipuProtocol.js";
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
@@ -1299,5 +1300,67 @@ const klingTurbo = getVideoModelCapability("kling", "kling-2-5", "kling-v2-5-tur
 assert(!klingTurbo, "Kling 2.5 Turbo should not advertise reference-image mode");
 const klingTurboText = getVideoModelCapability("kling", "kling-2-5", "kling-v2-5-turbo", "text_to_video");
 assert(klingTurboText?.supportedDurations.join(",") === "5,10", "Kling 2.5 Turbo should stay on 5s and 10s durations");
+
+const agnesCapabilities = normalizeVideoCapabilities({ inputModes: ["text-to-video"] }, "agnes", "agnes-video-v2.0");
+const agnesConfig = resolveVideoRequestConfig({
+  providerId: "agnes",
+  modelName: "agnes-video-v2.0",
+  apiBaseUrl: "https://apihub.agnes-ai.com",
+  apiKey: "test",
+  prompt: "test",
+  inputMode: "image-to-video",
+  imageAssetIds: ["asset-1"],
+  duration: 5,
+  aspectRatio: "9:16",
+  resolution: "720p"
+} as never, agnesCapabilities);
+assert(agnesConfig.apiFamily === "agnes_video", "Agnes official route should use the Agnes API family");
+assert(agnesConfig.finalUrl === "https://apihub.agnes-ai.com/v1/videos", "Agnes create endpoint should match the official API");
+assert(agnesConfig.pollEndpoint === "/agnesapi?video_id={taskId}", "Agnes polling should use video_id");
+assert(agnesConfig.imageTransport === "url", "Agnes image inputs should use public URLs");
+const agnesBody = buildProxyBody({ modelName: "agnes-video-v2.0", prompt: "test", apiBaseUrl: "https://apihub.agnes-ai.com", apiKey: "test" } as never, {
+  apiFamily: "agnes_video",
+  mode: "reference_images_to_video",
+  images: ["https://example.com/1.png", "https://example.com/2.png"],
+  videos: [],
+  audios: [],
+  aspectRatio: "9:16",
+  resolution: "720p",
+  seconds: "5"
+}) as Record<string, unknown>;
+assert((agnesBody.extra_body as Record<string, unknown>).image instanceof Array, "Agnes multi-image input should use extra_body.image");
+assert(Number(agnesBody.num_frames) <= 441 && (Number(agnesBody.num_frames) - 1) % 8 === 0, "Agnes num_frames must satisfy the official 8n+1 limit");
+
+const zhipuCapabilities = normalizeVideoCapabilities({ inputModes: ["text-to-video"] }, "zhipu", "cogvideox-3");
+const zhipuConfig = resolveVideoRequestConfig({
+  providerId: "zhipu",
+  modelName: "cogvideox-3",
+  apiBaseUrl: "https://open.bigmodel.cn/api/paas/v4",
+  apiKey: "test",
+  prompt: "test",
+  inputMode: "image-to-video",
+  imageAssetIds: ["asset-1"],
+  duration: 5,
+  aspectRatio: "9:16",
+  resolution: "720p"
+} as never, zhipuCapabilities);
+assert(zhipuConfig.apiFamily === "zhipu_video", "Zhipu official route should use the Zhipu API family");
+assert(zhipuConfig.finalUrl === "https://open.bigmodel.cn/api/paas/v4/videos/generations", "Zhipu video create endpoint should match the official API");
+assert(zhipuConfig.pollEndpoint === "/async-result/{taskId}", "Zhipu polling should use the official async-result endpoint");
+const zhipuBody = buildProxyBody({ modelName: "cogvideox-3", prompt: "test", apiBaseUrl: "https://open.bigmodel.cn/api/paas/v4", apiKey: "test" } as never, {
+  apiFamily: "zhipu_video",
+  mode: "image_to_video_first_frame",
+  images: ["https://example.com/1.png"],
+  videos: [],
+  audios: [],
+  aspectRatio: "9:16",
+  resolution: "720p",
+  seconds: "5"
+}) as Record<string, unknown>;
+assert(zhipuBody.image_url === "https://example.com/1.png", "Zhipu image-to-video should use image_url");
+assert(zhipuBody.size === "720x1280", "Zhipu CogVideoX portrait 720p should use 720x1280");
+assert(isZhipuOfficialEndpoint("https://open.bigmodel.cn/api/paas/v4/async/images/generations"), "Zhipu full endpoints should be recognized as official");
+assert(normalizeZhipuBaseUrl("https://open.bigmodel.cn/api/paas/v4/async/images/generations") === "https://open.bigmodel.cn/api/paas/v4", "Zhipu full endpoints should normalize to the official base URL");
+assert(isZhipuImageModel("glm-image") && zhipuImageModels.length === 4 && zhipuVideoModels.length === 9, "Zhipu official model directories should be complete");
 
 console.log("[test:video-provider-adapters] ok");

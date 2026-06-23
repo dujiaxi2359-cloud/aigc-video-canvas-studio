@@ -12,6 +12,8 @@ const kling3InputModes: ModelInputMode[] = ["text-to-video", "image-to-video", "
 const kling3SupportedInputs: VideoSupportedInput[] = ["text", "image", "first_frame", "reference_image", "first_last_frame"];
 const omniFastInputModes: ModelInputMode[] = ["text-to-video", "image-to-video", "reference-to-video", "first-last-frame"];
 const omniFastSupportedInputs: VideoSupportedInput[] = ["text", "image", "first_frame", "reference_image", "first_last_frame"];
+const agnesInputModes: ModelInputMode[] = ["text-to-video", "image-to-video", "reference-to-video", "first-last-frame"];
+const agnesSupportedInputs: VideoSupportedInput[] = ["text", "image", "first_frame", "reference_image", "first_last_frame"];
 
 function union<T>(base: readonly T[] | undefined, additions: readonly T[]) {
   return Array.from(new Set([...(base ?? []), ...additions]));
@@ -36,6 +38,99 @@ export function isGrokLikeVideoModel(providerId?: string, modelName?: string, ca
   return /(?:^|\s|[-_])grok(?:\s|[-_.]|$)/.test(modelIdentity(providerId, modelName, capabilities));
 }
 
+export function isAgnesVideoModel(providerId?: string, modelName?: string, capabilities?: ModelCapabilities) {
+  return /agnes|agnes_video/.test(`${providerId ?? ""} ${capabilities?.provider ?? ""} ${capabilities?.apiFamily ?? ""}`.toLowerCase());
+}
+
+export function isZhipuVideoModel(providerId?: string, modelName?: string, capabilities?: ModelCapabilities) {
+  return /zhipu|bigmodel|zhipu_video/.test(`${providerId ?? ""} ${capabilities?.provider ?? ""} ${capabilities?.apiFamily ?? ""}`.toLowerCase());
+}
+
+function zhipuCapabilities(modelName: string, capabilities: ModelCapabilities): ModelCapabilities {
+  const name = modelName.toLowerCase();
+  const isTextOnly = /viduq1[-_]?text/.test(name);
+  const isImageOnly = /viduq1[-_]?image|vidu2[-_]?image/.test(name);
+  const isStartEnd = /start[-_]?end/.test(name);
+  const isReference = /reference/.test(name);
+  const isVidu2 = /vidu2/.test(name);
+  const isCogVideo3 = /cogvideox[-_]?3/.test(name);
+  const inputModes: ModelInputMode[] = isTextOnly
+    ? ["text-to-video"]
+    : isImageOnly
+      ? ["image-to-video"]
+      : isStartEnd
+      ? ["first-last-frame"]
+      : isReference
+        ? ["reference-to-video"]
+        : isCogVideo3
+          ? ["text-to-video", "image-to-video", "first-last-frame"]
+          : ["text-to-video", "image-to-video"];
+  const supported: VideoSupportedInput[] = isTextOnly
+    ? ["text"]
+    : isImageOnly
+      ? ["image", "first_frame"]
+      : isStartEnd
+      ? ["image", "first_last_frame"]
+      : isReference
+        ? ["image", "reference_image"]
+        : isCogVideo3
+          ? ["text", "image", "first_frame", "first_last_frame"]
+          : ["text", "image", "first_frame"];
+  const durations = isVidu2 ? [4] : isCogVideo3 ? [5, 10] : [5];
+  const resolutions = isVidu2 ? ["480p", "720p"] : isCogVideo3 ? ["720p", "1080p", "4k"] : ["1080p"];
+  const channelCapability = {
+    ...capabilities.channelCapability,
+    provider: "zhipu" as const,
+    channel: "official" as const,
+    apiFamily: "zhipu_video" as const,
+    endpoint: "/videos/generations",
+    createEndpoint: "/videos/generations",
+    pollEndpoint: "/async-result/{taskId}",
+    authType: "bearer" as const,
+    requestFormat: "json" as const,
+    taskMode: "async" as const,
+    idField: "id",
+    taskIdField: "id",
+    statusField: "task_status",
+    resultField: "",
+    supportedInputs: supported,
+    imageTransport: isTextOnly ? "unsupported" as const : "url" as const,
+    imageField: "image_url"
+  };
+  return {
+    ...capabilities,
+    provider: "zhipu",
+    channel: "official",
+    apiFamily: "zhipu_video",
+    createEndpoint: "/videos/generations",
+    endpoint: "/videos/generations",
+    pollEndpoint: "/async-result/{taskId}",
+    authType: "bearer",
+    requestFormat: "json",
+    taskMode: "async",
+    idField: "id",
+    taskIdField: "id",
+    statusField: "task_status",
+    resultField: "",
+    inputModes,
+    supportedInputs: supported,
+    imageTransport: isTextOnly ? "unsupported" : "url",
+    imageField: "image_url",
+    duration: { type: "enum", values: durations },
+    supportedDurations: durations,
+    aspectRatios: ["16:9", "9:16", "1:1"],
+    supportedAspectRatios: ["16:9", "9:16", "1:1"],
+    resolutions,
+    supportedResolutions: resolutions,
+    supportsImageInput: !isTextOnly,
+    supportsReferenceImage: isReference,
+    supportsFirstLastFrame: isStartEnd || isCogVideo3,
+    supportsMultiImageInput: isReference || isStartEnd || isCogVideo3,
+    maxReferenceImages: isReference ? 3 : isStartEnd || isCogVideo3 ? 2 : 1,
+    channelCapability
+  };
+}
+
 export function isSeedance2LikeVideoModel(providerId?: string, modelName?: string, capabilities?: ModelCapabilities) {
   return /seedance[-_ .]?2(?:[-_ .]?0)?|doubao[-_]?seedance[-_]?2[-_]?0/.test(modelIdentity(providerId, modelName, capabilities));
 }
@@ -50,6 +145,65 @@ export function normalizeVideoCapabilities(
   providerId?: string,
   modelName?: string
 ): ModelCapabilities {
+  if (isAgnesVideoModel(providerId, modelName, capabilities)) {
+    const channelCapability = {
+      ...capabilities.channelCapability,
+      provider: "agnes" as const,
+      channel: "official" as const,
+      apiFamily: "agnes_video" as const,
+      endpoint: "/v1/videos",
+      createEndpoint: "/v1/videos",
+      pollEndpoint: "/agnesapi?video_id={taskId}",
+      authType: "bearer" as const,
+      requestFormat: "json" as const,
+      taskMode: "async" as const,
+      idField: "video_id",
+      taskIdField: "video_id",
+      statusField: "status",
+      resultField: "",
+      supportedInputs: agnesSupportedInputs,
+      imageTransport: "url" as const,
+      imageField: "image"
+    };
+    return {
+      ...capabilities,
+      provider: "agnes",
+      channel: "official",
+      apiFamily: "agnes_video",
+      endpoint: "/v1/videos",
+      createEndpoint: "/v1/videos",
+      pollEndpoint: "/agnesapi?video_id={taskId}",
+      authType: "bearer",
+      requestFormat: "json",
+      taskMode: "async",
+      idField: "video_id",
+      taskIdField: "video_id",
+      statusField: "status",
+      resultField: "",
+      inputModes: agnesInputModes,
+      supportedInputs: agnesSupportedInputs,
+      imageTransport: "url",
+      imageField: "image",
+      duration: { type: "enum", values: [3, 4, 5, 6, 8, 10, 15, 18] },
+      supportedDurations: [3, 4, 5, 6, 8, 10, 15, 18],
+      aspectRatios: ["16:9", "9:16", "1:1", "4:3", "3:4"],
+      supportedAspectRatios: ["16:9", "9:16", "1:1", "4:3", "3:4"],
+      resolutions: ["480p", "720p", "1080p"],
+      supportedResolutions: ["480p", "720p", "1080p"],
+      supportsImageInput: true,
+      supportsReferenceImage: true,
+      supportsFirstLastFrame: true,
+      supportsMultiImageInput: true,
+      supportsVideoInput: false,
+      maxReferenceImages: 8,
+      channelCapability
+    };
+  }
+
+  if (isZhipuVideoModel(providerId, modelName, capabilities)) {
+    return zhipuCapabilities(modelName ?? capabilities.modelCapability?.model ?? "", capabilities);
+  }
+
   if (isOmniFastVideoModel(modelName, capabilities)) {
     const normalized: ModelCapabilities = {
       ...capabilities,

@@ -23,6 +23,8 @@ import { generateVideoWithMiniMax } from "./providers/minimaxVideo.service.js";
 import { generateImageWithMidjourney, isMidjourneyImageModel } from "./providers/midjourneyImage.service.js";
 import { generateImageWithOpenAI } from "./providers/openaiImage.service.js";
 import { generateVideoWithSeedance } from "./providers/seedanceVideo.service.js";
+import { generateImageWithZhipu } from "./providers/zhipuImage.service.js";
+import { isZhipuOfficialEndpoint } from "./providers/zhipuProtocol.js";
 import { isQwenImageEditModel, normalizeImageCapabilities, qwenTextModelForEdit } from "./imageCapabilityNormalization.js";
 import { channelSupportsImage, resolveVideoRequestConfig, shouldUseProxyVideoAdapter, validateVideoRequestConfig } from "./providers/videoRequestAdapter.js";
 import { resolveProviderApiBaseUrl } from "./providers/providerBaseUrl.js";
@@ -475,6 +477,9 @@ async function callImageProvider(input: {
   if (providerId === "grsai" || isGrsaiImageEndpoint(providerParams.apiBaseUrl)) {
     return generateImageWithGrsai(providerParams);
   }
+  if (providerId === "zhipu" || isZhipuOfficialEndpoint(providerParams.apiBaseUrl)) {
+    return generateImageWithZhipu(providerParams);
+  }
   if (isMidjourneyImageModel({ providerId, modelName, displayName: model.display_name, apiBaseUrl: providerParams.apiBaseUrl })) {
     return generateImageWithMidjourney(providerParams);
   }
@@ -671,6 +676,15 @@ async function callVideoProvider(input: {
   }
   if (providerId === "minimax") {
     return generateVideoWithMiniMax(providerParams);
+  }
+  if (videoRequestConfig.apiFamily === "agnes_video" || videoRequestConfig.apiFamily === "zhipu_video") {
+    return generateVideoWithSeedance({
+      ...providerParams,
+      apiBaseUrl: videoRequestConfig.finalUrl,
+      imageTransport: videoRequestConfig.imageTransport,
+      videoTransport: videoRequestConfig.videoTransport,
+      videoRequestConfig
+    });
   }
   if (shouldUseProxyVideoAdapter(providerParams, capabilities)) {
     return generateVideoWithSeedance({

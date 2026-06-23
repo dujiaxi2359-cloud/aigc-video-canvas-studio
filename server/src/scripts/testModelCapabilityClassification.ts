@@ -25,6 +25,12 @@ const qwenText = normalizeImageCapabilities(emptyImageCapabilities, "alibaba", "
 assert.deepEqual(qwenText.inputModes, ["text-to-image"], "Qwen text image model should stay text-to-image only.");
 assert.equal(qwenText.supportsImageInput, false);
 
+const zhipuGlmImage = normalizeImageCapabilities(emptyImageCapabilities, "zhipu", "glm-image", "GLM-Image", "智普 BigModel 官方");
+assert.deepEqual(zhipuGlmImage.inputModes, ["text-to-image"], "Zhipu GLM-Image should use the official text-to-image API only.");
+assert.deepEqual(zhipuGlmImage.imageQualities, ["hd"], "Zhipu GLM-Image only supports hd quality.");
+assert(zhipuGlmImage.imageSizes?.includes("960x1728"), "Zhipu GLM-Image should expose the official portrait size.");
+assert.equal(zhipuGlmImage.supportsImageInput, false);
+
 assert.equal(isVeoLikeVideoModel("openai-video", "mimo-v2-omni", { inputModes: ["text-to-video"] }), false, "Bare omni in a non-Google model must not be treated as Veo.");
 assert.equal(isOmniFastVideoModel("omni-fast", { inputModes: ["text-to-video"] }), true);
 

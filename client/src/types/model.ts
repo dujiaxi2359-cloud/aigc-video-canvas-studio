@@ -67,9 +67,9 @@ export type ModelCapabilities = {
   aspectRatios?: string[];
   resolutions?: string[];
   inputModes: ModelInputMode[];
-  provider?: "doubao" | "veo" | "kling" | "sora" | "wan" | "minimax" | "custom";
+  provider?: "doubao" | "veo" | "kling" | "sora" | "wan" | "minimax" | "agnes" | "zhipu" | "custom";
   channel?: "official" | "proxy" | "legacy_custom";
-  apiFamily?: "openai_videos" | "grok_video" | "doubao_seedance15" | "aigc_video_json" | "omni_fast" | "omni_fast_v2v" | "seedance2_native" | "unified_video_create" | "official_provider";
+  apiFamily?: "openai_videos" | "grok_video" | "doubao_seedance15" | "aigc_video_json" | "omni_fast" | "omni_fast_v2v" | "seedance2_native" | "unified_video_create" | "agnes_video" | "zhipu_video" | "official_provider";
   endpoint?: string;
   createEndpoint?: string;
   pollEndpoint?: string;

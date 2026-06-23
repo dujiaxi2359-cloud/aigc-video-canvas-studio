@@ -50,6 +50,25 @@ export function normalizeImageCapabilities(
   const value = identity(providerId, modelName, displayName, provider);
   const model = modelName || capabilities.modelCapability?.model || "";
 
+  if (providerId === "zhipu" || /open\.bigmodel\.cn|glm[-_ .]?image|cogview/.test(value)) {
+    const glmImage = /glm[-_ .]?image/.test(value);
+    return withImageModelCapability({
+      ...capabilities,
+      inputModes: ["text-to-image"],
+      imageAspectRatios: imageRatios,
+      imageSizes: glmImage
+        ? ["1280x1280", "1568x1056", "1056x1568", "1472x1088", "1088x1472", "1728x960", "960x1728"]
+        : ["1024x1024", "768x1344", "864x1152", "1344x768", "1152x864", "1440x720", "720x1440"],
+      imageQualities: glmImage ? ["hd"] : ["standard", "hd"],
+      imageFormats: ["png"],
+      supportsImageInput: false,
+      supportsMultiImageInput: false,
+      supportsReferenceImage: false,
+      supportsMask: false,
+      supportsTransparentBackground: false
+    }, model);
+  }
+
   if (providerId === "grsai" || /grsai/i.test(value)) {
     const nano2 = /nano[-_]?banana[-_]?2/i.test(value);
     return withImageModelCapability({
@@ -175,10 +194,13 @@ export function normalizeImageCapabilities(
 }
 
 export function inferImageProvider(input: { providerId?: string; modelName: string; displayName?: string; provider?: string }) {
+  const value = identity(input.providerId, input.modelName, input.displayName, input.provider);
+  if (input.providerId === "zhipu" || /open\.bigmodel\.cn|glm[-_ .]?image|cogview/.test(value)) {
+    return { providerId: "zhipu", provider: "智普 BigModel 官方" };
+  }
   if (isQwenImageEditModel(input.providerId, input.modelName, input.displayName, input.provider) || isQwenImageTextModel(input.providerId, input.modelName, input.displayName, input.provider)) {
     return { providerId: "alibaba", provider: "通义万相 / 阿里百炼" };
   }
-  const value = identity(input.providerId, input.modelName, input.displayName, input.provider);
   if (input.providerId === "grsai" || /grsai/i.test(value)) return { providerId: "grsai", provider: "Grsai 图片中转" };
   if (/gemini.*image|image.*gemini|nano[-_ .]?banana|imagen/.test(value)) return { providerId: "google", provider: "Gemini 图像中转" };
   if (/seedream|doubao[-_]?seedream/.test(value)) return { providerId: "seedance", provider: "Seedream / 火山方舟" };

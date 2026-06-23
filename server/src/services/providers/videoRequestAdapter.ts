@@ -4,7 +4,7 @@ import { legacyInputModeToOfficialMode } from "../../types/videoModes.js";
 import type { VideoProviderParams } from "./providerTypes.js";
 import { normalizeVideoCapabilities } from "../videoCapabilityNormalization.js";
 
-export type VideoProviderName = "doubao" | "veo" | "kling" | "sora" | "wan" | "minimax" | "custom";
+export type VideoProviderName = "doubao" | "veo" | "kling" | "sora" | "wan" | "minimax" | "agnes" | "zhipu" | "custom";
 export type VideoChannel = "official" | "proxy" | "legacy_custom";
 export type VideoRequestFormat = "json" | "multipart";
 export type VideoAuthType = "bearer" | "api-key" | "none";
@@ -20,6 +20,8 @@ export type VideoApiFamily =
   | "omni_fast_v2v"
   | "seedance2_native"
   | "unified_video_create"
+  | "agnes_video"
+  | "zhipu_video"
   | "official_provider";
 
 export type VideoRequestConfig = {
@@ -100,6 +102,8 @@ function durationValues(capabilities: ModelCapabilities) {
 
 function inferProvider(providerId: string, modelName: string): VideoProviderName {
   const value = `${providerId} ${modelName}`.toLowerCase();
+  if (/agnes/.test(providerId.toLowerCase())) return "agnes";
+  if (/zhipu|bigmodel/.test(providerId.toLowerCase())) return "zhipu";
   if (/seedance|doubao|seedream/.test(value)) return "doubao";
   if (/veo|omni|gemini|google/.test(value)) return "veo";
   if (/kling|可灵/.test(value)) return "kling";
@@ -112,6 +116,8 @@ function inferProvider(providerId: string, modelName: string): VideoProviderName
 function isOfficialEndpoint(providerId: string, baseUrl: string) {
   if (!baseUrl) return false;
   const value = baseUrl.toLowerCase();
+  if (/apihub\.agnes-ai\.com/.test(value)) return true;
+  if (/open\.bigmodel\.cn/.test(value)) return true;
   if (providerId === "google") return /generativelanguage\.googleapis\.com/.test(value);
   if (providerId === "grok") return /api\.x\.ai/.test(value);
   if (providerId === "kling") return /klingai|kwaivgi|kling/.test(value) && !/\/v1(?:\/|$)/.test(value);
@@ -135,6 +141,8 @@ function isOpenAiCompatibleVideoEndpoint(baseUrl: string) {
 
 function inferApiFamily(channel: VideoChannel, baseUrl: string, modelName: string, capabilities: ModelCapabilities): VideoApiFamily {
   const value = `${baseUrl} ${modelName}`.toLowerCase();
+  if (/apihub\.agnes-ai\.com/.test(baseUrl.toLowerCase()) || capabilities.provider === "agnes" || capabilities.apiFamily === "agnes_video") return "agnes_video";
+  if (/open\.bigmodel\.cn/.test(baseUrl.toLowerCase()) || capabilities.provider === "zhipu" || capabilities.apiFamily === "zhipu_video") return "zhipu_video";
   // RunAPI exposes the unified JSON contract even when a migrated workspace
   // still carries an older `grok_video`/OpenAI capability snapshot.
   if (/runapi\.co/.test(value)) return "unified_video_create";
@@ -156,6 +164,8 @@ function knownRelayBase(baseUrl: string) {
 }
 
 function defaultCreateEndpoint(channel: VideoChannel, baseUrl: string, capabilities: ModelCapabilities, apiFamily: VideoApiFamily) {
+  if (apiFamily === "agnes_video") return "/v1/videos";
+  if (apiFamily === "zhipu_video") return "/videos/generations";
   if (channel === "official") return "";
   const value = baseUrl.toLowerCase();
   if (/runapi\.co/.test(value)) return "/v1/video/create";
@@ -175,6 +185,8 @@ function defaultCreateEndpoint(channel: VideoChannel, baseUrl: string, capabilit
 }
 
 function defaultPollEndpoint(baseUrl: string, createEndpoint: string, capabilities: ModelCapabilities, apiFamily: VideoApiFamily) {
+  if (apiFamily === "agnes_video") return "/agnesapi?video_id={taskId}";
+  if (apiFamily === "zhipu_video") return "/async-result/{taskId}";
   if (/runapi\.co/i.test(baseUrl)) return "/v1/videos/{taskId}";
   if (knownRelayBase(baseUrl)) {
     if (apiFamily === "seedance2_native") return "/v1/video/generations/{taskId}";
@@ -188,6 +200,7 @@ function defaultPollEndpoint(baseUrl: string, createEndpoint: string, capabiliti
 }
 
 function defaultTaskField(apiFamily: VideoApiFamily, capabilities: ModelCapabilities) {
+  if (apiFamily === "agnes_video") return capabilities.taskIdField ?? "video_id";
   return capabilities.taskIdField ?? capabilities.idField ?? (apiFamily === "seedance2_native" ? "task_id" : "id");
 }
 
@@ -195,6 +208,7 @@ function defaultImageTransport(channel: VideoChannel, apiFamily: VideoApiFamily,
   if (capabilities.imageTransport) return capabilities.imageTransport;
   if (!supportedInputs(capabilities).some((input) => ["image", "first_frame", "reference_image", "first_last_frame"].includes(input))) return "unsupported";
   if (apiFamily === "seedance2_native") return "url_or_asset";
+  if (apiFamily === "agnes_video" || apiFamily === "zhipu_video") return "url";
   if (apiFamily === "grok_video") return "multipart_file";
   if (channel === "official") return "multipart_file";
   if (apiFamily === "doubao_seedance15") return "multipart_file";
@@ -233,7 +247,7 @@ export function resolveVideoRequestConfig(params: VideoProviderParams, capabilit
   const apiFamily = inferApiFamily(channel, params.apiBaseUrl, params.modelName, effectiveCapabilities);
   const createEndpoint = defaultCreateEndpoint(channel, params.apiBaseUrl, effectiveCapabilities, apiFamily);
   const finalUrl = createEndpoint ? joinUrl(params.apiBaseUrl, createEndpoint) : params.apiBaseUrl;
-  const requestFormat = apiFamily === "unified_video_create" ? "json" : effectiveCapabilities.requestFormat
+  const requestFormat = ["unified_video_create", "agnes_video", "zhipu_video"].includes(apiFamily) ? "json" : effectiveCapabilities.requestFormat
     ?? (apiFamily === "doubao_seedance15" ? "multipart" : channel === "proxy" ? "json" : "multipart");
   const imageTransport = apiFamily === "unified_video_create" && /runapi\.co/i.test(params.apiBaseUrl)
     ? "url"
@@ -254,12 +268,12 @@ export function resolveVideoRequestConfig(params: VideoProviderParams, capabilit
     idField: effectiveCapabilities.idField ?? taskIdField,
     taskIdField,
     statusField: effectiveCapabilities.statusField ?? "status",
-    resultField: effectiveCapabilities.resultField ?? "result",
+    resultField: effectiveCapabilities.resultField ?? (["agnes_video", "zhipu_video"].includes(apiFamily) ? "" : "result"),
     supportedInputs: supportedInputs(effectiveCapabilities),
     imageTransport,
     videoTransport: effectiveCapabilities.videoTransport ?? (apiFamily === "omni_fast_v2v" ? "url_or_base64_json" : "unsupported"),
     imageField: effectiveCapabilities.imageField
-      ?? (apiFamily === "omni_fast" ? "first_image_url" : apiFamily === "doubao_seedance15" ? "first_frame_image" : apiFamily === "aigc_video_json" ? "image" : undefined),
+      ?? (apiFamily === "omni_fast" ? "first_image_url" : apiFamily === "doubao_seedance15" ? "first_frame_image" : apiFamily === "aigc_video_json" ? "image" : apiFamily === "zhipu_video" ? "image_url" : apiFamily === "agnes_video" ? "image" : undefined),
     videoField: effectiveCapabilities.videoField ?? (apiFamily === "omni_fast_v2v" ? "video" : undefined),
     supportedAspectRatios: effectiveCapabilities.supportedAspectRatios ?? effectiveCapabilities.aspectRatios ?? [],
     supportedDurations: effectiveCapabilities.supportedDurations ?? durationValues(effectiveCapabilities),

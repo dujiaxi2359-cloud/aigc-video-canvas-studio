@@ -82,6 +82,8 @@ type SeedanceProviderParams = VideoProviderParams & { imageTransport?: VideoImag
 function proxyVideoLabel(params: SeedanceProviderParams) {
   const provider = (params.videoRequestConfig?.provider ?? params.providerId ?? "").toLowerCase();
   const model = (params.modelName ?? "").toLowerCase();
+  if (provider.includes("agnes") || model.includes("agnes")) return "Agnes";
+  if (provider.includes("zhipu") || provider.includes("bigmodel") || /cogvideo|vidu/.test(model)) return "智普";
   if (provider.includes("google") || provider.includes("veo") || model.includes("veo")) return "Veo";
   if (provider.includes("grok") || provider.includes("xai") || model.includes("grok")) return "Grok";
   if (provider.includes("kling") || model.includes("kling")) return "可灵";
@@ -89,6 +91,10 @@ function proxyVideoLabel(params: SeedanceProviderParams) {
   if (provider.includes("omni") || model.includes("omni")) return "Omni";
   if (provider.includes("seedance") || model.includes("seedance") || model.includes("doubao")) return "Seedance";
   return params.videoRequestConfig?.provider || params.providerId || "视频";
+}
+
+function videoRouteLabel(params: SeedanceProviderParams) {
+  return `${proxyVideoLabel(params)} ${params.videoRequestConfig?.channel === "official" ? "官方接口" : "中转"}`;
 }
 
 async function assetJsonReferences(assetIds: string[] | undefined, aspectRatio: string | undefined, imageTransport: VideoImageTransport | undefined) {
@@ -172,6 +178,9 @@ function relayEndpointRoot(value: string) {
 }
 
 function relayCreateEndpointCandidates(params: SeedanceProviderParams) {
+  if (params.videoRequestConfig?.apiFamily === "agnes_video" || params.videoRequestConfig?.apiFamily === "zhipu_video") {
+    return [params.videoRequestConfig.finalUrl];
+  }
   const baseUrl = params.videoRequestConfig?.baseUrl ?? params.apiBaseUrl;
   const root = relayEndpointRoot(baseUrl);
   return Array.from(new Set([
@@ -631,16 +640,16 @@ function upstreamFriendlyErrorMessage(label: string, payload: Record<string, unk
   const fallback = errorMessage(payload);
   const decoded = `${fallback}\n${decodedErrorText(payload)}`;
   if (/cloudflare.*524|error code 524|a timeout occurred|origin web server timed out/i.test(decoded)) {
-    return `${label} 中转上游响应超时，请稍后重试或切换其它线路。`;
+    return `${label} 上游响应超时，请稍后重试或切换其它线路。`;
   }
   if (/please wait and try again later|try again later|temporarily unavailable|service busy|fully loaded/i.test(decoded)) {
-    return `${label} 中转暂时繁忙，请稍后重试或切换其它线路。`;
+    return `${label} 暂时繁忙，请稍后重试或切换其它线路。`;
   }
   if (/invalid params|invalid size|size must be one of|allowed values/i.test(decoded)) {
-    return `${label} 中转参数格式不兼容，系统已按通用视频尺寸重新提交；如果仍失败，请切换支持该模型的线路。`;
+    return `${label} 参数格式不兼容，系统已按通用视频尺寸重新提交；如果仍失败，请切换支持该模型的线路。`;
   }
   if (/orchestration-service|name or service not known|cannot connect to host|ssl:|getaddrinfo|service unavailable/i.test(decoded)) {
-    return `${label} 中转商内部服务暂时不可达，请稍后重试或切换其他视频通道。`;
+    return `${label} 上游内部服务暂时不可达，请稍后重试或切换其他视频通道。`;
   }
   if (/InputImageSensitiveContentDetected|PrivacyInformation|may contain real person/i.test(decoded)) {
     return `${label} 上游返回了输入素材审核提示。系统已通过素材库 asset 引用提交；请保留当前素材重新提交一次，若仍失败再调整单张素材或提示词。`;
@@ -660,6 +669,8 @@ function modelAccessDenied(payload: Record<string, unknown>) {
 }
 
 const preferredVideoUrlKeys = [
+  "remixed_from_video_id",
+  "video_result",
   "video_url",
   "videoUrl",
   "video",
@@ -752,6 +763,15 @@ function relayVideoSize(aspectRatio: string, resolution: string) {
   return `${dimensions.width}x${dimensions.height}`;
 }
 
+function zhipuVideoSize(modelName: string, aspectRatio: string, resolution: string) {
+  const name = modelName.toLowerCase();
+  if (/vidu2/.test(name)) return resolution.toLowerCase() === "480p" ? "480x360" : "1280x720";
+  if (/vidu/.test(name)) return "1920x1080";
+  if (resolution.toLowerCase() === "4k") return "3840x2160";
+  if (resolution.toLowerCase() === "1080p") return aspectRatio === "9:16" ? "1080x1920" : aspectRatio === "1:1" ? "1024x1024" : "1920x1080";
+  return aspectRatio === "9:16" ? "720x1280" : aspectRatio === "1:1" ? "1024x1024" : "1280x720";
+}
+
 function durationValue(params: SeedanceProviderParams) {
   return !params.duration || params.duration <= 0 ? "auto" : String(params.duration);
 }
@@ -769,6 +789,10 @@ function materializePollEndpoint(config: VideoRequestConfig | undefined, createE
   const template = config.pollEndpoint || "";
   if (!template) return seedancePollEndpoint(createEndpoint, taskIdValue);
   const replaced = template.replace(/\{taskId\}/g, encoded);
+  if (config.apiFamily === "agnes_video") {
+    const base = new URL(config.baseUrl);
+    return new URL(replaced, `${base.origin}/`).toString();
+  }
   const [pathOnly, query = ""] = replaced.split("?");
   const finalUrl = joinUrl(config.baseUrl, pathOnly ?? "");
   const url = new URL(finalUrl);
@@ -788,7 +812,12 @@ function configuredCreateEndpoints(params: SeedanceProviderParams) {
 }
 
 function requiresPublicImageUrl(apiFamily: VideoApiFamily) {
-  return apiFamily === "seedance2_native" || apiFamily === "omni_fast" || apiFamily === "unified_video_create" || apiFamily === "aigc_video_json";
+  return apiFamily === "seedance2_native"
+    || apiFamily === "omni_fast"
+    || apiFamily === "unified_video_create"
+    || apiFamily === "aigc_video_json"
+    || apiFamily === "agnes_video"
+    || apiFamily === "zhipu_video";
 }
 
 function seedanceImageRole(mode: string, index: number) {
@@ -804,6 +833,7 @@ function isRunApiVideoCreate(params: SeedanceProviderParams) {
 
 function normalizeProxyVideoModelName(params: SeedanceProviderParams) {
   const model = params.modelName?.trim() || "";
+  if (/agnes[-_ .]?video/i.test(model)) return "agnes-video-v2.0";
   if (!/omni[-_]?flash|omni[-_]?fast/i.test(model)) return model;
   if (isRunApiVideoCreate(params)) return "omni-flash";
   if (/omni[-_]?flash/i.test(model)) return "omni-fast";
@@ -932,7 +962,10 @@ function isRetryablePollNetworkError(error: unknown) {
 
 async function fetchPollTask(params: SeedanceProviderParams, pollEndpoint: string, taskIdValue: string): Promise<PollResult> {
   let last: PollResult | undefined;
-  const attempts = isRunApiVideoCreate(params)
+  const officialFamily = params.videoRequestConfig?.apiFamily === "agnes_video" || params.videoRequestConfig?.apiFamily === "zhipu_video";
+  const attempts = officialFamily
+    ? [{ endpoint: pollEndpoint, init: { method: "GET", headers: pollHeaders(params) } }]
+    : isRunApiVideoCreate(params)
     ? runApiPollAttempts(params, taskIdValue)
     : genericPollAttempts(params, pollEndpoint, taskIdValue);
   for (const attempt of attempts) {
@@ -957,6 +990,53 @@ export function buildProxyBody(params: SeedanceProviderParams, refs: {
   const base = {
     model: normalizeProxyVideoModelName(params)
   };
+  if (refs.apiFamily === "agnes_video") {
+    const dimensions = mapVideoDimensions(refs.aspectRatio, refs.resolution);
+    const seconds = refs.seconds === "auto" ? 5 : Math.max(1, Number(refs.seconds));
+    const frameRate = 24;
+    const numFrames = Math.min(441, Math.max(9, Math.round((seconds * frameRate - 1) / 8) * 8 + 1));
+    const multiImage = refs.images.length > 1 || refs.mode === "reference_images_to_video" || refs.mode === "image_to_video_first_last_frame";
+    return compactObject({
+      ...base,
+      prompt: params.prompt,
+      image: refs.images.length === 1 && !multiImage ? refs.images[0] : undefined,
+      mode: refs.mode === "image_to_video_first_last_frame" ? "keyframes" : refs.images.length ? "ti2vid" : undefined,
+      width: dimensions.width,
+      height: dimensions.height,
+      num_frames: numFrames,
+      frame_rate: frameRate,
+      extra_body: multiImage ? compactObject({
+        image: refs.images,
+        mode: refs.mode === "image_to_video_first_last_frame" ? "keyframes" : undefined
+      }) : undefined
+    });
+  }
+
+  if (refs.apiFamily === "zhipu_video") {
+    const name = params.modelName.toLowerCase();
+    const duration = refs.seconds === "auto" ? undefined : Number(refs.seconds);
+    const isVidu = /vidu/.test(name);
+    const isTextVidu = /viduq1[-_]?text/.test(name);
+    const isReferenceVidu = /reference/.test(name);
+    const isStartEndVidu = /start[-_]?end/.test(name);
+    const imageValue = isReferenceVidu || isStartEndVidu || (/cogvideox[-_]?3/.test(name) && refs.images.length > 1)
+      ? refs.images.slice(0, isReferenceVidu ? 3 : 2)
+      : refs.images[0];
+    return compactObject({
+      ...base,
+      prompt: params.prompt,
+      image_url: imageValue,
+      quality: isVidu ? undefined : params.qualityMode === "fast" ? "speed" : "quality",
+      with_audio: isTextVidu ? undefined : true,
+      size: zhipuVideoSize(params.modelName, refs.aspectRatio, refs.resolution),
+      fps: isVidu ? undefined : 30,
+      duration,
+      aspect_ratio: isTextVidu || isReferenceVidu ? refs.aspectRatio : undefined,
+      style: isTextVidu ? "general" : undefined,
+      movement_amplitude: isVidu ? "auto" : undefined,
+      watermark_enabled: false
+    });
+  }
   if (refs.apiFamily === "seedance2_native") {
     const content: Record<string, unknown>[] = [{ type: "text", text: params.prompt }];
     refs.images.forEach((url, index) => content.push({ type: "image_url", image_url: { url }, role: seedanceImageRole(refs.mode, index) }));
@@ -1156,6 +1236,7 @@ function maskKey(apiKey: string) {
 
 export async function generateVideoWithSeedance(params: SeedanceProviderParams): Promise<ProviderGenerateResult> {
   const label = proxyVideoLabel(params);
+  const routeLabel = videoRouteLabel(params);
   const mode = params.videoMode ?? legacyInputModeToOfficialMode(params.inputMode, "seedance");
   if (!["text_to_video", "image_to_video_first_frame", "image_to_video_first_last_frame", "reference_images_to_video", "video_edit", "video_extension"].includes(mode)) {
     throw new ProviderError("MODEL_MODE_UNSUPPORTED", `${label} 当前通道不支持这个视频生成模式。`);
@@ -1312,7 +1393,7 @@ export async function generateVideoWithSeedance(params: SeedanceProviderParams):
               break;
             }
             if (isRetryableSeedancePollFailure(response, task)) {
-              createError = new ProviderError("PROVIDER_ERROR", `${label} 中转任务创建暂时不可查，请稍后重试。`, preview(task), { endpoint });
+              createError = new ProviderError("PROVIDER_ERROR", `${routeLabel}任务创建暂时不可查，请稍后重试。`, preview(task), { endpoint });
               break;
             }
             if (assetDownloadError(task)) {
@@ -1323,13 +1404,13 @@ export async function generateVideoWithSeedance(params: SeedanceProviderParams):
                 { endpoint, whyBlocked: "noPublicImageUrl", upstreamResponse: task }
               );
             }
-            createError = new ProviderError("PROVIDER_ERROR", `${label} 中转任务创建失败：${upstreamFriendlyErrorMessage(label, task)}`, preview(task), { endpoint });
+            createError = new ProviderError("PROVIDER_ERROR", `${routeLabel}任务创建失败：${upstreamFriendlyErrorMessage(routeLabel, task)}`, preview(task), { endpoint });
             break;
           }
           remoteUrl = videoUrl(configuredResult(task, params.videoRequestConfig));
           id = configuredTaskId(task, params.videoRequestConfig);
           if (remoteUrl || id) break;
-          createError = new ProviderError("PROVIDER_ERROR", `${label} 中转没有返回 task_id 或视频地址。`, preview(task), { endpoint, response: task });
+          createError = new ProviderError("PROVIDER_ERROR", `${routeLabel}没有返回 task_id 或视频地址。`, preview(task), { endpoint, response: task });
           break;
         }
         if (remoteUrl || id) break;
@@ -1339,7 +1420,7 @@ export async function generateVideoWithSeedance(params: SeedanceProviderParams):
 
     if (createError && !remoteUrl && !id) throw createError;
     if (!remoteUrl && !id) {
-      throw new ProviderError("PROVIDER_ERROR", `${label} 中转没有返回 task_id 或视频地址。`, preview(task), { endpoint, response: task });
+      throw new ProviderError("PROVIDER_ERROR", `${routeLabel}没有返回 task_id 或视频地址。`, preview(task), { endpoint, response: task });
     }
 
     if (id) {
@@ -1369,15 +1450,15 @@ export async function generateVideoWithSeedance(params: SeedanceProviderParams):
       while (!remoteUrl) {
         const status = configuredStatus(task, params.videoRequestConfig);
         if (isFailedStatus(status)) {
-          const friendlyMessage = upstreamFriendlyErrorMessage(label, task);
+          const friendlyMessage = upstreamFriendlyErrorMessage(routeLabel, task);
           await saveGenerationTask({ id, status: "failed", result: task, errorMessage: friendlyMessage });
-          throw new ProviderError("VEO_OPERATION_FAILED", `${label} 中转任务失败：${friendlyMessage}`, preview(task));
+          throw new ProviderError("VEO_OPERATION_FAILED", `${routeLabel}任务失败：${friendlyMessage}`, preview(task));
         }
         if (isCompletedStatus(status)) completedSeenAt ??= Date.now();
         if (completedSeenAt && Date.now() - completedSeenAt > completedWithoutUrlGraceMs) break;
         if (Date.now() - startedAt > timeoutMs) {
           const minutes = Math.round(timeoutMs / 60_000);
-          const pendingMessage = `${label} 中转任务已提交，超过 ${minutes} 分钟仍在排队/生成中，请稍后查看任务结果。`;
+          const pendingMessage = `${routeLabel}任务已提交，超过 ${minutes} 分钟仍在排队/生成中，请稍后查看任务结果。`;
           await saveGenerationTask({
             id,
             status: "processing",
@@ -1425,7 +1506,7 @@ export async function generateVideoWithSeedance(params: SeedanceProviderParams):
                 retryablePollNetworkError: true,
                 pollNetworkError: message
               },
-              errorMessage: `${label} 中转查询暂时失败，已继续等待上游任务返回。`
+              errorMessage: `${routeLabel}查询暂时失败，已继续等待上游任务返回。`
             });
             continue;
           }
@@ -1467,7 +1548,7 @@ export async function generateVideoWithSeedance(params: SeedanceProviderParams):
               retryablePollError: true,
               upstreamStatus: pollResponse.status
             },
-            errorMessage: `${label} 中转任务已创建，查询暂时失败，正在继续等待。`
+            errorMessage: `${routeLabel}任务已创建，查询暂时失败，正在继续等待。`
           });
           continue;
         }
@@ -1499,8 +1580,8 @@ export async function generateVideoWithSeedance(params: SeedanceProviderParams):
           }
         };
       }
-      if (id) await saveGenerationTask({ id, status: "completed_without_video_url", result: task, errorMessage: `${label} 中转任务已完成，但响应中没有视频 URL。` });
-      throw new ProviderError("VEO_OPERATION_NO_VIDEO_IN_RESPONSE", `${label} 中转任务已完成，但响应中没有视频 URL。`, preview(task), {
+      if (id) await saveGenerationTask({ id, status: "completed_without_video_url", result: task, errorMessage: `${routeLabel}任务已完成，但响应中没有视频 URL。` });
+      throw new ProviderError("VEO_OPERATION_NO_VIDEO_IN_RESPONSE", `${routeLabel}任务已完成，但响应中没有视频 URL。`, preview(task), {
         endpoint,
         taskId: id,
         configuredModel: params.modelName,
@@ -1532,8 +1613,8 @@ export async function generateVideoWithSeedance(params: SeedanceProviderParams):
     if (error instanceof ProviderError) throw error;
     const message = rawErrorMessage(error);
     if (/fetch failed|network|econn|dns|timeout/i.test(message)) {
-      throw new ProviderError("NETWORK_ERROR", `${proxyVideoLabel(params)} 中转网络请求失败，请检查 Base URL、中转服务和后端网络。`, message);
+      throw new ProviderError("NETWORK_ERROR", `${videoRouteLabel(params)}网络请求失败，请检查 API 地址、上游服务和后端网络。`, message);
     }
-    throw new ProviderError("PROVIDER_ERROR", `${proxyVideoLabel(params)} 中转接口调用失败。`, message);
+    throw new ProviderError("PROVIDER_ERROR", `${videoRouteLabel(params)}调用失败。`, message);
   }
 }

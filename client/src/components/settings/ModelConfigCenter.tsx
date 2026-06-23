@@ -227,6 +227,62 @@ function videoCapabilitiesFor(modelName: string): ModelCapabilities {
   return defaultVideoCapabilities;
 }
 
+function zhipuVideoCapabilitiesFor(modelName: string): ModelCapabilities {
+  const name = modelName.toLowerCase();
+  const isTextOnly = /viduq1[-_]?text/.test(name);
+  const isImageOnly = /viduq1[-_]?image|vidu2[-_]?image/.test(name);
+  const isStartEnd = /start[-_]?end/.test(name);
+  const isReference = /reference/.test(name);
+  const isVidu2 = /vidu2/.test(name);
+  const isCogVideo3 = /cogvideox[-_]?3/.test(name);
+  const inputModes = isTextOnly
+    ? ["text-to-video"] as const
+    : isImageOnly ? ["image-to-video"] as const
+      : isStartEnd ? ["first-last-frame"] as const
+        : isReference ? ["reference-to-video"] as const
+          : isCogVideo3 ? ["text-to-video", "image-to-video", "first-last-frame"] as const
+            : ["text-to-video", "image-to-video"] as const;
+  const supportedInputs = isTextOnly
+    ? ["text"] as const
+    : isImageOnly ? ["image", "first_frame"] as const
+      : isStartEnd ? ["image", "first_last_frame"] as const
+        : isReference ? ["image", "reference_image"] as const
+          : isCogVideo3 ? ["text", "image", "first_frame", "first_last_frame"] as const
+            : ["text", "image", "first_frame"] as const;
+  const durations = isVidu2 ? [4] : isCogVideo3 ? [5, 10] : [5];
+  const resolutions = isVidu2 ? ["480p", "720p"] : isCogVideo3 ? ["720p", "1080p", "4k"] : ["1080p"];
+  return {
+    ...defaultVideoCapabilities,
+    provider: "zhipu",
+    channel: "official",
+    apiFamily: "zhipu_video",
+    createEndpoint: "/videos/generations",
+    endpoint: "/videos/generations",
+    pollEndpoint: "/async-result/{taskId}",
+    requestFormat: "json",
+    taskMode: "async",
+    idField: "id",
+    taskIdField: "id",
+    statusField: "task_status",
+    resultField: "",
+    imageTransport: isTextOnly ? "unsupported" : "url",
+    imageField: "image_url",
+    inputModes: [...inputModes],
+    supportedInputs: [...supportedInputs],
+    duration: { type: "enum", values: durations },
+    supportedDurations: durations,
+    aspectRatios: ["16:9", "9:16", "1:1"],
+    supportedAspectRatios: ["16:9", "9:16", "1:1"],
+    resolutions,
+    supportedResolutions: resolutions,
+    supportsImageInput: !isTextOnly,
+    supportsReferenceImage: isReference,
+    supportsFirstLastFrame: isStartEnd || isCogVideo3,
+    supportsMultiImageInput: isReference || isStartEnd || isCogVideo3,
+    maxReferenceImages: isReference ? 3 : isStartEnd || isCogVideo3 ? 2 : isTextOnly ? 0 : 1
+  };
+}
+
 function videoCapabilitiesForChannel(modelName: string, baseUrl: string): ModelCapabilities {
   const capabilities = videoCapabilitiesFor(modelName);
   if (/runapi\.co/i.test(baseUrl)) {
@@ -461,6 +517,8 @@ function normalizeBaseUrl(value: string) {
       if (/\/v1\/api\/(?:generate|result)$/i.test(url.pathname)) return url.origin;
       if (!url.pathname || url.pathname === "/") return url.origin;
     }
+    if (url.hostname.toLowerCase() === "open.bigmodel.cn") return `${url.origin}/api/paas/v4`;
+    if (url.hostname.toLowerCase() === "apihub.agnes-ai.com") return url.origin;
     if (!url.pathname || url.pathname === "/") return `${url.origin}/v1`;
   } catch {
     return normalized;
@@ -493,7 +551,9 @@ function isOfficialApiRoute(value?: string) {
     || host.endsWith("dashscope.aliyuncs.com")
     || host.includes("klingai.com")
     || host === "api.minimax.io"
-    || host === "api.minimaxi.com";
+    || host === "api.minimaxi.com"
+    || host === "open.bigmodel.cn"
+    || host === "apihub.agnes-ai.com";
 }
 
 function relayProviderLabel(baseUrl: string) {
@@ -505,13 +565,81 @@ function classifyModel(modelName: string): ModelCategory {
   const official = officialTemplateFor(modelName);
   if (official?.category === "video" || official?.category === "image" || official?.category === "text") return official.category;
   const name = modelName.toLowerCase();
-  if (/seedream|gpt-image|dall-e|imagen|image-preview|grok.*image|jimeng-(?!video)|flux|recraft|ideogram|midjourney|qwen[-_ .]?image|image|图像|图片/.test(name)) return "image";
-  if (/seedance|kling|veo|omni[-_ .]?(?:fast|flash)|grok.*video|grok-.*video|sora|vidu|jimeng-video|hailuo|hunyuan|wan\d|qwen-video|video/.test(name)) return "video";
+  if (/^(?:glm-image|cogview)/.test(name) || /seedream|gpt-image|dall-e|imagen|image-preview|grok.*image|jimeng-(?!video)|flux|recraft|ideogram|midjourney|qwen[-_ .]?image|image|图像|图片/.test(name)) return "image";
+  if (/^(?:cogvideox|vidu)/.test(name) || /seedance|kling|veo|omni[-_ .]?(?:fast|flash)|grok.*video|grok-.*video|sora|jimeng-video|hailuo|hunyuan|wan\d|qwen-video|video/.test(name)) return "video";
   return "text";
 }
 
 function inferModel(modelName: string, baseUrl = ""): Pick<ModelConfig, "provider" | "providerId" | "category" | "modelType" | "capabilities" | "displayName"> {
   const name = modelName.toLowerCase();
+  const host = apiHost(baseUrl).toLowerCase();
+  if (host === "open.bigmodel.cn" && /^(?:glm-image|cogview)/.test(name)) {
+    const glmImage = name === "glm-image";
+    const capabilities: ModelCapabilities = {
+      inputModes: ["text-to-image"],
+      imageAspectRatios: imageRatios,
+      imageSizes: glmImage
+        ? ["1280x1280", "1568x1056", "1056x1568", "1472x1088", "1088x1472", "1728x960", "960x1728"]
+        : ["1024x1024", "768x1344", "864x1152", "1344x768", "1152x864", "1440x720", "720x1440"],
+      imageQualities: glmImage ? ["hd"] : ["standard", "hd"],
+      imageFormats: ["png"],
+      supportsImageInput: false,
+      supportsMultiImageInput: false,
+      supportsReferenceImage: false
+    };
+    return {
+      provider: "智普 BigModel 官方",
+      providerId: "zhipu",
+      category: "image",
+      modelType: "text-to-image",
+      capabilities: { ...capabilities, modelCapability: modelCapabilityFor(capabilities, modelName) },
+      displayName: modelName
+    };
+  }
+  if (host === "open.bigmodel.cn" && /^(?:cogvideox|vidu)/.test(name)) {
+    const capabilities = zhipuVideoCapabilitiesFor(modelName);
+    return {
+      provider: "智普 BigModel 官方",
+      providerId: "zhipu",
+      category: "video",
+      modelType: name.includes("text") ? "text-to-video" : "image-to-video",
+      capabilities: { ...capabilities, modelCapability: modelCapabilityFor(capabilities, modelName) },
+      displayName: modelName
+    };
+  }
+  if (host === "apihub.agnes-ai.com") {
+    const capabilities: ModelCapabilities = {
+      ...defaultVideoCapabilities,
+      provider: "agnes",
+      channel: "official",
+      apiFamily: "agnes_video",
+      createEndpoint: "/v1/videos",
+      endpoint: "/v1/videos",
+      pollEndpoint: "/agnesapi?video_id={taskId}",
+      requestFormat: "json",
+      taskMode: "async",
+      idField: "video_id",
+      taskIdField: "video_id",
+      statusField: "status",
+      resultField: "",
+      imageTransport: "url",
+      imageField: "image",
+      inputModes: ["text-to-video", "image-to-video", "reference-to-video", "first-last-frame"],
+      supportedInputs: ["text", "image", "first_frame", "reference_image", "first_last_frame"],
+      supportsImageInput: true,
+      supportsReferenceImage: true,
+      supportsMultiImageInput: true,
+      supportsFirstLastFrame: true
+    };
+    return {
+      provider: "Agnes AI 官方",
+      providerId: "agnes",
+      category: "video",
+      modelType: "image-to-video",
+      capabilities: { ...capabilities, modelCapability: modelCapabilityFor(capabilities, "agnes-video-v2.0") },
+      displayName: "Agnes Video V2.0"
+    };
+  }
   if (isGrsaiApiRoute(baseUrl)) {
     const nano2 = /nano[-_ .]?banana[-_ .]?2/.test(name);
     const normalGptImage2 = /gpt[-_ .]?image[-_ .]?2$/.test(name);
