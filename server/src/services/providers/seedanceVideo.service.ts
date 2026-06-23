@@ -1369,8 +1369,36 @@ export async function generateVideoWithSeedance(params: SeedanceProviderParams):
         if (completedSeenAt && Date.now() - completedSeenAt > completedWithoutUrlGraceMs) break;
         if (Date.now() - startedAt > timeoutMs) {
           const minutes = Math.round(timeoutMs / 60_000);
-          await saveGenerationTask({ id, status: "timeout", result: task, errorMessage: `${label} 中转任务超过 ${minutes} 分钟仍未完成。` });
-          throw new ProviderError("VEO_OPERATION_TIMEOUT", `${label} 中转任务超过 ${minutes} 分钟仍未完成。`);
+          const pendingMessage = `${label} 中转任务已提交，超过 ${minutes} 分钟仍在排队/生成中，请稍后查看任务结果。`;
+          await saveGenerationTask({
+            id,
+            status: "processing",
+            progress: progressValue(task),
+            result: {
+              ...task,
+              pollEndpoint,
+              pendingAfterTimeout: true,
+              waitedMinutes: minutes
+            },
+            errorMessage: pendingMessage
+          });
+          return {
+            status: "processing",
+            rawResponse: task,
+            payloadSummary: {
+              endpoint,
+              taskId: id,
+              pollEndpoint,
+              model: params.modelName,
+              mode,
+              requestedAspectRatio: normalizedRatio,
+              requestedResolution: normalizedResolution,
+              requestedDuration: seconds,
+              pendingAfterTimeout: true,
+              waitedMinutes: minutes,
+              message: pendingMessage
+            }
+          };
         }
         await sleep(5000);
         let pollResult: PollResult;

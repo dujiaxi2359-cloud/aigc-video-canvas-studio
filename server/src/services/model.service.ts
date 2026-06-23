@@ -1013,6 +1013,27 @@ export async function generateVideo(input: GenerateVideoRequest) {
     let result: ProviderGenerateResult;
     try {
       result = await callVideoProvider({ model, providerParams, capabilities });
+      if (result.status === "processing") {
+        const payloadSummary = {
+          ...preflightSummary,
+          ...(result.payloadSummary && typeof result.payloadSummary === "object" ? result.payloadSummary as Record<string, unknown> : {})
+        };
+        await addHistory({
+          generationType: "video",
+          projectId: inputForGeneration.projectId,
+          nodeId: inputForGeneration.nodeId,
+          modelConfigId: model.id,
+          modelDisplayName: model.display_name,
+          inputMode: inputForGeneration.inputMode,
+          prompt: inputForGeneration.prompt,
+          duration: inputForGeneration.duration,
+          aspectRatio: inputForGeneration.aspectRatio,
+          resolution: inputForGeneration.resolution,
+          status: "processing",
+          errorMessage: "上游任务仍在生成中"
+        });
+        return { status: "processing" as const, payloadSummary };
+      }
       result = await enforceVideoAspectRatio(result, inputForGeneration.aspectRatio, inputForGeneration.resolution);
     } catch (primaryError) {
       const fallback = await tryVideoFallback({ primaryModel: model, request: inputForGeneration, primaryError });

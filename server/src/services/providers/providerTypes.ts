@@ -1,7 +1,7 @@
 import type { GenerateImageRequest, GenerateTextRequest, GenerateVideoRequest } from "../model.service.js";
 
 export type ProviderGenerateResult = {
-  status: "success" | "error";
+  status: "success" | "error" | "processing";
   outputText?: string;
   outputUrl?: string;
   outputAssetId?: string;

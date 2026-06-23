@@ -708,6 +708,14 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
             errorMessage: undefined,
             debugMessage: undefined
           }
+          : result.status === "processing"
+            ? {
+              status: "generating",
+              payloadSummary: result.payloadSummary,
+              errorCode: undefined,
+              errorMessage: undefined,
+              debugMessage: undefined
+            }
           : { status: "error", errorCode: result.errorCode, errorMessage: result.errorMessage, debugMessage: result.debugMessage, payloadSummary: result.payloadSummary }
       );
     } catch (error) {
