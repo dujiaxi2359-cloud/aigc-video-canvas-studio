@@ -44,8 +44,6 @@ const genericCategoryInputModes: Record<OfficialVideoCategory, VideoInputMode[]>
   video_edit: ["video-to-video"],
   video_extension: []
 };
-const HISTORY_FAILURE_GRACE_MS = 30 * 60 * 1000;
-
 function channelHost(apiBaseUrl?: string) {
   if (!apiBaseUrl) return "";
   try {
@@ -214,10 +212,6 @@ function durationOptions(model?: ModelConfig) {
   const values: number[] = [];
   for (let value = duration.min; value <= duration.max; value += duration.step) values.push(value);
   return values;
-}
-
-function isVideoOutput(url?: string) {
-  return Boolean(url && /\.(mp4|webm|mov|m4v)(\?|$)/i.test(url));
 }
 
 function aspectRatioCss(ratio?: string) {
@@ -575,7 +569,8 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
   const selectedVideoMode = props.data.videoMode ?? legacyInputModeToOfficialMode(props.data.inputMode);
   const selectedVideoModeLabel = videoModeLabelForModel(selectedModel, selectedVideoMode, dynamicOptions?.videoModeLabels?.[selectedVideoMode]);
   const outputUrl = absoluteUploadUrl(props.data.outputUrl);
-  const outputIsVideo = isVideoOutput(props.data.outputUrl);
+  const outputIsVideo = Boolean(props.data.outputUrl);
+  const frameStatus = props.data.status === "success" && !outputIsVideo ? "idle" : props.data.status;
   const displayRatio = displayAspectRatio(props.data.aspectRatio, selectedAspectRatio);
   const selectedChannelHost = channelHost(selectedModel?.apiBaseUrl);
   const actualOutputInfo = outputInfo(props.data.payloadSummary, props.data.resolution);
@@ -622,11 +617,11 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
           item.nodeId === props.id &&
           item.createdAt >= startedAt - 5000
         );
-        const success = candidates.find((item) => item.status === "success" && item.outputUrl);
-        if (success?.outputUrl) {
+        const latest = candidates[0];
+        if (latest?.status === "success" && latest.outputUrl) {
           update(props.id, {
             status: "success",
-            outputUrl: success.outputUrl,
+            outputUrl: latest.outputUrl,
             outputAssetId: currentData.outputAssetId,
             aspectRatio: selectedAspectRatio ?? props.data.aspectRatio,
             resolution: selectedResolution ?? props.data.resolution,
@@ -641,8 +636,7 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
           recoveringRef.current = false;
           return;
         }
-        const processing = candidates.find((item) => item.status === "processing");
-        if (processing) {
+        if (latest?.status === "processing") {
           update(props.id, {
             status: "generating",
             errorCode: undefined,
@@ -651,11 +645,12 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
           });
           continue;
         }
-        const latestError = candidates.find((item) => item.status === "error");
-        if (latestError && Date.now() - startedAt > HISTORY_FAILURE_GRACE_MS && !currentData.outputUrl) {
-          const message = latestError.errorMessage || "上游任务生成失败。";
+        if (latest?.status === "error") {
+          const message = latest.errorMessage || "上游任务生成失败。";
           update(props.id, {
             status: "error",
+            outputAssetId: currentData.outputAssetId,
+            outputUrl: currentData.outputUrl,
             errorMessage: message,
             generationStartedAt: undefined,
             clientRequestId: undefined
@@ -832,7 +827,7 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
       });
       const previousOutputAssetId = props.data.outputAssetId;
       const previousOutputUrl = props.data.outputUrl;
-      const hasReturnedVideo = Boolean(result.outputAssetId || result.outputUrl);
+      const hasReturnedVideo = Boolean(result.outputUrl);
       update(
         props.id,
         result.status === "success" && hasReturnedVideo
@@ -1088,7 +1083,7 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
     </div>
   );
 
-  return <CreationNodeFrame id={props.id} type={props.type} selected={props.selected} title={props.data.title || "Video"} ratio={displayRatio} status={props.data.status} preview={preview} toolbar={<MediaPreviewActions kind="video" url={outputIsVideo ? props.data.outputUrl : undefined} assetId={props.data.outputAssetId} title={props.data.title} nodeId={props.id} onSaved={(assetId) => update(props.id, { outputAssetId: assetId })} />} dock={dock} />;
+  return <CreationNodeFrame id={props.id} type={props.type} selected={props.selected} title={props.data.title || "Video"} ratio={displayRatio} status={frameStatus} preview={preview} toolbar={<MediaPreviewActions kind="video" url={outputIsVideo ? props.data.outputUrl : undefined} assetId={props.data.outputAssetId} title={props.data.title} nodeId={props.id} onSaved={(assetId) => update(props.id, { outputAssetId: assetId })} />} dock={dock} />;
 }
 
 export const VideoNode = memo(VideoNodeComponent);
