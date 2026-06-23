@@ -14,7 +14,7 @@ export function ScriptNode(props: NodeProps<ScriptNodeData>) {
     <NodeShell
       {...props}
       title={props.data.title}
-      badge="Shot Prompt"
+      badge="Script Generator"
       width={320}
       footer={
         <Button className="nodrag nopan h-8" variant="secondary">
@@ -23,10 +23,10 @@ export function ScriptNode(props: NodeProps<ScriptNodeData>) {
       }
     >
       <div className="space-y-2">
-        <div className="rounded-[10px] border border-white/[0.06] bg-white/[0.03] px-3 py-2 text-[12px] text-[#8b95a5]">脚本草稿 / Shot prompt</div>
+        <div className="rounded-[10px] border border-white/[0.06] bg-white/[0.03] px-3 py-2 text-[12px] text-[#8b95a5]">剧本草稿 / Shot prompt</div>
         <Textarea
           className="nodrag nopan h-[118px]"
-          placeholder="输入分镜脚本、画面描述或镜头提示词"
+          placeholder="输入故事方向、人物关系、画面描述或镜头提示词"
           value={firstShot?.prompt ?? ""}
           onChange={(event) => {
             const next = props.data.shots.length

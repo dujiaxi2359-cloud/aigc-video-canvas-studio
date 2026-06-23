@@ -21,7 +21,7 @@ const defaults: Record<WorkflowNodeType, unknown> = {
   video: { title: "视频节点", prompt: "", inputMode: "text-to-video", videoMode: "text_to_video", generateCount: 1, status: "idle" },
   audio: { title: "音频节点" },
   script: {
-    title: "脚本节点",
+    title: "剧本生成器",
     shots: [{ id: createClientId("shot"), shotNumber: 1, duration: 5, visualDescription: "", prompt: "", subtitle: "", soundDesign: "" }]
   },
   compose: { title: "视频合成", inputVideoAssetIds: [], status: "idle" }

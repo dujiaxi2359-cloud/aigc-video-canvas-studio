@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import {
   ArrowLeft, Blocks, Bot, ChevronDown, Clock3, Copy, Download, FileAudio, Folder, FolderPlus,
   Eye, History, Image as ImageIcon, LayoutTemplate, Link2, MessageCircle, MoreHorizontal, Plus, Search,
-  Settings, Share2, Star, Trash2, Upload, UsersRound, Video, X
+  ScrollText, Settings, Share2, Star, Trash2, Upload, UserRound, UsersRound, Video, X
 } from "lucide-react";
 import type { Page } from "../../App";
 import { useI18nStore } from "../../i18n";
@@ -380,17 +380,38 @@ export function CanvasDrawer({ drawer, onClose }: { drawer: DrawerName; onClose:
 
 export function CanvasEmptyGuide({ onAdd, onTemplates }: { onAdd: (type: WorkflowNodeType, position?: { x: number; y: number }) => void; onTemplates: () => void }) {
   const t = useI18nStore((state) => state.t);
+  const actions: Array<{ label: string; hint: string; type?: WorkflowNodeType; icon: ElementType; position?: { x: number; y: number }; onClick?: () => void; tone: string }> = [
+    { label: "故事脚本生成", hint: "剧本、分镜、Shot Prompt", type: "script", icon: ScrollText, position: { x: 180, y: 160 }, tone: "is-blue" },
+    { label: "角色三视图", hint: "正侧背设定参考", type: "imageGenerate", icon: UserRound, position: { x: 620, y: 150 }, tone: "is-rose" },
+    { label: "首帧图生视频", hint: "首帧、参考图转视频", type: "video", icon: ImageIcon, position: { x: 1060, y: 150 }, tone: "is-amber" },
+    { label: "音频生视频", hint: "音乐、旁白驱动画面", type: "audio", icon: FileAudio, position: { x: 1500, y: 160 }, tone: "is-teal" }
+  ];
   return (
-    <div className="pointer-events-none fixed inset-0 z-10 grid place-items-center">
-      <motion.div layout className="canvas-empty-guide pointer-events-auto -translate-y-8 text-center" transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}>
-        <div className="canvas-empty-title"><span>{t("canvas.emptyTitlePrefix")}</span>{t("canvas.emptyTitleSuffix")}</div>
-        <p className="canvas-empty-copy">{t("canvas.emptyCopy")}</p>
-        <div className="canvas-empty-actions mt-5 flex flex-wrap justify-center gap-2.5">
-          <button onClick={() => onAdd("video")} className="canvas-quick-action">文生视频</button>
-          <button onClick={() => onAdd("image")} className="canvas-quick-action">上传参考图</button>
-          <button onClick={() => onAdd("imageGenerate")} className="canvas-quick-action">图片生成</button>
-          <button onClick={() => onAdd("video")} className="canvas-quick-action">图生 / 首尾帧</button>
-          <button onClick={onTemplates} className="canvas-quick-action"><LayoutTemplate size={16} /> 浏览模板</button>
+    <div className="pointer-events-none fixed inset-0 z-10 flex items-center justify-center px-8">
+      <motion.div layout className="canvas-empty-guide pointer-events-auto" transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}>
+        <div className="canvas-empty-kicker">{t("canvas.emptyTitlePrefix")}{t("canvas.emptyTitleSuffix")}</div>
+        <div className="canvas-empty-actions">
+          {actions.map((item) => {
+            const Icon = item.icon;
+            return (
+              <button
+                key={item.label}
+                type="button"
+                className={`canvas-empty-task ${item.tone}`}
+                onClick={() => item.onClick ? item.onClick() : item.type && onAdd(item.type, item.position)}
+              >
+                <span className="canvas-empty-task-icon"><Icon size={18} /></span>
+                <span className="canvas-empty-task-text">
+                  <strong>{item.label}</strong>
+                  <small>{item.hint}</small>
+                </span>
+              </button>
+            );
+          })}
+          <button type="button" onClick={onTemplates} className="canvas-empty-task is-template">
+            <span className="canvas-empty-task-icon"><LayoutTemplate size={18} /></span>
+            <span className="canvas-empty-task-text"><strong>模板工作流</strong><small>从预设结构开始</small></span>
+          </button>
         </div>
       </motion.div>
     </div>

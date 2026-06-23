@@ -24,7 +24,7 @@ function frameWidth(type: string | undefined, cardWidth: number, hasDock: boolea
   return Math.max(cardWidth, hasDock ? 640 : 520);
 }
 
-function CreationNodeFrameComponent({ id, type, selected, title, ratio, status, preview, toolbar, floatingToolbar, dock }: {
+function CreationNodeFrameComponent({ id, type, selected, title, ratio, status, preview, toolbar, floatingToolbar, dock, hideInlineControls }: {
   id: string;
   type?: string;
   selected?: boolean;
@@ -35,6 +35,7 @@ function CreationNodeFrameComponent({ id, type, selected, title, ratio, status, 
   toolbar?: ReactNode;
   floatingToolbar?: ReactNode;
   dock?: ReactNode;
+  hideInlineControls?: boolean;
 }) {
   const deleteNode = useCanvasStore((state) => state.deleteNode);
   const edges = useCanvasStore((state) => state.edges);
@@ -57,8 +58,8 @@ function CreationNodeFrameComponent({ id, type, selected, title, ratio, status, 
         >
           {acceptsInput && <Handle id="in-0" type="target" position={Position.Left} className={`studio-handle studio-handle-in ${hasIncomingConnection ? "is-connected" : ""}`} />}
           <Handle id="out" type="source" position={Position.Right} className={`studio-handle studio-handle-out ${hasOutgoingConnection ? "is-connected" : ""}`} onClick={(event) => openCreateMenu(event, id, type)} />
-          {toolbar}
-          <button type="button" title="删除节点" className="creation-node-delete nodrag nopan" onClick={() => deleteNode(id)}><Trash2 size={13} /></button>
+          {!hideInlineControls && toolbar}
+          {!hideInlineControls && <button type="button" title="删除节点" className="creation-node-delete nodrag nopan" onClick={() => deleteNode(id)}><Trash2 size={13} /></button>}
           {preview}
           {status && <span className={`creation-preview-status is-${status}`}>{status === "generating" ? "生成中" : status === "success" ? "已完成" : status === "error" ? "失败" : "未生成"}</span>}
         </div>
