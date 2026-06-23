@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { legacyInputModeToOfficialMode, type OfficialVideoMode } from "../../types/videoModes.js";
-import { downloadGeneratedFile } from "../../utils/downloadGeneratedFile.js";
+import { downloadGeneratedVideoOrUseRemote } from "../../utils/downloadGeneratedFile.js";
 import { ProviderError, rawErrorMessage } from "../../utils/providerErrors.js";
 import { getAsset } from "../asset.service.js";
 import { ensureAssetLocalFile } from "../assets/ensureAssetLocalFile.service.js";
@@ -338,8 +338,8 @@ export async function generateVideoWithMiniMax(params: VideoProviderParams): Pro
     const directUrl = responseVideoUrl(task);
     const id = taskId(task);
     if (directUrl) {
-      const saved = await downloadGeneratedFile(directUrl, "video_minimax");
-      return { status: "success", outputUrl: saved.outputUrl, localPath: saved.localPath, rawResponse: task, payloadSummary: { endpoint: created.endpoint, model: params.modelName, mode, audits } };
+      const saved = await downloadGeneratedVideoOrUseRemote(directUrl, "video_minimax");
+      return { status: "success", outputUrl: saved.outputUrl, localPath: saved.localPath, rawResponse: task, payloadSummary: { endpoint: created.endpoint, model: params.modelName, mode, audits, archiveWarning: saved.archiveWarning } };
     }
     if (!id) throw new ProviderError("PROVIDER_ERROR", "MiniMax 视频接口没有返回 task_id。", JSON.stringify(task));
 
@@ -381,13 +381,13 @@ export async function generateVideoWithMiniMax(params: VideoProviderParams): Pro
     const remoteUrl = foundUrl || (foundFileId ? (await retrieveVideoUrl(params.apiBaseUrl, params.apiKey, foundFileId)).url : undefined);
     if (!remoteUrl) throw new ProviderError("VEO_OPERATION_NO_VIDEO_IN_RESPONSE", "MiniMax 任务已完成，但没有返回视频 URL 或 file_id。", JSON.stringify(task));
     await saveGenerationTask({ id, status: "success", progress: 100, result: task });
-    const saved = await downloadGeneratedFile(remoteUrl, "video_minimax");
+    const saved = await downloadGeneratedVideoOrUseRemote(remoteUrl, "video_minimax");
     return {
       status: "success",
       outputUrl: saved.outputUrl,
       localPath: saved.localPath,
       rawResponse: task,
-      payloadSummary: { endpoint: created.endpoint, taskId: id, model: params.modelName, mode, audits }
+      payloadSummary: { endpoint: created.endpoint, taskId: id, model: params.modelName, mode, audits, archiveWarning: saved.archiveWarning }
     };
   } catch (error) {
     if (error instanceof ProviderError) throw error;

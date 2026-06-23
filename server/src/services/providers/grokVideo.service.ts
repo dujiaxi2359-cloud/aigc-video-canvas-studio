@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { legacyInputModeToOfficialMode } from "../../types/videoModes.js";
-import { downloadGeneratedFile, saveGeneratedBuffer } from "../../utils/downloadGeneratedFile.js";
+import { downloadGeneratedFile, downloadGeneratedVideoOrUseRemote, saveGeneratedBuffer } from "../../utils/downloadGeneratedFile.js";
 import { ProviderError, rawErrorMessage } from "../../utils/providerErrors.js";
 import { mapVideoDimensions, normalizeVideoAspectRatio, normalizeVideoResolution } from "../../utils/videoParams.js";
 import { getAsset } from "../asset.service.js";
@@ -221,6 +221,7 @@ async function downloadGrokResult(input: {
   allowContentFallback: boolean;
 }) {
   if (input.remoteUrl) {
+    if (!input.allowContentFallback) return downloadGeneratedVideoOrUseRemote(input.remoteUrl, "video_grok");
     try {
       return await downloadGeneratedFile(input.remoteUrl, "video_grok");
     } catch (error) {

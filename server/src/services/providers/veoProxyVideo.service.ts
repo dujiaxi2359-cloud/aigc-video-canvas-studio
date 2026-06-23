@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { legacyInputModeToOfficialMode, type OfficialVideoMode } from "../../types/videoModes.js";
-import { downloadGeneratedFile } from "../../utils/downloadGeneratedFile.js";
+import { downloadGeneratedVideoOrUseRemote } from "../../utils/downloadGeneratedFile.js";
 import { ProviderError, rawErrorMessage } from "../../utils/providerErrors.js";
 import { mapVideoDimensions } from "../../utils/videoParams.js";
 import { getAsset } from "../asset.service.js";
@@ -592,7 +592,7 @@ export async function generateVideoWithVeoProxy(params: VideoProviderParams): Pr
           response: created
         }
       });
-      const saved = await downloadGeneratedFile(directVideoUrl, "video_veo_proxy");
+      const saved = await downloadGeneratedVideoOrUseRemote(directVideoUrl, "video_veo_proxy");
       return {
         status: "success",
         outputUrl: saved.outputUrl,
@@ -612,7 +612,8 @@ export async function generateVideoWithVeoProxy(params: VideoProviderParams): Pr
           nativeAspectRatioRequired: requestAspectRatio === "9:16",
           inputImageCount: images.length,
           inputImages: inputImageAudits,
-          directResult: true
+          directResult: true,
+          archiveWarning: saved.archiveWarning
         }
       };
     }
@@ -728,7 +729,7 @@ export async function generateVideoWithVeoProxy(params: VideoProviderParams): Pr
       });
     }
     await saveGenerationTask({ id: taskId, status: "success", progress: 100, result: task });
-    const saved = await downloadGeneratedFile(videoUrl, "video_veo_proxy");
+    const saved = await downloadGeneratedVideoOrUseRemote(videoUrl, "video_veo_proxy");
     return {
       status: "success",
       outputUrl: saved.outputUrl,
@@ -748,7 +749,8 @@ export async function generateVideoWithVeoProxy(params: VideoProviderParams): Pr
         requestedDuration: params.duration,
         nativeAspectRatioRequired: requestAspectRatio === "9:16",
         inputImageCount: images.length,
-        inputImages: inputImageAudits
+        inputImages: inputImageAudits,
+        archiveWarning: saved.archiveWarning
       }
     };
   } catch (error) {

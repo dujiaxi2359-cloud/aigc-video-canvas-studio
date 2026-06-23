@@ -1,6 +1,6 @@
 import { getVideoModelCapabilityOrLegacy } from "../../config/videoModelCapabilities.js";
 import { legacyInputModeToOfficialMode, type OfficialVideoMode } from "../../types/videoModes.js";
-import { downloadGeneratedFile } from "../../utils/downloadGeneratedFile.js";
+import { downloadGeneratedVideoOrUseRemote } from "../../utils/downloadGeneratedFile.js";
 import { buildPayloadSummary, logOfficialPayload } from "../../utils/generationPayload.js";
 import { ProviderError, rawErrorMessage } from "../../utils/providerErrors.js";
 import { buildNegativePrompt } from "../../utils/qualityPrompt.js";
@@ -410,8 +410,8 @@ export async function pollWanTask(params: VideoProviderParams, taskId: string) {
 export async function downloadWanResult(taskResult: unknown): Promise<ProviderGenerateResult> {
   const videoUrl = findVideoUrl(taskResult);
   if (!videoUrl) throw new ProviderError("PROVIDER_ERROR", "阿里 Wan 任务完成，但没有找到可下载的视频 URL。", rawErrorMessage(taskResult));
-  const saved = await downloadGeneratedFile(videoUrl, "video_alibaba_wan");
-  return { status: "success", outputUrl: saved.outputUrl, localPath: saved.localPath, rawResponse: taskResult };
+  const saved = await downloadGeneratedVideoOrUseRemote(videoUrl, "video_alibaba_wan");
+  return { status: "success", outputUrl: saved.outputUrl, localPath: saved.localPath, rawResponse: taskResult, payloadSummary: { archiveWarning: saved.archiveWarning } };
 }
 
 export async function generateVideoWithAlibabaWan(params: VideoProviderParams): Promise<ProviderGenerateResult> {

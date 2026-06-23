@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
 import { legacyInputModeToOfficialMode, type OfficialVideoMode } from "../../types/videoModes.js";
-import { downloadGeneratedFile } from "../../utils/downloadGeneratedFile.js";
+import { downloadGeneratedVideoOrUseRemote } from "../../utils/downloadGeneratedFile.js";
 import { ProviderError, rawErrorMessage } from "../../utils/providerErrors.js";
 import { mapVideoDimensions, mapVideoSize, normalizeVideoAspectRatio } from "../../utils/videoParams.js";
 import { getAsset } from "../asset.service.js";
@@ -198,13 +198,13 @@ export async function generateVideoWithKling(params: VideoProviderParams): Promi
     const remoteUrl = resultVideoUrl(task);
     if (!remoteUrl) throw new ProviderError("VEO_OPERATION_NO_VIDEO_IN_RESPONSE", "可灵任务已完成，但响应中没有视频 URL。", JSON.stringify(task));
     await saveGenerationTask({ id, status: "success", progress: 100, result: task });
-    const saved = await downloadGeneratedFile(remoteUrl, "video_kling");
+    const saved = await downloadGeneratedVideoOrUseRemote(remoteUrl, "video_kling");
     return {
       status: "success",
       outputUrl: saved.outputUrl,
       localPath: saved.localPath,
       rawResponse: task,
-      payloadSummary: { endpoint, taskId: id, model: params.modelName, mode, promptTruncated: prompt !== params.prompt }
+      payloadSummary: { endpoint, taskId: id, model: params.modelName, mode, promptTruncated: prompt !== params.prompt, archiveWarning: saved.archiveWarning }
     };
   } catch (error) {
     if (error instanceof ProviderError) throw error;

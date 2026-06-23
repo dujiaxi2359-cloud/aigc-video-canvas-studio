@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { legacyInputModeToOfficialMode } from "../../types/videoModes.js";
-import { downloadGeneratedFile, saveGeneratedBuffer } from "../../utils/downloadGeneratedFile.js";
+import { downloadGeneratedVideoOrUseRemote, saveGeneratedBuffer } from "../../utils/downloadGeneratedFile.js";
 import { ProviderError, rawErrorMessage } from "../../utils/providerErrors.js";
 import { mapVideoDimensions, mapVideoSize, normalizeVideoAspectRatio, normalizeVideoResolution } from "../../utils/videoParams.js";
 import { getAsset } from "../asset.service.js";
@@ -1508,7 +1508,7 @@ export async function generateVideoWithSeedance(params: SeedanceProviderParams):
         response: task
       });
     }
-    const saved = await downloadGeneratedFile(remoteUrl, "video_seedance");
+    const saved = await downloadGeneratedVideoOrUseRemote(remoteUrl, "video_seedance");
     return {
       status: "success",
       outputUrl: saved.outputUrl,
@@ -1523,6 +1523,7 @@ export async function generateVideoWithSeedance(params: SeedanceProviderParams):
         requestedResolution: normalizedResolution,
         requestedDuration: seconds,
         nativeAspectRatioRequired: apiFamily === "omni_fast" && normalizedRatio === "9:16",
+        archiveWarning: saved.archiveWarning,
         watermark: false,
         referenceBindingCount: params.referenceBindings?.length ?? 0
       }

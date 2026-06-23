@@ -63,3 +63,19 @@ export async function downloadGeneratedFile(remoteUrl: string, prefix = "generat
     contentType
   });
 }
+
+export async function downloadGeneratedVideoOrUseRemote(remoteUrl: string, prefix = "generated", init?: RequestInit) {
+  try {
+    return { ...(await downloadGeneratedFile(remoteUrl, prefix, init)), archiveWarning: undefined as string | undefined };
+  } catch (error) {
+    const archiveWarning = error instanceof Error ? error.message : String(error);
+    console.warn("[video delivery] local archive failed; returning the completed upstream video", { prefix, archiveWarning });
+    return {
+      outputUrl: remoteUrl,
+      localPath: undefined,
+      size: undefined,
+      originalName: undefined,
+      archiveWarning
+    };
+  }
+}
