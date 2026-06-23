@@ -1,4 +1,5 @@
 import {
+  midjourneyCreateEndpointCandidates,
   isMidjourneyImageModel,
   midjourneyCreateEndpoint,
   midjourneyPollEndpoints,
@@ -20,6 +21,18 @@ assert(
 assert(
   midjourneyCreateEndpoint("https://relay.example.com/v1/midjourney/generations", "image-edit") === "https://relay.example.com/v1/midjourney/generations/edits",
   "full relay endpoint must support image editing without duplicated paths"
+);
+assert(
+  midjourneyCreateEndpointCandidates("https://relay.example.com/v1/midjourney/generations/imagine", "text-to-image")[0] === "https://relay.example.com/v1/midjourney/generations/imagine",
+  "explicit relay imagine endpoint must be tried first"
+);
+assert(
+  midjourneyCreateEndpointCandidates("https://relay.example.com/v1", "text-to-image").includes("https://relay.example.com/v1/midjourney/generations/imagine"),
+  "relay-compatible imagine endpoint must be available as a fallback"
+);
+assert(
+  midjourneyCreateEndpointCandidates("https://relay.example.com/v1", "text-to-image").includes("https://relay.example.com/mj/submit/imagine"),
+  "common Midjourney submit endpoint must be available as a fallback"
 );
 assert(
   midjourneyPollEndpoints("https://relay.example.com/v1", "task 1")[0] === "https://relay.example.com/v1/tasks/task%201",

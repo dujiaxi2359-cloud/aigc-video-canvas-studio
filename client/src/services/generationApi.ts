@@ -12,7 +12,7 @@ export const generationApi = {
       data
     ),
   image: (data: unknown) =>
-    api.post<{ status: "success" | "error"; outputAssetId?: string; outputUrl?: string; payloadSummary?: Record<string, unknown>; errorCode?: string; errorMessage?: string; debugMessage?: string }>(
+    api.post<{ status: "success" | "processing" | "error"; outputAssetId?: string; outputUrl?: string; payloadSummary?: Record<string, unknown>; errorCode?: string; errorMessage?: string; debugMessage?: string }>(
       "/api/generate/image",
       data
     )

@@ -339,10 +339,22 @@ function ImageGenerateNodeComponent(props: NodeProps<ImageGenerateNodeData>) {
         qualityMode: props.data.qualityMode ?? "full_quality",
         realismMode: "natural_human"
       });
+      const previousOutputAssetId = props.data.outputAssetId;
+      const previousOutputUrl = props.data.outputUrl;
       update(
         props.id,
         result.status === "success"
           ? { status: "success", outputAssetId: result.outputAssetId, outputUrl: result.outputUrl, payloadSummary: result.payloadSummary }
+          : result.status === "processing"
+            ? {
+              status: "generating",
+              outputAssetId: previousOutputAssetId,
+              outputUrl: previousOutputUrl,
+              errorCode: undefined,
+              errorMessage: undefined,
+              debugMessage: undefined,
+              payloadSummary: result.payloadSummary
+            }
           : { status: "error", errorMessage: result.errorMessage, payloadSummary: result.payloadSummary }
       );
     } catch (error) {

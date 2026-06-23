@@ -27,13 +27,47 @@ function midjourneyRoot(apiBaseUrl?: string) {
   const raw = (apiBaseUrl || "https://api.apimart.ai").trim().replace(/\/+$/, "");
   return raw
     .replace(/\/v1\/midjourney\/generations(?:\/imagine|\/edits)?$/i, "")
+    .replace(/\/v1\/midjourney\/(?:imagine|edits)$/i, "")
+    .replace(/\/mj\/submit\/(?:imagine|blend|describe)$/i, "")
     .replace(/\/v1\/midjourney$/i, "")
     .replace(/\/v1$/i, "");
 }
 
+function uniqueStrings(values: string[]) {
+  return [...new Set(values.filter(Boolean))];
+}
+
+export function midjourneyCreateEndpointCandidates(apiBaseUrl: string | undefined, inputMode: ImageProviderParams["inputMode"]) {
+  const root = midjourneyRoot(apiBaseUrl);
+  const raw = (apiBaseUrl || "").trim().replace(/\/+$/, "");
+  const suppliedEndpoint = /\/(?:v1\/midjourney\/(?:generations(?:\/imagine|\/edits)?|imagine|edits)|mj\/submit\/(?:imagine|blend|describe))$/i.test(raw)
+    ? raw
+    : "";
+  if (inputMode === "image-edit") {
+    const editEndpoint = suppliedEndpoint
+      ? suppliedEndpoint
+        .replace(/\/v1\/midjourney\/generations(?:\/imagine)?$/i, "/v1/midjourney/generations/edits")
+        .replace(/\/v1\/midjourney\/imagine$/i, "/v1/midjourney/edits")
+      : "";
+    return uniqueStrings([
+      editEndpoint,
+      `${root}/v1/midjourney/generations/edits`,
+      `${root}/v1/midjourney/generations`,
+      `${root}/v1/midjourney/edits`,
+      `${root}/mj/submit/imagine`
+    ]);
+  }
+  return uniqueStrings([
+    suppliedEndpoint,
+    `${root}/v1/midjourney/generations`,
+    `${root}/v1/midjourney/generations/imagine`,
+    `${root}/v1/midjourney/imagine`,
+    `${root}/mj/submit/imagine`
+  ]);
+}
+
 export function midjourneyCreateEndpoint(apiBaseUrl: string | undefined, inputMode: ImageProviderParams["inputMode"]) {
-  const suffix = inputMode === "image-edit" ? "/edits" : "";
-  return `${midjourneyRoot(apiBaseUrl)}/v1/midjourney/generations${suffix}`;
+  return midjourneyCreateEndpointCandidates(apiBaseUrl, inputMode)[0]!;
 }
 
 export function midjourneyPollEndpoints(apiBaseUrl: string | undefined, taskId: string) {
@@ -134,6 +168,14 @@ function throwResponseError(response: Response, payload: unknown, stage: string)
   throw new ProviderError("PROVIDER_ERROR", `Midjourney ${stage}失败：${detail}`, `${response.status} ${detail}`, payload);
 }
 
+function shouldTryNextCreateEndpoint(response: Response, payload: unknown) {
+  const detail = errorMessage(payload);
+  if (/quota|credit|balance|insufficient|余额|额度|unauthorized|invalid api key|incorrect api key|forbidden|permission|access denied|无权限/i.test(detail)) return false;
+  if ([404, 405].includes(response.status)) return true;
+  if ([400, 422].includes(response.status) && /route|path|endpoint|not found|cannot\s+(post|get)|method not allowed|unsupported.*endpoint|no route|路径|接口|不存在|不支持/i.test(detail)) return true;
+  return false;
+}
+
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -222,15 +264,32 @@ export async function generateImageWithMidjourney(params: ImageProviderParams): 
 
   try {
     const imageUrls = await resolveImageUrls(params);
-    const endpoint = midjourneyCreateEndpoint(params.apiBaseUrl, params.inputMode);
+    const endpoints = midjourneyCreateEndpointCandidates(params.apiBaseUrl, params.inputMode);
     const body = buildRequestBody(params, imageUrls);
-    const response = await fetch(endpoint, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${params.apiKey}`, "Content-Type": "application/json", Accept: "application/json" },
-      body: JSON.stringify(body)
-    });
-    let task = await responseJson(response);
-    if (!response.ok || applicationError(task)) throwResponseError(response, task, "任务创建");
+    let endpoint = endpoints[0]!;
+    let task: unknown = {};
+    let createResponse: Response | undefined;
+    for (const candidate of endpoints) {
+      const response = await fetch(candidate, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${params.apiKey}`, "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify(body)
+      });
+      task = await responseJson(response);
+      createResponse = response;
+      endpoint = candidate;
+      if (response.ok && !applicationError(task)) break;
+      if (!shouldTryNextCreateEndpoint(response, task) || candidate === endpoints[endpoints.length - 1]) {
+        throwResponseError(response, task, "任务创建");
+      }
+      console.warn("[Midjourney Image] create endpoint rejected by relay; trying compatible path", {
+        rejectedEndpoint: candidate,
+        nextEndpoint: endpoints[endpoints.indexOf(candidate) + 1],
+        status: response.status,
+        message: errorMessage(task)
+      });
+    }
+    if (!createResponse || !createResponse.ok || applicationError(task)) throwResponseError(createResponse!, task, "任务创建");
 
     const taskId = midjourneyTaskId(task);
     const immediateUrl = midjourneyResultUrl(task);

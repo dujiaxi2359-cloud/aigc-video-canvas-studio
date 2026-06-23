@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { openAIImageTaskId, openAIImageTaskStatus } from "../services/providers/openaiImage.service.js";
 import { extractImagePayload, summarizeImageResponseShape } from "../utils/imageResponseExtractor.js";
 
 const base64 = Buffer.alloc(256, 7).toString("base64");
@@ -21,6 +22,8 @@ assert(dataUrl.mimeType === "image/png", "data URL mime type should be preserved
 
 const empty = extractImagePayload({ id: "task_123", status: "processing" });
 assert(empty === undefined, "async task response without image should not be treated as an image");
+assert(openAIImageTaskId({ id: "task_123", status: "processing" }) === "task_123", "async OpenAI image task id should be preserved");
+assert(openAIImageTaskStatus({ id: "task_123", status: "processing" }) === "processing", "async OpenAI image task status should be preserved");
 
 const summary = summarizeImageResponseShape({ data: [{ b64_json: base64.repeat(30) }] });
 assert(summary.includes("chars"), "large strings should be summarized");

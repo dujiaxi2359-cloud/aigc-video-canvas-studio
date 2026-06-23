@@ -1,11 +1,17 @@
 import fs from "node:fs";
 import { getAsset } from "../asset.service.js";
 import { ensureAssetLocalFile } from "../assets/ensureAssetLocalFile.service.js";
+import { saveGenerationTask } from "../generationTask.service.js";
 import { downloadGeneratedFile, saveGeneratedBuffer } from "../../utils/downloadGeneratedFile.js";
 import { aspectRatioToOpenAIImageSize } from "../../utils/imageAspectRatio.js";
 import { extractImagePayload, summarizeImageResponseShape } from "../../utils/imageResponseExtractor.js";
 import { ProviderError } from "../../utils/providerErrors.js";
 import type { ImageProviderParams, ProviderGenerateResult } from "./providerTypes.js";
+
+type JsonRecord = Record<string, unknown>;
+
+const OPENAI_IMAGE_PENDING_STATUSES = new Set(["created", "queued", "pending", "submitted", "running", "processing", "in_progress"]);
+const OPENAI_IMAGE_FAILURE_STATUSES = new Set(["failed", "failure", "error", "cancelled", "canceled"]);
 
 async function responseError(response: Response) {
   const text = await response.text();
@@ -93,9 +99,78 @@ function imageExtension(format?: string) {
   return ".png";
 }
 
-async function saveOpenAIImage(json: unknown, format?: string): Promise<ProviderGenerateResult> {
+function asRecord(value: unknown): JsonRecord | undefined {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as JsonRecord : undefined;
+}
+
+function openAIImageTaskCandidates(payload: unknown) {
+  const root = asRecord(payload);
+  const data = root?.data;
+  const firstData = Array.isArray(data) ? data[0] : data;
+  const output = asRecord(firstData)?.output ?? root?.output;
+  const result = asRecord(firstData)?.result ?? root?.result;
+  return [payload, firstData, output, result].map(asRecord).filter(Boolean) as JsonRecord[];
+}
+
+export function openAIImageTaskId(payload: unknown) {
+  for (const candidate of openAIImageTaskCandidates(payload)) {
+    const value = candidate.task_id ?? candidate.taskId ?? candidate.generation_id ?? candidate.generationId ?? candidate.request_id ?? candidate.requestId ?? candidate.id;
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return undefined;
+}
+
+export function openAIImageTaskStatus(payload: unknown) {
+  for (const candidate of openAIImageTaskCandidates(payload)) {
+    const value = candidate.status ?? candidate.state ?? candidate.task_status ?? candidate.taskStatus;
+    if (typeof value === "string" && value.trim()) return value.trim().toLowerCase();
+  }
+  return "";
+}
+
+function openAIImageTaskMessage(payload: unknown) {
+  for (const candidate of openAIImageTaskCandidates(payload)) {
+    const error = asRecord(candidate.error);
+    for (const value of [candidate.message, candidate.error_message, candidate.fail_reason, error?.message, error?.detail]) {
+      if (typeof value === "string" && value.trim()) return value.trim();
+    }
+  }
+  return "";
+}
+
+async function saveOpenAIImage(json: unknown, format: string | undefined, context: { endpoint: string; modelName: string; nodeId?: string }): Promise<ProviderGenerateResult> {
   const image = extractImagePayload(json);
   if (!image) {
+    const taskId = openAIImageTaskId(json);
+    const taskStatus = openAIImageTaskStatus(json);
+    if (OPENAI_IMAGE_FAILURE_STATUSES.has(taskStatus)) {
+      throw new ProviderError("PROVIDER_ERROR", `OpenAI 图片任务失败：${openAIImageTaskMessage(json) || taskStatus}`, undefined, json);
+    }
+    if (taskId && (OPENAI_IMAGE_PENDING_STATUSES.has(taskStatus) || !taskStatus)) {
+      await saveGenerationTask({
+        id: taskId,
+        status: taskStatus || "processing",
+        result: {
+          provider: "openai-image",
+          endpoint: context.endpoint,
+          nodeId: context.nodeId,
+          modelName: context.modelName,
+          response: json
+        }
+      });
+      return {
+        status: "processing",
+        rawResponse: json,
+        payloadSummary: {
+          provider: "openai-image",
+          endpoint: context.endpoint,
+          taskId,
+          taskStatus: taskStatus || "processing",
+          model: context.modelName,
+          message: "上游图片任务已提交，当前仍在生成中。"
+        }
+      };
+    }
     throw new Error(`OpenAI 图片接口没有返回可识别的图片字段（已检查 b64_json、url、image_url、output_url、base64 等）。返回结构：${summarizeImageResponseShape(json)}`);
   }
 
@@ -253,12 +328,20 @@ export async function generateImageWithOpenAI(params: ImageProviderParams): Prom
     };
     applySharedImageParams(body, params);
 
-    return saveOpenAIImage(await fetchOpenAIImageJson({ apiBaseUrl, apiKey: params.apiKey, body }), params.imageFormat);
+    return saveOpenAIImage(await fetchOpenAIImageJson({ apiBaseUrl, apiKey: params.apiKey, body }), params.imageFormat, {
+      endpoint: "/images/generations",
+      modelName: params.modelName,
+      nodeId: params.nodeId
+    });
   }
 
   if (!params.imageAssetIds?.length) {
     throw new ProviderError("MISSING_INPUT_ASSET", "OpenAI 图片编辑需要连接至少一张图片素材。");
   }
 
-  return saveOpenAIImage(await fetchOpenAIImageEditJson({ apiBaseUrl, apiKey: params.apiKey, params }), params.imageFormat);
+  return saveOpenAIImage(await fetchOpenAIImageEditJson({ apiBaseUrl, apiKey: params.apiKey, params }), params.imageFormat, {
+    endpoint: "/images/edits",
+    modelName: params.modelName,
+    nodeId: params.nodeId
+  });
 }
