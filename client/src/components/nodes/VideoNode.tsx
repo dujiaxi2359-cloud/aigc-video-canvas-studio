@@ -390,6 +390,7 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
   const [listening, setListening] = useState(false);
   const [pendingMentionRange, setPendingMentionRange] = useState<MentionRange | null>(null);
   const isComposingRef = useRef(false);
+  const generatingRef = useRef(false);
   const promptTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const parameterAnchorRef = useRef<HTMLDivElement | null>(null);
 
@@ -623,8 +624,11 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
   }, [props.data.inputMode, props.data.videoMode, resolvedInputs.audioInputs.length, resolvedInputs.hasFirstFrame, resolvedInputs.hasImageInput, resolvedInputs.hasLastFrame, resolvedInputs.hasReferenceImage, resolvedInputs.hasVideoInput, selectedModel]);
 
   async function generate(promptOverride?: string) {
+    if (generatingRef.current || props.data.status === "generating") return;
+    generatingRef.current = true;
     if (!props.data.modelConfigId || !selectedModel) {
       update(props.id, { errorMessage: "暂无可用模型，请先到设置中心配置 API。", status: "error" });
+      generatingRef.current = false;
       return;
     }
     const promptForRequest = promptOverride ?? localPrompt ?? props.data.prompt;
@@ -684,7 +688,7 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
         ...(selectedDuration !== undefined ? { duration: selectedDuration } : {}),
         ...(selectedAspectRatio ? { aspectRatio: selectedAspectRatio } : {}),
         ...(selectedResolution ? { resolution: selectedResolution } : {}),
-        generateCount: props.data.generateCount,
+        generateCount: 1,
         qualityMode: props.data.qualityMode ?? "full_quality",
         promptExtend: true,
         realismMode: "natural_human"
@@ -710,6 +714,8 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
       const message = humanizeError(error);
       setLocalError(message);
       update(props.id, { status: "error", errorMessage: message });
+    } finally {
+      generatingRef.current = false;
     }
   }
 
@@ -861,14 +867,14 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
             { label: "比例", value: selectedAspectRatio, options: availableRatios, onChange: (value) => update(props.id, { aspectRatio: value }) },
             { label: "清晰度", value: selectedResolution, options: availableResolutions, onChange: (value) => update(props.id, { resolution: value }) },
             { label: "生成时长", value: selectedDuration, options: availableDurations, format: durationLabel, onChange: (value) => update(props.id, { duration: Number(value) }) },
-            { label: "生成数量", value: props.data.generateCount, options: [1, 2, 3, 4], format: (value) => `${value} 个`, onChange: (value) => update(props.id, { generateCount: Number(value) }) }
+            { label: "生成数量", value: 1, options: [1], format: (value) => `${value} 个`, onChange: () => update(props.id, { generateCount: 1 }) }
           ]} />
           </div>
         </div>
         <div className="creation-dock-actions">
           <button type="button" title="语音输入" className={listening ? "is-active" : ""} onClick={() => setListening((value) => !value)}><Mic size={14} /></button>
           <div className="creation-video-generate-cluster">
-            <button type="button" className="creation-video-count-button" title="生成数量" onClick={() => update(props.id, { generateCount: (props.data.generateCount % 4) + 1 })}>{props.data.generateCount || 1}x</button>
+            <button type="button" className="creation-video-count-button" title="视频生成固定单次提交" onClick={() => update(props.id, { generateCount: 1 })}>1x</button>
             <button type="button" title={props.data.status === "idle" ? "生成" : generateButtonLabel(props.data.status)} aria-label={props.data.status === "idle" ? "生成" : generateButtonLabel(props.data.status)} className="creation-generate-button creation-video-generate-button" disabled={!selectedModel || availableVideoModes.length === 0 || props.data.status === "generating"} onClick={() => void generate()}><ArrowUp size={19} strokeWidth={2.3} /></button>
           </div>
         </div>
