@@ -47,8 +47,14 @@ const defaultImageCapabilities: ModelCapabilities = {
   supportsReferenceImage: true
 };
 
+const imageRatios = ["1:1", "3:4", "4:3", "9:16", "16:9"];
+const imageFormats = ["png", "jpeg", "webp"];
+const openAiImageSizes = ["auto", "1024x1024", "1536x1024", "1024x1536"];
+const qwenImageSizes = ["1024x1024", "1024x1536", "1536x1024"];
+
 const defaultTextCapabilities: ModelCapabilities = {
   inputModes: ["text"],
+  modelCapability: { supportsText: true },
   contextWindow: 128000
 };
 
@@ -264,14 +270,124 @@ function modelCapabilityFor(capabilities: ModelCapabilities, officialModelKey: s
   const inputModes = new Set(capabilities.inputModes ?? []);
   return {
     model: officialModelKey,
+    supportsText: inputModes.has("text"),
+    supportsTextToImage: inputModes.has("text-to-image"),
+    supportsImageToImage: inputModes.has("image-to-image"),
+    supportsImageEdit: inputModes.has("image-edit"),
     supportsTextToVideo: inputModes.has("text-to-video"),
     supportsImageToVideo: inputModes.has("image-to-video") || inputModes.has("reference-to-video") || inputModes.has("first-last-frame"),
+    supportsReferenceToVideo: inputModes.has("reference-to-video"),
     supportsFirstLastFrame: inputModes.has("first-last-frame") || Boolean(capabilities.supportsFirstLastFrame),
     supportsVideoToVideo: inputModes.has("video-to-video") || Boolean(capabilities.supportsVideoInput)
   };
 }
 
+function imageModelIdentity(modelName: string) {
+  return modelName.toLowerCase();
+}
+
+function isQwenImageEditModel(modelName: string) {
+  return /qwen[-_ .]?image[-_ .]?edit|edit[-_ .]?(?:plus|max)/.test(imageModelIdentity(modelName));
+}
+
+function isQwenImageTextModel(modelName: string) {
+  const name = imageModelIdentity(modelName);
+  return !isQwenImageEditModel(modelName) && /qwen[-_ .]?image|wanx|通义|万相/.test(name);
+}
+
+function imageCapabilitiesFor(modelName: string): ModelCapabilities {
+  const name = imageModelIdentity(modelName);
+  if (isQwenImageEditModel(modelName)) {
+    const capabilities: ModelCapabilities = {
+      inputModes: ["image-to-image", "image-edit"],
+      imageAspectRatios: imageRatios,
+      imageSizes: qwenImageSizes,
+      imageQualities: ["standard", "high"],
+      imageFormats: ["png"],
+      supportsImageInput: true,
+      supportsMultiImageInput: true,
+      supportsReferenceImage: true,
+      supportsMask: false,
+      supportsTransparentBackground: false
+    };
+    return { ...capabilities, modelCapability: modelCapabilityFor(capabilities, modelName) };
+  }
+  if (isQwenImageTextModel(modelName)) {
+    const capabilities: ModelCapabilities = {
+      inputModes: ["text-to-image"],
+      imageAspectRatios: imageRatios,
+      imageSizes: qwenImageSizes,
+      imageQualities: ["standard", "high"],
+      imageFormats: ["png"],
+      supportsImageInput: false,
+      supportsMultiImageInput: false,
+      supportsReferenceImage: false,
+      supportsMask: false,
+      supportsTransparentBackground: false
+    };
+    return { ...capabilities, modelCapability: modelCapabilityFor(capabilities, modelName) };
+  }
+  if (/gemini.*image|image.*gemini|nano[-_ .]?banana/.test(name)) {
+    const capabilities: ModelCapabilities = {
+      inputModes: ["text-to-image", "image-to-image", "image-edit"],
+      imageAspectRatios: imageRatios,
+      imageSizes: ["1K"],
+      imageQualities: ["auto", "standard", "high"],
+      imageFormats: ["png"],
+      supportsImageInput: true,
+      supportsMultiImageInput: true,
+      supportsReferenceImage: true,
+      supportsMask: false,
+      supportsTransparentBackground: false
+    };
+    return { ...capabilities, modelCapability: modelCapabilityFor(capabilities, modelName) };
+  }
+  if (/imagen/.test(name)) {
+    const capabilities: ModelCapabilities = {
+      inputModes: ["text-to-image"],
+      imageAspectRatios: imageRatios,
+      imageSizes: ["1K", "2K"],
+      imageQualities: ["auto", "standard", "high"],
+      imageFormats: ["png"],
+      supportsImageInput: false,
+      supportsMultiImageInput: false,
+      supportsReferenceImage: false,
+      supportsMask: false,
+      supportsTransparentBackground: false
+    };
+    return { ...capabilities, modelCapability: modelCapabilityFor(capabilities, modelName) };
+  }
+  if (/seedream|doubao[-_]?seedream/.test(name)) {
+    const capabilities: ModelCapabilities = {
+      ...defaultImageCapabilities,
+      modelCapability: modelCapabilityFor(defaultImageCapabilities, modelName)
+    };
+    return capabilities;
+  }
+  if (/gpt[-_ .]?image|dall[-_ .]?e|openai/.test(name)) {
+    const capabilities: ModelCapabilities = {
+      inputModes: ["text-to-image", "image-to-image", "image-edit"],
+      imageAspectRatios: imageRatios,
+      imageSizes: openAiImageSizes,
+      imageQualities: ["auto", "low", "medium", "high"],
+      imageFormats,
+      supportsImageInput: true,
+      supportsMultiImageInput: true,
+      supportsReferenceImage: true,
+      supportsMask: true,
+      supportsTransparentBackground: !/gpt[-_ .]?image[-_ .]?2/.test(name)
+    };
+    return { ...capabilities, modelCapability: modelCapabilityFor(capabilities, modelName) };
+  }
+  const capabilities: ModelCapabilities = {
+    ...defaultImageCapabilities,
+    inputModes: /flux|recraft|ideogram|midjourney|jimeng/.test(name) ? ["text-to-image"] : defaultImageCapabilities.inputModes
+  };
+  return { ...capabilities, modelCapability: modelCapabilityFor(capabilities, modelName) };
+}
+
 const officialVideoCatalog = fallbackModelCatalog.filter((item) => item.category === "video");
+const officialCatalog = fallbackModelCatalog.filter((item) => item.category === "video" || item.category === "image" || item.category === "text");
 
 const officialAliasRules: Array<{ id: string; test: RegExp }> = [
   { id: "google-veo-3-1-fast", test: /\bveo[-_ .]?3[-_ .]?1(?:[-_ .]?fast|_fast)|veo_3_1-fast/i },
@@ -310,7 +426,7 @@ function normalizeModelKey(value: string) {
 
 function officialTemplateFor(upstreamModelName: string): ModelCatalogItem | undefined {
   const normalized = normalizeModelKey(upstreamModelName);
-  const exact = officialVideoCatalog.find((item) => normalizeModelKey(item.name) === normalized || normalizeModelKey(item.id) === normalized);
+  const exact = officialCatalog.find((item) => normalizeModelKey(item.name) === normalized || normalizeModelKey(item.id) === normalized);
   if (exact) return exact;
   const matched = officialAliasRules.find((rule) => rule.test.test(upstreamModelName));
   return matched ? officialVideoCatalog.find((item) => item.id === matched.id) : undefined;
@@ -357,10 +473,10 @@ function apiHost(value?: string) {
 
 function classifyModel(modelName: string): ModelCategory {
   const official = officialTemplateFor(modelName);
-  if (official?.category === "video") return "video";
+  if (official?.category === "video" || official?.category === "image" || official?.category === "text") return official.category;
   const name = modelName.toLowerCase();
-  if (/seedance|kling|veo|omni|grok.*video|grok-.*video|sora|vidu|jimeng-video|hailuo|hunyuan|wan\d|qwen-video|video/.test(name)) return "video";
-  if (/seedream|gpt-image|dall-e|imagen|image-preview|grok.*image|jimeng-(?!video)|flux|recraft|ideogram|midjourney|image|图像|图片/.test(name)) return "image";
+  if (/seedream|gpt-image|dall-e|imagen|image-preview|grok.*image|jimeng-(?!video)|flux|recraft|ideogram|midjourney|qwen[-_ .]?image|image|图像|图片/.test(name)) return "image";
+  if (/seedance|kling|veo|omni[-_ .]?(?:fast|flash)|grok.*video|grok-.*video|sora|vidu|jimeng-video|hailuo|hunyuan|wan\d|qwen-video|video/.test(name)) return "video";
   return "text";
 }
 
@@ -368,25 +484,31 @@ function inferModel(modelName: string): Pick<ModelConfig, "provider" | "provider
   const name = modelName.toLowerCase();
   const official = officialTemplateFor(modelName);
   if (official) {
+    const capabilities = {
+      ...official.capabilities,
+      modelCapability: modelCapabilityFor(official.capabilities, official.id)
+    };
     return {
       provider: official.provider,
       providerId: official.providerId,
       category: official.category,
       modelType: official.modelType,
-      capabilities: official.capabilities,
+      capabilities,
       displayName: official.displayName
     };
   }
   const category = classifyModel(modelName);
   if (category === "image") {
-    const isGeminiImage = /gemini.*image|image.*gemini/.test(name);
+    const isGeminiImage = /gemini.*image|image.*gemini|nano[-_ .]?banana|imagen/.test(name);
     const isVolcengineImage = /seedream|doubao[-_]?seedream/.test(name);
+    const isAlibabaImage = isQwenImageEditModel(modelName) || isQwenImageTextModel(modelName);
+    const capabilities = imageCapabilitiesFor(modelName);
     return {
-      provider: isVolcengineImage ? "Seedream / 火山方舟" : isGeminiImage ? "Gemini 图像中转" : "OpenAI 兼容图像中转",
-      providerId: isVolcengineImage ? "seedance" : isGeminiImage ? "google" : "openai",
+      provider: isAlibabaImage ? "通义万相 / 阿里百炼" : isVolcengineImage ? "Seedream / 火山方舟" : isGeminiImage ? "Gemini 图像中转" : "OpenAI 兼容图像中转",
+      providerId: isAlibabaImage ? "alibaba" : isVolcengineImage ? "seedance" : isGeminiImage ? "google" : "openai",
       category,
-      modelType: "text-to-image",
-      capabilities: defaultImageCapabilities,
+      modelType: isQwenImageEditModel(modelName) ? "image-edit" : "text-to-image",
+      capabilities,
       displayName: displayNameFor(modelName)
     };
   }
@@ -396,7 +518,7 @@ function inferModel(modelName: string): Pick<ModelConfig, "provider" | "provider
       providerId: "deepseek",
       category,
       modelType: "text",
-      capabilities: defaultTextCapabilities,
+      capabilities: { ...defaultTextCapabilities, modelCapability: modelCapabilityFor(defaultTextCapabilities, modelName) },
       displayName: displayNameFor(modelName)
     };
   }
@@ -406,7 +528,7 @@ function inferModel(modelName: string): Pick<ModelConfig, "provider" | "provider
     providerId: "openai-video",
     category,
     modelType: /grok|xai/.test(name) ? "text-to-video" : "image-to-video",
-    capabilities,
+    capabilities: { ...capabilities, modelCapability: modelCapabilityFor(capabilities, modelName) },
     displayName: displayNameFor(modelName)
   };
 }

@@ -49,8 +49,13 @@ export type ModelConstraint = {
 export type ModelCapabilities = {
   modelCapability?: {
     model?: string;
+    supportsText?: boolean;
+    supportsTextToImage?: boolean;
+    supportsImageToImage?: boolean;
+    supportsImageEdit?: boolean;
     supportsTextToVideo?: boolean;
     supportsImageToVideo?: boolean;
+    supportsReferenceToVideo?: boolean;
     supportsFirstLastFrame?: boolean;
     supportsVideoToVideo?: boolean;
   };

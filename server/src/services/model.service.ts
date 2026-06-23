@@ -21,6 +21,7 @@ import { generateVideoWithMiniMax } from "./providers/minimaxVideo.service.js";
 import { generateImageWithMidjourney, isMidjourneyImageModel } from "./providers/midjourneyImage.service.js";
 import { generateImageWithOpenAI } from "./providers/openaiImage.service.js";
 import { generateVideoWithSeedance } from "./providers/seedanceVideo.service.js";
+import { isQwenImageEditModel, normalizeImageCapabilities, qwenTextModelForEdit } from "./imageCapabilityNormalization.js";
 import { channelSupportsImage, resolveVideoRequestConfig, shouldUseProxyVideoAdapter, validateVideoRequestConfig } from "./providers/videoRequestAdapter.js";
 import { resolveProviderApiBaseUrl } from "./providers/providerBaseUrl.js";
 import { isGrokLikeVideoModel, isVeoLikeVideoModel, normalizeVideoCapabilities } from "./videoCapabilityNormalization.js";
@@ -362,6 +363,28 @@ function validateImageRequest(capabilities: ModelCapabilities, input: GenerateIm
   }
 }
 
+function effectiveImageRuntime(input: {
+  capabilities: ModelCapabilities;
+  providerId?: string;
+  modelName: string;
+  displayName?: string;
+  provider?: string;
+  request: GenerateImageRequest;
+}) {
+  let modelName = input.modelName;
+  if (
+    input.request.inputMode === "text-to-image"
+    && !input.request.imageAssetIds?.length
+    && isQwenImageEditModel(input.providerId, input.modelName, input.displayName, input.provider)
+  ) {
+    modelName = qwenTextModelForEdit(input.modelName);
+  }
+  return {
+    modelName,
+    capabilities: normalizeImageCapabilities(input.capabilities, input.providerId, modelName, input.displayName, input.provider)
+  };
+}
+
 function isRetryableImageRelayError(error: unknown) {
   const text = error instanceof Error ? error.message : safeStringify(error);
   return /OpenAI 兼容图片中转返回|Cloudflare|OPENAI_COMPAT_NON_JSON_RESPONSE|HTML 页面|上游响应超时|upstream request failed|upstream_error|temporarily unavailable|service busy|fully loaded|error code 524|a timeout occurred|502|503|504/i.test(text);
@@ -443,13 +466,21 @@ async function tryImageFallback(input: {
       const catalogItem = catalogFor(candidate);
       const useCatalogCapabilities = shouldUseCatalogCapabilities(candidate, catalogItem);
       const configuredCapabilities = JSON.parse(candidate.capabilities_json) as ModelCapabilities;
-      const capabilities = useCatalogCapabilities ? catalogItem!.capabilities : configuredCapabilities;
       const candidateRequest: GenerateImageRequest = { ...input.request };
+      const runtime = effectiveImageRuntime({
+        capabilities: useCatalogCapabilities ? catalogItem!.capabilities : configuredCapabilities,
+        providerId: candidate.provider_id,
+        modelName: candidate.model_name,
+        displayName: candidate.display_name,
+        provider: candidate.provider,
+        request: candidateRequest
+      });
+      const capabilities = runtime.capabilities;
       validateImageRequest(capabilities, candidateRequest);
       const apiKey = candidate.encrypted_api_key ? decryptApiKey(candidate.encrypted_api_key) : "";
       if (!apiKey) continue;
       const providerId = candidate.provider_id ?? "";
-      const modelName = candidate.model_name ?? "";
+      const modelName = runtime.modelName;
       const providerParams = {
         ...candidateRequest,
         apiKey,
@@ -1049,8 +1080,16 @@ export async function generateImage(input: GenerateImageRequest) {
   logGenerate({ type: "image", model, catalogItem, apiKey, inputMode: input.inputMode });
   const configuredCapabilities = JSON.parse(model.capabilities_json) as ModelCapabilities;
   const useCatalogCapabilities = shouldUseCatalogCapabilities(model, catalogItem);
-  const capabilities = useCatalogCapabilities ? catalogItem!.capabilities : configuredCapabilities;
   const inputForGeneration: GenerateImageRequest = { ...input };
+  const runtime = effectiveImageRuntime({
+    capabilities: useCatalogCapabilities ? catalogItem!.capabilities : configuredCapabilities,
+    providerId: model.provider_id,
+    modelName: model.model_name,
+    displayName: model.display_name,
+    provider: model.provider,
+    request: inputForGeneration
+  });
+  const capabilities = runtime.capabilities;
   try {
     validateImageRequest(capabilities, inputForGeneration);
     if (forceMock) {
@@ -1085,7 +1124,7 @@ export async function generateImage(input: GenerateImageRequest) {
 
     if (!apiKey) throw new Error("请先在设置中心配置该模型 API Key");
     const providerId = model.provider_id ?? "";
-    const modelName = model.model_name ?? "";
+    const modelName = runtime.modelName;
     if (useCatalogCapabilities) {
       assertFullQualityModel({ qualityMode: inputForGeneration.qualityMode, providerId, catalogModelId: catalogItem?.id, modelName });
       validateAgainstOfficial({

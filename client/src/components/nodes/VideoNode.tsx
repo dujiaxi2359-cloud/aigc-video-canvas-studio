@@ -74,7 +74,7 @@ function isSeedance15Model(model?: ModelConfig) {
 }
 
 function isVeoModel(model?: ModelConfig) {
-  return /\b(?:google|gemini|veo|omni)\b|veo[-_ .]?\d|veo_/.test(modelIdentity(model));
+  return /\b(?:google|gemini|veo)\b|veo[-_ .]?\d|veo_/.test(modelIdentity(model));
 }
 
 function isKlingOmniModel(model?: ModelConfig) {

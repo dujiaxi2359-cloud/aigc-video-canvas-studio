@@ -1,6 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import { createRequire } from "node:module";
+import { inferImageModelType, inferImageProvider, normalizeImageCapabilities } from "../services/imageCapabilityNormalization.js";
+import type { ModelCapabilities } from "../types/model.js";
 
 type SqliteValue = string | number | bigint | null | Buffer;
 
@@ -305,6 +307,63 @@ async function migrateVolcengineImageProtocols(database: AppDatabase) {
   }
 }
 
+async function migrateImageModelCapabilities(database: AppDatabase) {
+  const rows = await database.all<Array<{ id: string; provider: string; provider_id: string | null; category: string | null; model_type: string; display_name: string; model_name: string; capabilities_json: string }>>(
+    `SELECT id, provider, provider_id, category, model_type, display_name, model_name, capabilities_json
+     FROM model_configs
+     WHERE lower(model_name) LIKE '%gpt-image%'
+        OR lower(model_name) LIKE '%dall-e%'
+        OR lower(model_name) LIKE '%gemini%image%'
+        OR lower(model_name) LIKE '%image%gemini%'
+        OR lower(model_name) LIKE '%nano%banana%'
+        OR lower(model_name) LIKE '%imagen%'
+        OR lower(model_name) LIKE '%qwen-image%'
+        OR lower(model_name) LIKE '%seedream%'
+        OR lower(model_name) LIKE '%flux%'
+        OR lower(model_name) LIKE '%recraft%'
+        OR lower(model_name) LIKE '%ideogram%'
+        OR lower(model_name) LIKE '%midjourney%'
+        OR lower(model_name) LIKE '%jimeng%'
+        OR lower(model_name) LIKE '%图像%'
+        OR lower(model_name) LIKE '%图片%'`
+  );
+  for (const row of rows) {
+    const configuredCapabilities = JSON.parse(row.capabilities_json) as ModelCapabilities;
+    const inferred = inferImageProvider({
+      providerId: row.provider_id ?? undefined,
+      provider: row.provider,
+      modelName: row.model_name,
+      displayName: row.display_name
+    });
+    const nextCapabilities = normalizeImageCapabilities(
+      configuredCapabilities,
+      inferred.providerId,
+      row.model_name,
+      row.display_name,
+      inferred.provider
+    );
+    const nextModelType = inferImageModelType({
+      providerId: inferred.providerId,
+      provider: inferred.provider,
+      modelName: row.model_name,
+      displayName: row.display_name,
+      capabilities: nextCapabilities
+    });
+    await database.run(
+      `UPDATE model_configs
+       SET provider = ?, provider_id = ?, category = ?, model_type = ?, capabilities_json = ?, updated_at = ?
+       WHERE id = ?`,
+      inferred.provider,
+      inferred.providerId,
+      "image",
+      nextModelType,
+      JSON.stringify(nextCapabilities),
+      Date.now(),
+      row.id
+    );
+  }
+}
+
 export async function getDb() {
   if (db) return db;
 
@@ -338,6 +397,7 @@ export async function getDb() {
   }
   await migrateAi666VideoProtocols(db);
   await migrateVolcengineImageProtocols(db);
+  await migrateImageModelCapabilities(db);
   const database = db;
   const ensureColumn = async (table: string, name: string, sql: string) => {
     const columns = await database.all<Array<{ name: string }>>(`PRAGMA table_info(${table})`);

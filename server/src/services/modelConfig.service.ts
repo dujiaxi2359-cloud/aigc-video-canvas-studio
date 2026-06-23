@@ -3,6 +3,8 @@ import { createId } from "../utils/id.js";
 import { now } from "../utils/time.js";
 import { decryptApiKey, encryptApiKey, maskEncryptedApiKey } from "./encryption.service.js";
 import { defaultCapabilities } from "./modelCatalog.js";
+import { inferImageModelType, inferImageProvider, normalizeImageCapabilities } from "./imageCapabilityNormalization.js";
+import { normalizeVideoCapabilities } from "./videoCapabilityNormalization.js";
 import type { ModelCapabilities, ModelConfig } from "../types/model.js";
 import { requireRequestContext } from "./requestContext.js";
 
@@ -133,6 +135,60 @@ function mergeCapabilitiesWithoutOverwriting(existing: ModelCapabilities, incomi
   return merged;
 }
 
+function withTextModelCapability(capabilities: ModelCapabilities, modelName?: string): ModelCapabilities {
+  return {
+    ...capabilities,
+    modelCapability: {
+      ...capabilities.modelCapability,
+      model: capabilities.modelCapability?.model ?? modelName,
+      supportsText: true
+    }
+  };
+}
+
+function normalizeModelConfigInput(input: Partial<ModelConfig> & { apiKey?: string }, fallback?: ModelConfigRow) {
+  const modelName = input.modelName?.trim() || fallback?.model_name || "mock-model";
+  const displayName = input.displayName ?? fallback?.display_name ?? "未命名模型";
+  const provider = input.provider ?? fallback?.provider;
+  const providerId = input.providerId ?? fallback?.provider_id ?? undefined;
+  const category = input.category ?? fallback?.category ?? inferCategory(input.modelType ?? fallback?.model_type ?? "text-to-video");
+  const baseCapabilities = input.capabilities ?? (fallback ? JSON.parse(fallback.capabilities_json) as ModelCapabilities : defaultCapabilities());
+
+  if (category === "image") {
+    const inferred = inferImageProvider({ providerId, provider, modelName, displayName });
+    const nextProviderId = inferred.providerId;
+    const nextProvider = inferred.provider;
+    const capabilities = normalizeImageCapabilities(baseCapabilities, nextProviderId, modelName, displayName, nextProvider);
+    return {
+      ...input,
+      providerId: nextProviderId,
+      provider: nextProvider,
+      category: "image" as const,
+      modelType: inferImageModelType({ providerId: nextProviderId, provider: nextProvider, modelName, displayName, capabilities }),
+      capabilities
+    };
+  }
+
+  if (category === "video") {
+    return {
+      ...input,
+      category: "video" as const,
+      capabilities: normalizeVideoCapabilities(baseCapabilities, providerId, modelName)
+    };
+  }
+
+  if (category === "text") {
+    return {
+      ...input,
+      category: "text" as const,
+      modelType: "text" as const,
+      capabilities: withTextModelCapability(baseCapabilities, modelName)
+    };
+  }
+
+  return { ...input, capabilities: baseCapabilities };
+}
+
 export async function listModelConfigs() {
   const db = await getDb();
   const { workspace } = requireRequestContext();
@@ -151,7 +207,8 @@ export async function createModelConfig(input: Partial<ModelConfig> & { apiKey?:
   const timestamp = now();
   const id = createId("model");
   const { workspace, user } = requireRequestContext();
-  const capabilities: ModelCapabilities = input.capabilities ?? defaultCapabilities();
+  const normalizedInput = normalizeModelConfigInput(input);
+  const capabilities: ModelCapabilities = normalizedInput.capabilities ?? defaultCapabilities();
   const apiKey = submittedApiKey(input.apiKey);
   await db.run(
     `INSERT INTO model_configs
@@ -160,16 +217,16 @@ export async function createModelConfig(input: Partial<ModelConfig> & { apiKey?:
     id,
     workspace.id,
     user.id,
-    input.providerId ?? null,
-    input.provider ?? "自定义 API",
-    input.category ?? inferCategory(input.modelType),
-    input.displayName ?? "未命名模型",
-    input.apiBaseUrl ?? "",
-    input.requiresApiBaseUrl ? 1 : 0,
+    normalizedInput.providerId ?? null,
+    normalizedInput.provider ?? "自定义 API",
+    normalizedInput.category ?? inferCategory(normalizedInput.modelType),
+    normalizedInput.displayName ?? "未命名模型",
+    normalizedInput.apiBaseUrl ?? "",
+    normalizedInput.requiresApiBaseUrl ? 1 : 0,
     apiKey ? encryptApiKey(apiKey) : null,
-    input.modelName ?? "mock-model",
-    input.modelType ?? "text-to-video",
-    input.enabled === false ? 0 : 1,
+    normalizedInput.modelName ?? "mock-model",
+    normalizedInput.modelType ?? "text-to-video",
+    normalizedInput.enabled === false ? 0 : 1,
     JSON.stringify(capabilities),
     timestamp,
     timestamp
@@ -208,9 +265,10 @@ export async function saveModelConfigsBulk(
       );
       const normalizedInput = { ...input, modelName, apiBaseUrl, enabled: true };
       if (existing) {
+        const mergedCapabilities = mergeCapabilitiesWithoutOverwriting(JSON.parse(existing.capabilities_json) as ModelCapabilities, input.capabilities);
         await updateModelConfig(existing.id, {
           ...normalizedInput,
-          capabilities: mergeCapabilitiesWithoutOverwriting(JSON.parse(existing.capabilities_json) as ModelCapabilities, input.capabilities)
+          capabilities: mergedCapabilities
         });
         keptIds.push(existing.id);
         updatedCount += 1;
@@ -255,6 +313,7 @@ export async function updateModelConfig(id: string, input: Partial<ModelConfig> 
   const db = await getDb();
   const existing = await getInternalModelConfig(id);
   if (!existing) throw new Error("Model config not found");
+  const normalizedInput = normalizeModelConfigInput(input, existing);
   const apiKey = submittedApiKey(input.apiKey);
   const encryptedApiKey = apiKey ? encryptApiKey(apiKey) : existing.encrypted_api_key;
   await db.run(
@@ -262,17 +321,17 @@ export async function updateModelConfig(id: string, input: Partial<ModelConfig> 
      SET provider_id = ?, provider = ?, category = ?, display_name = ?, api_base_url = ?, requires_api_base_url = ?,
          encrypted_api_key = ?, model_name = ?, model_type = ?, enabled = ?, capabilities_json = ?, updated_at = ?
      WHERE id = ?`,
-    input.providerId ?? existing.provider_id ?? null,
-    input.provider ?? existing.provider,
-    input.category ?? existing.category ?? inferCategory(input.modelType ?? existing.model_type),
-    input.displayName ?? existing.display_name,
-    input.apiBaseUrl ?? existing.api_base_url,
-    input.requiresApiBaseUrl === undefined ? existing.requires_api_base_url ?? 0 : input.requiresApiBaseUrl ? 1 : 0,
+    normalizedInput.providerId ?? existing.provider_id ?? null,
+    normalizedInput.provider ?? existing.provider,
+    normalizedInput.category ?? existing.category ?? inferCategory(normalizedInput.modelType ?? existing.model_type),
+    normalizedInput.displayName ?? existing.display_name,
+    normalizedInput.apiBaseUrl ?? existing.api_base_url,
+    normalizedInput.requiresApiBaseUrl === undefined ? existing.requires_api_base_url ?? 0 : normalizedInput.requiresApiBaseUrl ? 1 : 0,
     encryptedApiKey ?? null,
-    input.modelName ?? existing.model_name,
-    input.modelType ?? existing.model_type,
-    input.enabled === undefined ? existing.enabled : input.enabled ? 1 : 0,
-    JSON.stringify(input.capabilities ?? JSON.parse(existing.capabilities_json)),
+    normalizedInput.modelName ?? existing.model_name,
+    normalizedInput.modelType ?? existing.model_type,
+    normalizedInput.enabled === undefined ? existing.enabled : normalizedInput.enabled ? 1 : 0,
+    JSON.stringify(normalizedInput.capabilities ?? JSON.parse(existing.capabilities_json)),
     now(),
     id
   );

@@ -19,7 +19,7 @@ function union<T>(base: readonly T[] | undefined, additions: readonly T[]) {
 
 export function isVeoLikeVideoModel(providerId?: string, modelName?: string, capabilities?: ModelCapabilities) {
   const identity = `${providerId ?? ""} ${modelName ?? ""} ${capabilities?.provider ?? ""} ${capabilities?.modelCapability?.model ?? ""}`.toLowerCase();
-  return /\b(?:google|gemini|veo|omni)\b/.test(identity) || /veo[-_ .]?\d|veo_/.test(identity);
+  return /\b(?:google|gemini|veo)\b/.test(identity) || /veo[-_ .]?\d|veo_/.test(identity);
 }
 
 export function isOmniFastVideoModel(modelName?: string, capabilities?: ModelCapabilities) {

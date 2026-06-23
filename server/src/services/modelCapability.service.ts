@@ -2,6 +2,7 @@ import { getDb } from "../db/database.js";
 import { requireRequestContext } from "./requestContext.js";
 import { getVideoModelCapabilityOrLegacy } from "../config/videoModelCapabilities.js";
 import { officialModeToLegacyInputMode, officialVideoModeLabels } from "../types/videoModes.js";
+import { normalizeImageCapabilities } from "./imageCapabilityNormalization.js";
 import { normalizeVideoCapabilities } from "./videoCapabilityNormalization.js";
 import type {
   AvailableImageOptions,
@@ -152,6 +153,10 @@ export function calculateAvailableImageOptions(capabilities: ModelCapabilities, 
   const availableImageQualities = [...(capabilities.imageQualities ?? ["auto"])];
   const availableImageFormats = [...(capabilities.imageFormats ?? ["png"])];
   const inputModes = new Set(capabilities.inputModes.filter((mode) => ["text-to-image", "image-to-image", "image-edit"].includes(mode)));
+  const theoretical = capabilities.modelCapability;
+  if (theoretical?.supportsTextToImage) inputModes.add("text-to-image");
+  if (theoretical?.supportsImageToImage) inputModes.add("image-to-image");
+  if (theoretical?.supportsImageEdit) inputModes.add("image-edit");
   if (capabilities.supportsImageInput || capabilities.supportsReferenceImage || capabilities.supportsMultiImageInput) {
     inputModes.add("image-to-image");
     inputModes.add("image-edit");
@@ -182,13 +187,13 @@ export function calculateAvailableImageOptions(capabilities: ModelCapabilities, 
 
 async function getCapabilities(modelConfigId: string) {
   const db = await getDb();
-  const row = await db.get<{ provider_id?: string; model_name: string; capabilities_json: string }>(
-    "SELECT provider_id, model_name, capabilities_json FROM model_configs WHERE id = ? AND workspace_id = ? AND enabled = 1",
+  const row = await db.get<{ provider_id?: string; provider?: string; display_name?: string; model_name: string; capabilities_json: string }>(
+    "SELECT provider_id, provider, display_name, model_name, capabilities_json FROM model_configs WHERE id = ? AND workspace_id = ? AND enabled = 1",
     modelConfigId,
     requireRequestContext().workspace.id
   );
   if (!row) throw new Error("Model config not found or disabled");
-  return JSON.parse(row.capabilities_json) as ModelCapabilities;
+  return normalizeImageCapabilities(JSON.parse(row.capabilities_json) as ModelCapabilities, row.provider_id, row.model_name, row.display_name, row.provider);
 }
 
 async function getCapabilityContext(modelConfigId: string) {

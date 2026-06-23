@@ -18,6 +18,7 @@
     "test:image-response-extractor": "node ../node_modules/tsx/dist/cli.mjs src/scripts/testImageResponseExtractor.ts",
     "test:midjourney-image-adapter": "node ../node_modules/tsx/dist/cli.mjs src/scripts/testMidjourneyImageAdapter.ts",
     "test:asset-access-token": "node ../node_modules/tsx/dist/cli.mjs src/scripts/testAssetAccessToken.ts",
+    "test:model-capability-classification": "node ../node_modules/tsx/dist/cli.mjs src/scripts/testModelCapabilityClassification.ts",
     "test:veo-capabilities": "node ../node_modules/tsx/dist/cli.mjs src/scripts/testVeoCapabilities.ts"
   },
   "dependencies": {
