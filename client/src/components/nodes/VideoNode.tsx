@@ -44,6 +44,7 @@ const genericCategoryInputModes: Record<OfficialVideoCategory, VideoInputMode[]>
   video_edit: ["video-to-video"],
   video_extension: []
 };
+const HISTORY_FAILURE_GRACE_MS = 30 * 60 * 1000;
 
 function channelHost(apiBaseUrl?: string) {
   if (!apiBaseUrl) return "";
@@ -617,14 +618,16 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
       if (currentData?.status !== "generating" || currentData.generationStartedAt !== startedAt) break;
       try {
         const histories = await historyApi.list();
-        const latest = histories.find((item) =>
+        const candidates = histories.filter((item) =>
           item.nodeId === props.id &&
           item.createdAt >= startedAt - 5000
         );
-        if (latest?.status === "success" && latest.outputUrl) {
+        const success = candidates.find((item) => item.status === "success" && item.outputUrl);
+        if (success?.outputUrl) {
           update(props.id, {
             status: "success",
-            outputUrl: latest.outputUrl,
+            outputUrl: success.outputUrl,
+            outputAssetId: currentData.outputAssetId,
             aspectRatio: selectedAspectRatio ?? props.data.aspectRatio,
             resolution: selectedResolution ?? props.data.resolution,
             duration: selectedDuration ?? props.data.duration,
@@ -638,8 +641,19 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
           recoveringRef.current = false;
           return;
         }
-        if (latest?.status === "error") {
-          const message = latest.errorMessage || "上游任务生成失败。";
+        const processing = candidates.find((item) => item.status === "processing");
+        if (processing) {
+          update(props.id, {
+            status: "generating",
+            errorCode: undefined,
+            errorMessage: undefined,
+            debugMessage: undefined
+          });
+          continue;
+        }
+        const latestError = candidates.find((item) => item.status === "error");
+        if (latestError && Date.now() - startedAt > HISTORY_FAILURE_GRACE_MS && !currentData.outputUrl) {
+          const message = latestError.errorMessage || "上游任务生成失败。";
           update(props.id, {
             status: "error",
             errorMessage: message,
@@ -664,8 +678,10 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
     payloadSummary?: Record<string, unknown>;
   }) {
     const summary = result.payloadSummary ?? {};
-    return [summary.taskId, summary.proxyTaskId, summary.id, summary.requestId].some((value) => typeof value === "string" && value.length > 0)
+    return [summary.taskId, summary.task_id, summary.proxyTaskId, summary.id, summary.requestId, summary.request_id, summary.jobId, summary.job_id].some((value) => typeof value === "string" && value.length > 0)
       || summary.pendingAfterTimeout === true
+      || summary.pendingAfterPollInterruption === true
+      || summary.pendingInBackground === true
       || /已提交|排队|生成中|processing|pending|queued/i.test(`${result.errorMessage ?? ""}\n${result.debugMessage ?? ""}`);
   }
 
@@ -814,13 +830,16 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
         promptExtend: true,
         realismMode: "natural_human"
       });
+      const previousOutputAssetId = props.data.outputAssetId;
+      const previousOutputUrl = props.data.outputUrl;
+      const hasReturnedVideo = Boolean(result.outputAssetId || result.outputUrl);
       update(
         props.id,
-        result.status === "success"
+        result.status === "success" && hasReturnedVideo
           ? {
             status: "success",
-            outputAssetId: result.outputAssetId,
-            outputUrl: result.outputUrl,
+            outputAssetId: result.outputAssetId ?? previousOutputAssetId,
+            outputUrl: result.outputUrl ?? previousOutputUrl,
             payloadSummary: result.payloadSummary,
             aspectRatio: selectedAspectRatio ?? props.data.aspectRatio,
             resolution: selectedResolution ?? props.data.resolution,
@@ -831,9 +850,21 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
             generationStartedAt: undefined,
             clientRequestId: undefined
           }
+          : result.status === "success"
+            ? {
+              status: "generating",
+              outputAssetId: previousOutputAssetId,
+              outputUrl: previousOutputUrl,
+              payloadSummary: result.payloadSummary,
+              errorCode: undefined,
+              errorMessage: "上游已完成，正在等待视频地址回填到画布。",
+              debugMessage: undefined
+            }
           : result.status === "processing"
             ? {
               status: "generating",
+              outputAssetId: previousOutputAssetId,
+              outputUrl: previousOutputUrl,
               payloadSummary: result.payloadSummary,
               errorCode: undefined,
               errorMessage: undefined,
@@ -842,6 +873,8 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
           : resultHasSubmittedTask(result)
             ? {
               status: "generating",
+              outputAssetId: previousOutputAssetId,
+              outputUrl: previousOutputUrl,
               errorCode: undefined,
               errorMessage: "上游任务仍在排队或生成中，完成后将自动回填画布。",
               debugMessage: undefined,
@@ -849,6 +882,8 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
             }
             : {
               status: "error",
+              outputAssetId: previousOutputAssetId,
+              outputUrl: previousOutputUrl,
               errorCode: result.errorCode,
               errorMessage: result.errorMessage,
               debugMessage: result.debugMessage,
@@ -862,7 +897,7 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
       if (/网络请求失败|Failed to fetch|Load failed|NetworkError/i.test(message)) {
         const waitingMessage = "任务可能已提交到中转，正在等待成功结果回填到画布。";
         setLocalError(waitingMessage);
-        update(props.id, { status: "generating", errorMessage: waitingMessage });
+        update(props.id, { status: "generating", errorMessage: waitingMessage, outputAssetId: props.data.outputAssetId, outputUrl: props.data.outputUrl });
         void recoverVideoFromHistory(startedAt);
       } else {
         setLocalError(message);
