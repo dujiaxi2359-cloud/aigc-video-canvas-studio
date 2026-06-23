@@ -935,7 +935,7 @@ export async function generateVideo(input: GenerateVideoRequest) {
   logGenerate({ type: "video", model, catalogItem, apiKey, inputMode: input.inputMode });
   const configuredCapabilities = JSON.parse(model.capabilities_json) as ModelCapabilities;
   const capabilities = normalizeVideoCapabilities(configuredCapabilities, model.provider_id, model.model_name);
-  const inputForGeneration: GenerateVideoRequest = { ...input };
+  const inputForGeneration: GenerateVideoRequest = { ...input, generateCount: 1 };
   try {
     validateVideoRequest(capabilities, inputForGeneration, model.provider_id, model.model_name);
     if (forceMock) {
