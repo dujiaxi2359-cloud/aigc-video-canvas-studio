@@ -15,6 +15,8 @@ import { generateTextWithDeepSeek } from "./providers/deepseek.service.js";
 import { generateImageWithGoogle } from "./providers/googleImage.service.js";
 import { generateTextWithGoogle } from "./providers/googleText.service.js";
 import { generateVideoWithGoogleVeo } from "./providers/googleVeo.service.js";
+import { generateImageWithGrsai } from "./providers/grsaiImage.service.js";
+import { isGrsaiImageEndpoint } from "./providers/grsaiImageProtocol.js";
 import { generateVideoWithGrok } from "./providers/grokVideo.service.js";
 import { generateVideoWithKling } from "./providers/klingVideo.service.js";
 import { generateVideoWithMiniMax } from "./providers/minimaxVideo.service.js";
@@ -470,6 +472,9 @@ async function callImageProvider(input: {
   const { model, providerParams } = input;
   const providerId = model.provider_id ?? "";
   const modelName = model.model_name ?? "";
+  if (providerId === "grsai" || isGrsaiImageEndpoint(providerParams.apiBaseUrl)) {
+    return generateImageWithGrsai(providerParams);
+  }
   if (isMidjourneyImageModel({ providerId, modelName, displayName: model.display_name, apiBaseUrl: providerParams.apiBaseUrl })) {
     return generateImageWithMidjourney(providerParams);
   }

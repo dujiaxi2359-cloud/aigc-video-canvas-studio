@@ -51,6 +51,8 @@ const imageRatios = ["1:1", "3:4", "4:3", "9:16", "16:9"];
 const imageFormats = ["png", "jpeg", "webp"];
 const openAiImageSizes = ["auto", "1024x1024", "1536x1024", "1024x1536"];
 const qwenImageSizes = ["1024x1024", "1024x1536", "1536x1024"];
+const grsaiImageSizes = ["1K", "2K", "4K"];
+const grsaiImageRatios = ["auto", "1:1", "16:9", "9:16", "4:3", "3:4", "3:2", "2:3", "5:4", "4:5", "21:9", "9:21", "1:2", "2:1"];
 
 const defaultTextCapabilities: ModelCapabilities = {
   inputModes: ["text"],
@@ -455,6 +457,10 @@ function normalizeBaseUrl(value: string) {
   const normalized = value.trim().replace(/\/+$/, "");
   try {
     const url = new URL(normalized);
+    if (/^(?:grsaiapi\.com|grsai\.dakka\.com\.cn)$/i.test(url.hostname)) {
+      if (/\/v1\/api\/(?:generate|result)$/i.test(url.pathname)) return url.origin;
+      if (!url.pathname || url.pathname === "/") return url.origin;
+    }
     if (!url.pathname || url.pathname === "/") return `${url.origin}/v1`;
   } catch {
     return normalized;
@@ -469,6 +475,11 @@ function apiHost(value?: string) {
   } catch {
     return value.replace(/^https?:\/\//i, "").replace(/\/.*$/, "");
   }
+}
+
+function isGrsaiApiRoute(value?: string) {
+  const host = apiHost(value).toLowerCase();
+  return host === "grsaiapi.com" || host === "grsai.dakka.com.cn";
 }
 
 function isOfficialApiRoute(value?: string) {
@@ -501,6 +512,30 @@ function classifyModel(modelName: string): ModelCategory {
 
 function inferModel(modelName: string, baseUrl = ""): Pick<ModelConfig, "provider" | "providerId" | "category" | "modelType" | "capabilities" | "displayName"> {
   const name = modelName.toLowerCase();
+  if (isGrsaiApiRoute(baseUrl)) {
+    const nano2 = /nano[-_ .]?banana[-_ .]?2/.test(name);
+    const normalGptImage2 = /gpt[-_ .]?image[-_ .]?2$/.test(name);
+    const capabilities: ModelCapabilities = {
+      inputModes: ["text-to-image", "image-to-image", "image-edit"],
+      imageAspectRatios: nano2 ? [...grsaiImageRatios, "1:4", "4:1", "1:8", "8:1"] : grsaiImageRatios,
+      imageSizes: normalGptImage2 ? ["1K"] : grsaiImageSizes,
+      imageQualities: ["auto", "standard", "high"],
+      imageFormats: ["png"],
+      supportsImageInput: true,
+      supportsMultiImageInput: true,
+      supportsReferenceImage: true,
+      supportsMask: false,
+      supportsTransparentBackground: false
+    };
+    return {
+      provider: relayProviderLabel(baseUrl),
+      providerId: "grsai",
+      category: "image",
+      modelType: "image-edit",
+      capabilities: { ...capabilities, modelCapability: modelCapabilityFor(capabilities, modelName) },
+      displayName: modelName
+    };
+  }
   const official = officialTemplateFor(modelName);
   if (official) {
     const officialRoute = isOfficialApiRoute(baseUrl);

@@ -5,6 +5,7 @@ import { decryptApiKey, encryptApiKey, maskEncryptedApiKey } from "./encryption.
 import { defaultCapabilities } from "./modelCatalog.js";
 import { inferImageModelType, inferImageProvider, normalizeImageCapabilities } from "./imageCapabilityNormalization.js";
 import { normalizeVideoCapabilities } from "./videoCapabilityNormalization.js";
+import { grsaiImageModels, isGrsaiImageEndpoint, normalizeGrsaiImageBaseUrl } from "./providers/grsaiImageProtocol.js";
 import type { ModelCapabilities, ModelConfig } from "../types/model.js";
 import { requireRequestContext } from "./requestContext.js";
 
@@ -41,6 +42,12 @@ function submittedApiKey(apiKey?: string) {
   return trimmed.includes("*") ? undefined : trimmed;
 }
 
+function normalizeApiBaseUrlForStorage(apiBaseUrl?: string) {
+  const trimmed = apiBaseUrl?.trim().replace(/\/+$/, "");
+  if (!trimmed) return "";
+  return isGrsaiImageEndpoint(trimmed) ? normalizeGrsaiImageBaseUrl(trimmed) : trimmed;
+}
+
 function endpointFrom(baseUrl: string, path: string) {
   const trimmedBase = baseUrl.trim().replace(/\/+$/, "");
   const trimmedPath = path.trim();
@@ -75,6 +82,15 @@ function placeholderApiBaseUrlMessage(apiBaseUrl: string) {
     return "请求地址格式不正确，请填写类似 https://真实域名/v1 的 Base URL。";
   }
   return "";
+}
+
+function grsaiProbeMessage(apiBaseUrl: string) {
+  const root = normalizeGrsaiImageBaseUrl(apiBaseUrl);
+  return [
+    "Grsai 图片中转配置格式有效。",
+    `该线路不是 OpenAI /models 协议，生成会调用 ${root}/v1/api/generate，异步结果会查询 ${root}/v1/api/result。`,
+    "系统已按文档提供 nano-banana 与 gpt-image-2 模板模型。"
+  ].join("");
 }
 
 function extractModelId(item: unknown) {
@@ -148,9 +164,10 @@ function withTextModelCapability(capabilities: ModelCapabilities, modelName?: st
 
 function normalizeModelConfigInput(input: Partial<ModelConfig> & { apiKey?: string }, fallback?: ModelConfigRow) {
   const modelName = input.modelName?.trim() || fallback?.model_name || "mock-model";
+  const apiBaseUrl = normalizeApiBaseUrlForStorage(input.apiBaseUrl ?? fallback?.api_base_url ?? "");
   const displayName = input.displayName ?? fallback?.display_name ?? "未命名模型";
-  const provider = input.provider ?? fallback?.provider;
-  const providerId = input.providerId ?? fallback?.provider_id ?? undefined;
+  const provider = isGrsaiImageEndpoint(apiBaseUrl) ? "Grsai 图片中转" : input.provider ?? fallback?.provider;
+  const providerId = isGrsaiImageEndpoint(apiBaseUrl) ? "grsai" : input.providerId ?? fallback?.provider_id ?? undefined;
   const category = input.category ?? fallback?.category ?? inferCategory(input.modelType ?? fallback?.model_type ?? "text-to-video");
   const baseCapabilities = input.capabilities ?? (fallback ? JSON.parse(fallback.capabilities_json) as ModelCapabilities : defaultCapabilities());
 
@@ -161,6 +178,7 @@ function normalizeModelConfigInput(input: Partial<ModelConfig> & { apiKey?: stri
     const capabilities = normalizeImageCapabilities(baseCapabilities, nextProviderId, modelName, displayName, nextProvider);
     return {
       ...input,
+      apiBaseUrl,
       providerId: nextProviderId,
       provider: nextProvider,
       category: "image" as const,
@@ -172,6 +190,7 @@ function normalizeModelConfigInput(input: Partial<ModelConfig> & { apiKey?: stri
   if (category === "video") {
     return {
       ...input,
+      apiBaseUrl,
       category: "video" as const,
       capabilities: normalizeVideoCapabilities(baseCapabilities, providerId, modelName)
     };
@@ -180,13 +199,14 @@ function normalizeModelConfigInput(input: Partial<ModelConfig> & { apiKey?: stri
   if (category === "text") {
     return {
       ...input,
+      apiBaseUrl,
       category: "text" as const,
       modelType: "text" as const,
       capabilities: withTextModelCapability(baseCapabilities, modelName)
     };
   }
 
-  return { ...input, capabilities: baseCapabilities };
+  return { ...input, apiBaseUrl, capabilities: baseCapabilities };
 }
 
 export async function listModelConfigs() {
@@ -253,7 +273,7 @@ export async function saveModelConfigsBulk(
   await db.transaction(async () => {
     for (const input of inputs) {
       const modelName = input.modelName?.trim();
-      const apiBaseUrl = input.apiBaseUrl?.trim().replace(/\/+$/, "");
+      const apiBaseUrl = normalizeApiBaseUrlForStorage(input.apiBaseUrl);
       if (!modelName || !apiBaseUrl) throw new Error("模型名称和上游请求地址不能为空。");
       touchedBaseUrls.add(apiBaseUrl);
 
@@ -393,12 +413,15 @@ export async function testModelConfig(id: string, input: Partial<ModelConfig> & 
   const row = await getInternalModelConfig(id);
   if (!row) throw new Error("Model config not found");
   const apiKey = submittedApiKey(input.apiKey) ?? (row.encrypted_api_key ? decryptApiKey(row.encrypted_api_key) : "");
-  const apiBaseUrl = input.apiBaseUrl?.trim() || row.api_base_url;
+  const apiBaseUrl = normalizeApiBaseUrlForStorage(input.apiBaseUrl ?? row.api_base_url);
   const modelName = input.modelName?.trim() || row.model_name;
   const category = input.category ?? row.category ?? inferCategory(input.modelType ?? row.model_type);
 
   if (!apiBaseUrl || !modelName || !apiKey) {
     return { success: false, message: "请填写 API Base URL、Model Name 和 API Key。" };
+  }
+  if (row.provider_id === "grsai" || isGrsaiImageEndpoint(apiBaseUrl)) {
+    return { success: true, message: grsaiProbeMessage(apiBaseUrl) };
   }
   if (row.provider_id === "google" && !/generativelanguage\.googleapis\.com/i.test(apiBaseUrl)) {
     const videoProtocol = /\/v1\/video\/create\/?$/i.test(apiBaseUrl)
@@ -430,6 +453,13 @@ export async function probeOpenAiCompatibleModels(input: { apiBaseUrl?: string; 
   const placeholderMessage = placeholderApiBaseUrlMessage(apiBaseUrl);
   if (placeholderMessage) {
     return { success: false, message: placeholderMessage, models: [] as string[] };
+  }
+  if (isGrsaiImageEndpoint(apiBaseUrl)) {
+    return {
+      success: true,
+      message: grsaiProbeMessage(apiBaseUrl),
+      models: category === "image" || !category ? [...grsaiImageModels] : []
+    };
   }
 
   const endpoint = endpointFrom(apiBaseUrl, validationPath);

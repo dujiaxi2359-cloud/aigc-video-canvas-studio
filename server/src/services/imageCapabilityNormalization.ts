@@ -1,6 +1,7 @@
 import type { ImageInputMode, ModelCapabilities, ModelType } from "../types/model.js";
 
 const imageRatios = ["1:1", "3:4", "4:3", "9:16", "16:9"];
+const grsaiRatios = ["auto", "1:1", "16:9", "9:16", "4:3", "3:4", "3:2", "2:3", "5:4", "4:5", "21:9", "9:21", "1:2", "2:1"];
 const openAiSizes = ["auto", "1024x1024", "1536x1024", "1024x1536"];
 const openAiFormats = ["png", "jpeg", "webp"];
 const qwenSizes = ["1024x1024", "1024x1536", "1536x1024"];
@@ -48,6 +49,23 @@ export function normalizeImageCapabilities(
 ): ModelCapabilities {
   const value = identity(providerId, modelName, displayName, provider);
   const model = modelName || capabilities.modelCapability?.model || "";
+
+  if (providerId === "grsai" || /grsai/i.test(value)) {
+    const nano2 = /nano[-_]?banana[-_]?2/i.test(value);
+    return withImageModelCapability({
+      ...capabilities,
+      inputModes: ["text-to-image", "image-to-image", "image-edit"],
+      imageAspectRatios: nano2 ? [...grsaiRatios, "1:4", "4:1", "1:8", "8:1"] : grsaiRatios,
+      imageSizes: /gpt[-_]?image[-_]?2(?!.*vip)/i.test(value) ? ["1K"] : ["1K", "2K", "4K"],
+      imageQualities: ["auto", "standard", "high"],
+      imageFormats: ["png"],
+      supportsImageInput: true,
+      supportsMultiImageInput: true,
+      supportsReferenceImage: true,
+      supportsMask: false,
+      supportsTransparentBackground: false
+    }, model);
+  }
 
   if (isQwenImageEditModel(providerId, modelName, displayName, provider)) {
     return withImageModelCapability({
@@ -161,6 +179,7 @@ export function inferImageProvider(input: { providerId?: string; modelName: stri
     return { providerId: "alibaba", provider: "通义万相 / 阿里百炼" };
   }
   const value = identity(input.providerId, input.modelName, input.displayName, input.provider);
+  if (input.providerId === "grsai" || /grsai/i.test(value)) return { providerId: "grsai", provider: "Grsai 图片中转" };
   if (/gemini.*image|image.*gemini|nano[-_ .]?banana|imagen/.test(value)) return { providerId: "google", provider: "Gemini 图像中转" };
   if (/seedream|doubao[-_]?seedream/.test(value)) return { providerId: "seedance", provider: "Seedream / 火山方舟" };
   return { providerId: input.providerId ?? "openai", provider: input.provider ?? "OpenAI 兼容图像中转" };
