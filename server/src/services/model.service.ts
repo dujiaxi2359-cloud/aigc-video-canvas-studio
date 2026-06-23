@@ -123,10 +123,35 @@ function isUpstreamQuotaError(text: string) {
   return /PUBLIC_ERROR_USER_QUOTA_REACHED|USER_QUOTA_REACHED|RESOURCE_EXHAUSTED|quota|credit|balance|insufficient|capacity|at capacity|exhausted|余额不足|额度不足|额度耗尽|并发上限|资源耗尽/i.test(text);
 }
 
+function isUpstreamChannelUnavailable(text: string) {
+  return /无可用渠道|可用渠道不存在|所有分组.*模型|当前分组.*模型|no available channel|channel.*unavailable|model.*not available.*group/i.test(text);
+}
+
+function upstreamChannelMessage(text: string) {
+  const firstLine = text.split("\n")[0]?.trim() ?? "";
+  if (/^中转当前分组没有该模型的可用渠道/.test(firstLine)) return firstLine;
+  const detail = text.replace(/^.*?(?:生成失败|调用失败)[：:]\s*/s, "").split("\n")[0]?.trim();
+  return `中转当前分组没有该模型的可用渠道${detail ? `：${detail}` : "，请在中转后台切换分组、开通模型或联系中转管理员。"}`;
+}
+
+function isUpstreamSocketClosed(error: unknown) {
+  if (!(error instanceof Error)) return false;
+  const cause = (error as Error & { cause?: { code?: string; message?: string } }).cause;
+  return cause?.code === "UND_ERR_SOCKET" || /other side closed|socket.*closed|connection.*reset/i.test(`${error.message}\n${cause?.message ?? ""}`);
+}
+
 function providerErrorMeta(providerId: string | undefined, error: unknown) {
   console.error("[provider adapter error]", providerId, error);
   if (isProviderError(error)) {
     const text = `${error.message}\n${error.debugMessage ?? ""}\n${safeStringify(error.details)}`;
+    if (isUpstreamChannelUnavailable(text)) {
+      return {
+        errorCode: "UPSTREAM_CHANNEL_UNAVAILABLE",
+        errorMessage: upstreamChannelMessage(text),
+        debugMessage: text,
+        payloadSummary: error.details
+      };
+    }
     if (isUpstreamQuotaError(text)) {
       return {
         errorCode: "UPSTREAM_QUOTA_EXHAUSTED",
@@ -143,6 +168,13 @@ function providerErrorMeta(providerId: string | undefined, error: unknown) {
     };
   }
   const message = error instanceof Error ? error.message : "生成失败";
+  if (isUpstreamChannelUnavailable(message)) {
+    return {
+      errorCode: "UPSTREAM_CHANNEL_UNAVAILABLE",
+      errorMessage: upstreamChannelMessage(message),
+      debugMessage: message
+    };
+  }
   if (isUpstreamQuotaError(message)) {
     return {
       errorCode: "UPSTREAM_QUOTA_EXHAUSTED",
@@ -160,7 +192,9 @@ function providerErrorMeta(providerId: string | undefined, error: unknown) {
   if (/fetch failed/i.test(message)) {
     return {
       errorCode: "NETWORK_ERROR",
-      errorMessage: "网络请求失败，请检查本地服务、代理、接口地址或第三方 API 网络连接是否正常。",
+      errorMessage: isUpstreamSocketClosed(error)
+        ? "中转服务器在接收素材时主动断开了连接，通常是中转繁忙或上传限制，不是 Base URL 配置错误。请稍后重试。"
+        : "无法连接中转服务，请检查中转服务状态和网络连接。",
       debugMessage: message
     };
   }

@@ -138,7 +138,6 @@ function inferApiFamily(channel: VideoChannel, baseUrl: string, modelName: strin
   // RunAPI exposes the unified JSON contract even when a migrated workspace
   // still carries an older `grok_video`/OpenAI capability snapshot.
   if (/runapi\.co/.test(value)) return "unified_video_create";
-  if (capabilities.apiFamily) return capabilities.apiFamily;
   if (channel === "official") return "official_provider";
   if (/grok[-_ .]?(?:imagine[-_ .]?video|video|1[-_ .]?5[-_ .]?video)/.test(value)) return "grok_video";
   if (/doubao[-_]?seedance[-_]?1[-_]?5/.test(value)) return "doubao_seedance15";
@@ -148,15 +147,25 @@ function inferApiFamily(channel: VideoChannel, baseUrl: string, modelName: strin
   if (/omni[-_]?fast[-_]?v2v/.test(value)) return "omni_fast_v2v";
   if (/omni[-_]?fast|omni[-_]?flash/.test(value)) return "omni_fast";
   if (/doubao[-_]?seedance[-_]?2[-_]?0|seedance[-_ .]?2/.test(value)) return "seedance2_native";
+  if (capabilities.apiFamily) return capabilities.apiFamily;
   return "openai_videos";
 }
 
+function knownRelayBase(baseUrl: string) {
+  return /(?:ai\.)?(?:cy88\.ai|ai666\.net)|runapi\.co/i.test(baseUrl);
+}
+
 function defaultCreateEndpoint(channel: VideoChannel, baseUrl: string, capabilities: ModelCapabilities, apiFamily: VideoApiFamily) {
-  if (capabilities.createEndpoint) return capabilities.createEndpoint;
-  if (capabilities.endpoint) return capabilities.endpoint;
   if (channel === "official") return "";
   const value = baseUrl.toLowerCase();
   if (/runapi\.co/.test(value)) return "/v1/video/create";
+  if (knownRelayBase(baseUrl)) {
+    if (apiFamily === "seedance2_native") return "/v1/video/generations";
+    if (apiFamily === "unified_video_create") return "/v1/video/create";
+    return "/v1/videos";
+  }
+  if (capabilities.createEndpoint) return capabilities.createEndpoint;
+  if (capabilities.endpoint) return capabilities.endpoint;
   if (/\/v1\/video\/generations\/?$/.test(value)) return "/v1/video/generations";
   if (/\/v1\/video\/create\/?$/.test(value)) return "/v1/video/create";
   if (/\/v1\/videos\/?$/.test(value)) return "/v1/videos";
@@ -166,8 +175,13 @@ function defaultCreateEndpoint(channel: VideoChannel, baseUrl: string, capabilit
 }
 
 function defaultPollEndpoint(baseUrl: string, createEndpoint: string, capabilities: ModelCapabilities, apiFamily: VideoApiFamily) {
-  if (capabilities.pollEndpoint) return capabilities.pollEndpoint;
   if (/runapi\.co/i.test(baseUrl)) return "/v1/videos/{taskId}";
+  if (knownRelayBase(baseUrl)) {
+    if (apiFamily === "seedance2_native") return "/v1/video/generations/{taskId}";
+    if (apiFamily === "unified_video_create") return "/v1/video/query?id={taskId}";
+    return "/v1/videos/{taskId}";
+  }
+  if (capabilities.pollEndpoint) return capabilities.pollEndpoint;
   if (apiFamily === "unified_video_create" || /\/v1\/video\/create\/?$/i.test(createEndpoint)) return "/v1/video/query?id={taskId}";
   if (apiFamily === "seedance2_native") return "/v1/video/generations/{taskId}";
   return `${createEndpoint.replace(/\/+$/g, "")}/{taskId}`;

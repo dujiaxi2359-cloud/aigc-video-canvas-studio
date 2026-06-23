@@ -471,6 +471,25 @@ function apiHost(value?: string) {
   }
 }
 
+function isOfficialApiRoute(value?: string) {
+  const host = apiHost(value).toLowerCase();
+  return host === "api.openai.com"
+    || host === "api.x.ai"
+    || host === "generativelanguage.googleapis.com"
+    || host.endsWith("aiplatform.googleapis.com")
+    || host.endsWith("volces.com")
+    || host.endsWith("volcengineapi.com")
+    || host.endsWith("dashscope.aliyuncs.com")
+    || host.includes("klingai.com")
+    || host === "api.minimax.io"
+    || host === "api.minimaxi.com";
+}
+
+function relayProviderLabel(baseUrl: string) {
+  const host = apiHost(baseUrl);
+  return host ? `${host} 中转` : "自定义中转";
+}
+
 function classifyModel(modelName: string): ModelCategory {
   const official = officialTemplateFor(modelName);
   if (official?.category === "video" || official?.category === "image" || official?.category === "text") return official.category;
@@ -480,21 +499,22 @@ function classifyModel(modelName: string): ModelCategory {
   return "text";
 }
 
-function inferModel(modelName: string): Pick<ModelConfig, "provider" | "providerId" | "category" | "modelType" | "capabilities" | "displayName"> {
+function inferModel(modelName: string, baseUrl = ""): Pick<ModelConfig, "provider" | "providerId" | "category" | "modelType" | "capabilities" | "displayName"> {
   const name = modelName.toLowerCase();
   const official = officialTemplateFor(modelName);
   if (official) {
+    const officialRoute = isOfficialApiRoute(baseUrl);
     const capabilities = {
       ...official.capabilities,
-      modelCapability: modelCapabilityFor(official.capabilities, official.id)
+      modelCapability: modelCapabilityFor(official.capabilities, officialRoute ? official.id : modelName)
     };
     return {
-      provider: official.provider,
+      provider: officialRoute ? official.provider : relayProviderLabel(baseUrl),
       providerId: official.providerId,
       category: official.category,
       modelType: official.modelType,
       capabilities,
-      displayName: official.displayName
+      displayName: officialRoute ? official.displayName : modelName
     };
   }
   const category = classifyModel(modelName);
@@ -504,32 +524,32 @@ function inferModel(modelName: string): Pick<ModelConfig, "provider" | "provider
     const isAlibabaImage = isQwenImageEditModel(modelName) || isQwenImageTextModel(modelName);
     const capabilities = imageCapabilitiesFor(modelName);
     return {
-      provider: isAlibabaImage ? "通义万相 / 阿里百炼" : isVolcengineImage ? "Seedream / 火山方舟" : isGeminiImage ? "Gemini 图像中转" : "OpenAI 兼容图像中转",
+      provider: baseUrl && !isOfficialApiRoute(baseUrl) ? relayProviderLabel(baseUrl) : isAlibabaImage ? "通义万相 / 阿里百炼" : isVolcengineImage ? "Seedream / 火山方舟" : isGeminiImage ? "Gemini 图像中转" : "OpenAI 兼容图像中转",
       providerId: isAlibabaImage ? "alibaba" : isVolcengineImage ? "seedance" : isGeminiImage ? "google" : "openai",
       category,
       modelType: isQwenImageEditModel(modelName) ? "image-edit" : "text-to-image",
       capabilities,
-      displayName: displayNameFor(modelName)
+      displayName: baseUrl && !isOfficialApiRoute(baseUrl) ? modelName : displayNameFor(modelName)
     };
   }
   if (category === "text") {
     return {
-      provider: "OpenAI 兼容文本中转",
+      provider: baseUrl && !isOfficialApiRoute(baseUrl) ? relayProviderLabel(baseUrl) : "OpenAI 兼容文本中转",
       providerId: "deepseek",
       category,
       modelType: "text",
       capabilities: { ...defaultTextCapabilities, modelCapability: modelCapabilityFor(defaultTextCapabilities, modelName) },
-      displayName: displayNameFor(modelName)
+      displayName: baseUrl && !isOfficialApiRoute(baseUrl) ? modelName : displayNameFor(modelName)
     };
   }
   const capabilities = videoCapabilitiesFor(modelName);
   return {
-    provider: "OpenAI 兼容视频中转",
+    provider: baseUrl && !isOfficialApiRoute(baseUrl) ? relayProviderLabel(baseUrl) : "OpenAI 兼容视频中转",
     providerId: "openai-video",
     category,
     modelType: /grok|xai/.test(name) ? "text-to-video" : "image-to-video",
     capabilities: { ...capabilities, modelCapability: modelCapabilityFor(capabilities, modelName) },
-    displayName: displayNameFor(modelName)
+    displayName: baseUrl && !isOfficialApiRoute(baseUrl) ? modelName : displayNameFor(modelName)
   };
 }
 
@@ -561,11 +581,11 @@ type EnabledModelGroup = {
   models: ModelConfig[];
 };
 
-function groupFetchedModels(models: string[]): FetchedModelGroup[] {
+function groupFetchedModels(models: string[], baseUrl = ""): FetchedModelGroup[] {
   const groups = new Map<string, FetchedModelGroup>();
   for (const model of models) {
     const category = classifyModel(model);
-    const official = officialTemplateFor(model);
+    const official = isOfficialApiRoute(baseUrl) ? officialTemplateFor(model) : undefined;
     const key = official ? `${category}:official:${official.id}` : `${category}:raw:${model}`;
     const existing = groups.get(key);
     if (existing) {
@@ -703,10 +723,10 @@ export function ModelConfigCenter() {
     text: fetchedModels.filter((model) => classifyModel(model) === "text")
   }), [fetchedModels]);
   const groupedFetchedModels = useMemo(() => ({
-    image: groupFetchedModels(categorizedFetchedModels.image),
-    video: groupFetchedModels(categorizedFetchedModels.video),
-    text: groupFetchedModels(categorizedFetchedModels.text)
-  }), [categorizedFetchedModels]);
+    image: groupFetchedModels(categorizedFetchedModels.image, apiBaseUrl),
+    video: groupFetchedModels(categorizedFetchedModels.video, apiBaseUrl),
+    text: groupFetchedModels(categorizedFetchedModels.text, apiBaseUrl)
+  }), [apiBaseUrl, categorizedFetchedModels]);
   const savedCategoryCounts = useMemo(() => ({
     image: imageConfigs.length,
     text: textConfigs.length,
@@ -866,8 +886,8 @@ export function ModelConfigCenter() {
     setMessage("");
     try {
       const payloads = models.map((modelName) => {
-        const inferred = inferModel(modelName);
         const normalizedBaseUrl = normalizeBaseUrl(apiBaseUrl);
+        const inferred = inferModel(modelName, normalizedBaseUrl);
         const official = officialTemplateFor(modelName);
         return {
           providerId: inferred.providerId,
@@ -880,7 +900,9 @@ export function ModelConfigCenter() {
           modelName,
           modelType: inferred.modelType as ModelType,
           enabled: true,
-          capabilities: inferred.category === "video" ? mergeOfficialAndChannelCapabilities(official, modelName, normalizedBaseUrl) : inferred.capabilities
+          capabilities: inferred.category === "video"
+            ? mergeOfficialAndChannelCapabilities(isOfficialApiRoute(normalizedBaseUrl) ? official : undefined, modelName, normalizedBaseUrl)
+            : inferred.capabilities
         } satisfies Partial<ModelConfig> & { apiKey?: string };
       });
       const result = await saveModelConfigsBulk(payloads, false);

@@ -43,9 +43,20 @@ function isQuotaError(text: string) {
   return /PUBLIC_ERROR_USER_QUOTA_REACHED|USER_QUOTA_REACHED|RESOURCE_EXHAUSTED|token quota|quota is not enough|quota|credit|balance|insufficient|exhausted|余额不足|额度不足|额度耗尽/i.test(text);
 }
 
+function isChannelUnavailable(text: string) {
+  return /无可用渠道|可用渠道不存在|所有分组.*模型|当前分组.*模型|no available channel|channel.*unavailable/i.test(text);
+}
+
 function generationError(error: unknown) {
   if (isProviderError(error)) {
     const raw = `${error.message}\n${error.debugMessage ?? ""}`;
+    if (isChannelUnavailable(raw)) {
+      return {
+        status: "error" as const,
+        errorCode: "UPSTREAM_CHANNEL_UNAVAILABLE",
+        errorMessage: `中转当前分组没有该模型的可用渠道：${error.message}`
+      };
+    }
     if (isQuotaError(raw)) {
       return {
         status: "error" as const,
@@ -62,6 +73,13 @@ function generationError(error: unknown) {
     };
   }
   const message = error instanceof Error ? error.message : "生成失败";
+  if (isChannelUnavailable(message)) {
+    return {
+      status: "error" as const,
+      errorCode: "UPSTREAM_CHANNEL_UNAVAILABLE",
+      errorMessage: `中转当前分组没有该模型的可用渠道：${message}`
+    };
+  }
   if (isQuotaError(message)) {
     return {
       status: "error" as const,

@@ -483,6 +483,30 @@ assert(cy88SeedanceConfig.apiFamily === "seedance2_native", "cy88 Seedance 2 sho
 assert(cy88SeedanceConfig.finalUrl === "https://ai.cy88.ai/v1/video/generations", "cy88 Seedance 2 should submit to /v1/video/generations");
 assert(cy88SeedanceConfig.pollEndpoint === "/v1/video/generations/{taskId}", "cy88 Seedance 2 should use native task polling");
 assert(cy88SeedanceConfig.imageTransport === "url", "Explicit Seedance 2 image transport should be preserved");
+const repairedCy88SeedanceConfig = resolveVideoRequestConfig({
+  providerId: "seedance",
+  modelName: "doubao-seedance-2-0-fast-260128",
+  apiBaseUrl: "https://ai.cy88.ai/v1",
+  apiKey: "sk-test-key",
+  prompt: "test",
+  nodeId: "node",
+  modelConfigId: "model",
+  inputMode: "reference-to-video",
+  imageAssetIds: ["asset"],
+  duration: 5,
+  aspectRatio: "9:16",
+  resolution: "720P",
+  generateCount: 1
+}, {
+  inputModes: ["text-to-video"],
+  channel: "proxy",
+  apiFamily: "openai_videos",
+  createEndpoint: "/v1/videos/generations",
+  pollEndpoint: "/v1/videos/generations/{taskId}"
+});
+assert(repairedCy88SeedanceConfig.apiFamily === "seedance2_native", "Known Seedance 2 relay IDs must override stale OpenAI protocol metadata");
+assert(repairedCy88SeedanceConfig.finalUrl === "https://ai.cy88.ai/v1/video/generations", "cy88 Seedance 2 should create through /v1/video/generations");
+assert(repairedCy88SeedanceConfig.pollEndpoint === "/v1/video/generations/{taskId}", "cy88 Seedance 2 should use its native poll endpoint");
 
 const seedance15Config = resolveVideoRequestConfig({
   providerId: "seedance",
@@ -538,6 +562,30 @@ const klingAigcConfig = resolveVideoRequestConfig({
 assert(klingAigcConfig.apiFamily === "aigc_video_json", "Kling proxy should use the documented AIGC JSON family");
 assert(klingAigcConfig.requestFormat === "json", "Kling AIGC should submit JSON");
 assert(klingAigcConfig.imageTransport === "url_or_asset", "Kling reference input should use a public asset URL");
+const repairedCy88KlingConfig = resolveVideoRequestConfig({
+  providerId: "kling",
+  modelName: "kling-3.0-omni-720p-ref-mute",
+  apiBaseUrl: "https://ai.cy88.ai/v1",
+  apiKey: "sk-test-key",
+  prompt: "test",
+  nodeId: "node",
+  modelConfigId: "model",
+  inputMode: "reference-to-video",
+  imageAssetIds: ["asset"],
+  duration: 5,
+  aspectRatio: "9:16",
+  resolution: "720P",
+  generateCount: 1
+}, {
+  inputModes: ["text-to-video"],
+  channel: "proxy",
+  apiFamily: "openai_videos",
+  createEndpoint: "/v1/videos/generations",
+  pollEndpoint: "/v1/videos/generations/{taskId}"
+});
+assert(repairedCy88KlingConfig.apiFamily === "aigc_video_json", "Known Kling relay IDs must override stale OpenAI protocol metadata");
+assert(repairedCy88KlingConfig.finalUrl === "https://ai.cy88.ai/v1/videos", "cy88 Kling should create through the proven /v1/videos endpoint");
+assert(repairedCy88KlingConfig.pollEndpoint === "/v1/videos/{taskId}", "cy88 Kling should poll through /v1/videos/{taskId}");
 const klingAigcBody = buildProxyBody({
   providerId: "google",
   modelName: "kling-3.0-omni-720p-ref-audio",

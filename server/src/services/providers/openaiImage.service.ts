@@ -44,6 +44,9 @@ function humanOpenAIError(message: string) {
   if (/please wait and try again later|try again later|temporarily unavailable|service busy|fully loaded/i.test(message)) {
     return "OpenAI 图片中转暂时繁忙，请稍后重试或切换其它图片线路。";
   }
+  if (/无可用渠道|可用渠道不存在|所有分组.*模型|当前分组.*模型|no available channel/i.test(message)) {
+    return `中转当前分组没有该模型的可用渠道：${message}`;
+  }
   if (lower.includes("incorrect api key") || lower.includes("invalid api key") || lower.includes("unauthorized") || lower.includes("401")) {
     return "OpenAI API Key 无效。请确认你填写的是 platform.openai.com 创建的 API Key，不是 ChatGPT 登录账号、不是 Azure Key、不是其他中转平台 Key。";
   }

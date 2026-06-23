@@ -38,6 +38,7 @@ export type ProviderErrorCode =
   | "SEEDANCE_ASSET_UPLOAD_FAILED"
   | "UPSTREAM_HUMAN_PRIVACY_REVIEW"
   | "UPSTREAM_QUOTA_EXHAUSTED"
+  | "UPSTREAM_CHANNEL_UNAVAILABLE"
   | "PROVIDER_ERROR";
 
 export class ProviderError extends Error {
