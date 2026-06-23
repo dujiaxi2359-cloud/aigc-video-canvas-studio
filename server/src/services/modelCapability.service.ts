@@ -149,7 +149,7 @@ function calculateOfficialVideoOptions(
 }
 
 export function calculateAvailableImageOptions(capabilities: ModelCapabilities, nodeContext: ImageNodeContext): AvailableImageOptions {
-  const availableImageSizes = [...(capabilities.imageAspectRatios ?? capabilities.imageSizes ?? ["1:1"])];
+  const availableImageSizes = Array.from(new Set(["auto", ...(capabilities.imageAspectRatios ?? capabilities.imageSizes ?? ["1:1"])]));
   const availableImageQualities = [...(capabilities.imageQualities ?? ["auto"])];
   const availableImageFormats = [...(capabilities.imageFormats ?? ["png"])];
   const inputModes = new Set(capabilities.inputModes.filter((mode) => ["text-to-image", "image-to-image", "image-edit"].includes(mode)));

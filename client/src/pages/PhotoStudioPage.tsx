@@ -26,7 +26,7 @@ export function PhotoStudioPage({ onNavigate }: { onNavigate: (page: Page, proje
       const textNode = canvas.nodes.find((node) => node.type === "textGenerate");
       const imageNode = canvas.nodes.find((node) => node.type === "imageGenerate");
       if (textNode) updateNodeData(textNode.id, { title: "图文策划", prompt: defaultPrompt, taskType: "prompt-polish" });
-      if (imageNode) updateNodeData(imageNode.id, { title: "图像生成", prompt: defaultPrompt, aspectRatio: "1:1", inputMode: "text-to-image" });
+      if (imageNode) updateNodeData(imageNode.id, { title: "图像生成", prompt: defaultPrompt, aspectRatio: "auto", inputMode: "text-to-image" });
       if (textNode && imageNode) {
         useCanvasStore.getState().connectNodes({ source: textNode.id, sourceHandle: "out", target: imageNode.id, targetHandle: "in-0" });
       }

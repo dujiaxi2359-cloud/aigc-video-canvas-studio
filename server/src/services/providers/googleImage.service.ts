@@ -109,13 +109,14 @@ async function imagePartsFromAssets(assetIds: string[] | undefined) {
 
 async function callGeminiImage(ai: any, params: ImageProviderParams, parts: Array<Record<string, unknown>>) {
   const mappedSize = aspectRatioToGoogleSize(params.aspectRatio);
+  const normalizedAspectRatio = normalizeImageAspectRatio(params.aspectRatio);
   const request = {
     model: params.modelName,
     contents: [{ role: "user", parts }],
     config: {
       responseModalities: ["IMAGE"],
-      aspectRatio: normalizeImageAspectRatio(params.aspectRatio),
-      imageConfig: mappedSize ? { width: mappedSize.width, height: mappedSize.height } : undefined
+      ...(normalizedAspectRatio ? { aspectRatio: normalizedAspectRatio } : {}),
+      ...(mappedSize ? { imageConfig: { width: mappedSize.width, height: mappedSize.height } } : {})
     }
   };
 
@@ -152,6 +153,7 @@ export async function generateImageWithGoogle(params: ImageProviderParams): Prom
     }
     const parts = [{ text: params.prompt }, ...inputParts.parts];
     const mappedSize = aspectRatioToGoogleSize(params.aspectRatio);
+    const normalizedAspectRatio = normalizeImageAspectRatio(params.aspectRatio);
     logOfficialPayload(
       buildPayloadSummary({
         providerId: "google",
@@ -159,7 +161,7 @@ export async function generateImageWithGoogle(params: ImageProviderParams): Prom
         actualModelName: params.modelName,
         inputMode: params.inputMode,
         aspectRatio: params.aspectRatio,
-        mappedSize: mappedSize ? `${mappedSize.width}x${mappedSize.height}` : normalizeImageAspectRatio(params.aspectRatio),
+        mappedSize: mappedSize ? `${mappedSize.width}x${mappedSize.height}` : normalizedAspectRatio,
         quality: params.imageQuality,
         qualityMode: params.qualityMode ?? "full_quality",
         hasImageInput: Boolean(params.imageAssetIds?.length),

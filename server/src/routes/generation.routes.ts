@@ -47,9 +47,47 @@ function isChannelUnavailable(text: string) {
   return /无可用渠道|可用渠道不存在|所有分组.*模型|当前分组.*模型|no available channel|channel.*unavailable/i.test(text);
 }
 
+function isTerminalGenerationFailure(text: string) {
+  return isQuotaError(text)
+    || isChannelUnavailable(text)
+    || /审核|安全|违规|safety|content policy|policy violation|moderation|blocked|filtered|RAI|privacy|隐私|unauthorized|invalid api key|incorrect api key|forbidden|permission|access denied|无权限|未开通/i.test(text);
+}
+
+function submittedTaskSignal(value: unknown): Record<string, unknown> | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const record = value as Record<string, unknown>;
+  const taskId = record.taskId ?? record.task_id ?? record.proxyTaskId ?? record.id ?? record.requestId ?? record.request_id ?? record.jobId ?? record.job_id;
+  const status = record.taskStatus ?? record.task_status ?? record.status ?? record.state;
+  if (typeof taskId === "string" && taskId.length > 0) return record;
+  if (record.pendingAfterTimeout === true || record.pendingAfterPollInterruption === true || record.pendingInBackground === true) return record;
+  if (typeof status === "string" && /processing|pending|queued|submitted|running|in_progress|生成中|排队|已提交/i.test(status)) return record;
+  for (const nested of [record.payloadSummary, record.response, record.result, record.data, record.output]) {
+    const found = submittedTaskSignal(nested);
+    if (found) return found;
+  }
+  if (Array.isArray(record.data)) {
+    for (const item of record.data) {
+      const found = submittedTaskSignal(item);
+      if (found) return found;
+    }
+  }
+  return undefined;
+}
+
 function generationError(error: unknown) {
   if (isProviderError(error)) {
     const raw = `${error.message}\n${error.debugMessage ?? ""}`;
+    const submitted = submittedTaskSignal(error.details);
+    if (submitted && !isTerminalGenerationFailure(raw)) {
+      return {
+        status: "processing" as const,
+        payloadSummary: {
+          ...submitted,
+          providerErrorCode: error.errorCode,
+          message: "上游任务已提交，当前仍在生成中。"
+        }
+      };
+    }
     if (isChannelUnavailable(raw)) {
       return {
         status: "error" as const,

@@ -14,17 +14,26 @@ const qwen20RatioToSize: Record<string, { width: number; height: number }> = {
   "16:9": { width: 1696, height: 960 }
 };
 
+export function isAutoImageAspectRatio(aspectRatio?: string) {
+  return !aspectRatio || aspectRatio === "auto";
+}
+
 export function normalizeImageAspectRatio(aspectRatio?: string) {
+  if (isAutoImageAspectRatio(aspectRatio)) return undefined;
   return ratioToSize[aspectRatio ?? ""] ? aspectRatio! : "1:1";
 }
 
 export function aspectRatioToAlibabaSize(aspectRatio?: string) {
-  const size = ratioToSize[normalizeImageAspectRatio(aspectRatio)];
+  const normalized = normalizeImageAspectRatio(aspectRatio);
+  if (!normalized) return undefined;
+  const size = ratioToSize[normalized];
   return `${size.width}*${size.height}`;
 }
 
 export function aspectRatioToQwen20Size(aspectRatio?: string) {
-  const size = qwen20RatioToSize[normalizeImageAspectRatio(aspectRatio)];
+  const normalized = normalizeImageAspectRatio(aspectRatio);
+  if (!normalized) return undefined;
+  const size = qwen20RatioToSize[normalized];
   return `${size.width}*${size.height}`;
 }
 
@@ -46,9 +55,11 @@ const gptImage2TierSizes: Record<string, Record<"1K" | "2K" | "4K", string>> = {
 };
 
 export function aspectRatioToOpenAIImageSize(aspectRatio?: string, modelName?: string, imageSize?: string) {
+  if (isAutoImageAspectRatio(aspectRatio)) return imageSize && /^\d+x\d+$/i.test(imageSize) ? imageSize : undefined;
   if (isGptImage2(modelName)) {
     const tier = normalizeImageTier(imageSize) ?? "2K";
-    const tierSize = gptImage2TierSizes[normalizeImageAspectRatio(aspectRatio)]?.[tier];
+    const normalizedRatio = normalizeImageAspectRatio(aspectRatio) ?? "1:1";
+    const tierSize = gptImage2TierSizes[normalizedRatio]?.[tier];
     if (tierSize) return tierSize;
     if (imageSize && imageSize !== "auto") {
       return imageSize;
@@ -68,5 +79,6 @@ export function aspectRatioToOpenAIImageSize(aspectRatio?: string, modelName?: s
 }
 
 export function aspectRatioToGoogleSize(aspectRatio?: string) {
-  return ratioToSize[normalizeImageAspectRatio(aspectRatio)];
+  const normalized = normalizeImageAspectRatio(aspectRatio);
+  return normalized ? ratioToSize[normalized] : undefined;
 }

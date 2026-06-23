@@ -204,9 +204,9 @@ export async function generateImageWithAzureOpenAI(params: ImageProviderParams):
     if (params.inputMode === "text-to-image") {
       const body: Record<string, unknown> = {
         prompt: params.prompt,
-        n: Math.max(1, params.generateCount || 1),
-        size: requestedSize
+        n: Math.max(1, params.generateCount || 1)
       };
+      if (requestedSize) body.size = requestedSize;
       if (!usesDeploymentPath) body.model = params.modelName;
       if (params.imageQuality && params.imageQuality !== "auto") body.quality = params.imageQuality;
       response = await fetch(endpoint, {
@@ -235,12 +235,12 @@ export async function generateImageWithAzureOpenAI(params: ImageProviderParams):
       }
     } else {
       if (!params.imageAssetIds?.length) throw new ProviderError("MISSING_INPUT_ASSET", "Azure 图片编辑需要连接一张图片素材。");
-      const buildForm = async (size: string) => {
+      const buildForm = async (size?: string) => {
         const form = new FormData();
         if (!usesDeploymentPath) form.set("model", params.modelName);
         form.set("prompt", params.prompt);
         form.set("n", String(Math.max(1, params.generateCount || 1)));
-        form.set("size", size);
+        if (size) form.set("size", size);
         if (params.imageQuality && params.imageQuality !== "auto") form.set("quality", params.imageQuality);
         for (const assetId of params.imageAssetIds!.slice(0, 16)) {
           const asset = await getAsset(assetId);

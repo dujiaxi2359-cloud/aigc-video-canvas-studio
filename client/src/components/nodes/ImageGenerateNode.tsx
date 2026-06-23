@@ -28,7 +28,7 @@ const modeLabels: Record<ImageInputMode, string> = {
   "image-edit": "图片编辑"
 };
 
-const imageAspectRatios = ["1:1", "3:4", "4:3", "9:16", "16:9"];
+const imageAspectRatios = ["auto", "1:1", "3:4", "4:3", "9:16", "16:9"];
 const imageQualityTiers = ["1K", "2K", "4K"];
 
 function qualityValueForTier(tier: string, qualities: string[]) {
@@ -46,8 +46,13 @@ function tierForQuality(value: string | undefined, qualities: string[]) {
 }
 
 function aspectRatioCss(ratio?: string) {
+  if (!ratio || ratio === "auto") return "1 / 1";
   const [width, height] = (ratio || "1:1").split(":").map(Number);
   return `${width || 1} / ${height || 1}`;
+}
+
+function formatImageAspectRatio(value: string | number) {
+  return String(value) === "auto" ? "自动" : String(value);
 }
 
 function toNumber(value: unknown) {
@@ -84,6 +89,25 @@ function humanizeError(error: unknown) {
   const message = error instanceof Error ? error.message : "图片生成失败";
   if (/fetch failed/i.test(message)) return "网络请求失败，请检查本地服务、接口地址或第三方 API 网络连接。";
   return message;
+}
+
+function isTerminalImageFailure(input: { errorCode?: string; errorMessage?: string; debugMessage?: string }) {
+  const text = `${input.errorCode ?? ""}\n${input.errorMessage ?? ""}\n${input.debugMessage ?? ""}`;
+  return /INSUFFICIENT_CREDITS|UPSTREAM_QUOTA_EXHAUSTED|UPSTREAM_CHANNEL_UNAVAILABLE|API_KEY_INVALID|MODEL_ACCESS_DENIED|quota|credit|balance|insufficient|余额|额度|无可用渠道|可用渠道不存在|审核|安全|违规|safety|content policy|policy violation|moderation|blocked|filtered|RAI|privacy|隐私|unauthorized|invalid api key|incorrect api key|forbidden|permission|access denied|无权限|未开通/i.test(text);
+}
+
+function resultHasSubmittedImageTask(result: {
+  errorMessage?: string;
+  debugMessage?: string;
+  payloadSummary?: Record<string, unknown>;
+}) {
+  const summary = result.payloadSummary ?? {};
+  return [summary.taskId, summary.task_id, summary.proxyTaskId, summary.id, summary.requestId, summary.request_id, summary.jobId, summary.job_id]
+    .some((value) => typeof value === "string" && value.length > 0)
+    || summary.pendingAfterTimeout === true
+    || summary.pendingAfterPollInterruption === true
+    || summary.pendingInBackground === true
+    || /已提交|排队|生成中|processing|pending|queued|submitted|running|in_progress/i.test(`${summary.taskStatus ?? ""}\n${summary.status ?? ""}\n${result.errorMessage ?? ""}\n${result.debugMessage ?? ""}`);
 }
 
 function statusText(status: ImageGenerateNodeData["status"]) {
@@ -277,7 +301,6 @@ function ImageGenerateNodeComponent(props: NodeProps<ImageGenerateNodeData>) {
         setOptions(result);
         const patch: Partial<ImageGenerateNodeData> = {};
         if (result.normalizedSelection.inputMode && result.normalizedSelection.inputMode !== props.data.inputMode) patch.inputMode = result.normalizedSelection.inputMode as ImageInputMode;
-        if (!props.data.aspectRatio) patch.aspectRatio = "1:1";
         if (result.normalizedSelection.imageQuality && result.normalizedSelection.imageQuality !== props.data.imageQuality) patch.imageQuality = result.normalizedSelection.imageQuality;
         if (result.normalizedSelection.imageFormat && result.normalizedSelection.imageFormat !== props.data.imageFormat) patch.imageFormat = result.normalizedSelection.imageFormat;
         if (Object.keys(patch).length) update(props.id, patch as Record<string, unknown>);
@@ -291,13 +314,15 @@ function ImageGenerateNodeComponent(props: NodeProps<ImageGenerateNodeData>) {
   }, [props.data.modelConfigId, props.data.inputMode, props.data.imageSize, props.data.imageQuality, props.data.imageFormat, props.data.aspectRatio, props.id, resolvedInputs.hasImageInput, update]);
 
   const availableModes = (options?.availableInputModes ?? selectedModel?.capabilities.inputModes.filter((mode) => ["text-to-image", "image-to-image", "image-edit"].includes(mode)) ?? ["text-to-image"]) as ImageInputMode[];
-  const ratios = selectedModel?.capabilities.imageAspectRatios ?? imageAspectRatios;
+  const ratios = Array.from(new Set(["auto", ...(selectedModel?.capabilities.imageAspectRatios ?? imageAspectRatios)]));
   const qualities = options?.availableImageQualities ?? selectedModel?.capabilities.imageQualities ?? ["auto"];
   const formats = options?.availableImageFormats ?? selectedModel?.capabilities.imageFormats ?? ["png"];
   const selectedQualityTier = imageQualityTiers.includes(props.data.imageSize ?? "")
     ? props.data.imageSize!
     : tierForQuality(props.data.imageQuality, qualities);
-  const displayRatio = outputRatioFromSummary(props.data.payloadSummary, props.data.aspectRatio || "1:1");
+  const selectedAspectRatio = props.data.aspectRatio ?? "auto";
+  const requestAspectRatio = selectedAspectRatio === "auto" ? undefined : selectedAspectRatio;
+  const displayRatio = outputRatioFromSummary(props.data.payloadSummary, selectedAspectRatio === "auto" ? "1:1" : selectedAspectRatio);
   const imageReferenceLimit = imageReferenceLimitLabel(props.data.inputMode, selectedModel?.modelName || selectedModel?.displayName);
 
   useEffect(() => {
@@ -312,6 +337,7 @@ function ImageGenerateNodeComponent(props: NodeProps<ImageGenerateNodeData>) {
     }
     update(props.id, { status: "generating", errorMessage: undefined });
     setLocalError("");
+    let requestSent = false;
     try {
       const promptForRequest = localPrompt || props.data.prompt || "";
       const promptReferencedInputs = resolvePromptReferencedImageInputs(promptForRequest, resolvedInputs);
@@ -325,12 +351,13 @@ function ImageGenerateNodeComponent(props: NodeProps<ImageGenerateNodeData>) {
       if (props.data.inputMode !== "text-to-image" && !requestInputs.hasImageInput) {
         throw new Error(props.data.inputMode === "image-edit" ? "图片编辑需要连接一张图片素材。" : "图生图需要连接一张图片素材。");
       }
+      requestSent = true;
       const result = await generationApi.image({
         nodeId: props.id,
         modelConfigId: props.data.modelConfigId,
         inputMode: props.data.inputMode,
         prompt: promptForProvider,
-        aspectRatio: props.data.aspectRatio ?? ratios[0],
+        ...(requestAspectRatio ? { aspectRatio: requestAspectRatio } : {}),
         imageSize: props.data.imageSize,
         imageQuality: props.data.imageQuality ?? qualities[0],
         imageFormat: props.data.imageFormat ?? formats[0],
@@ -355,10 +382,26 @@ function ImageGenerateNodeComponent(props: NodeProps<ImageGenerateNodeData>) {
               debugMessage: undefined,
               payloadSummary: result.payloadSummary
             }
-          : { status: "error", errorMessage: result.errorMessage, payloadSummary: result.payloadSummary }
+          : resultHasSubmittedImageTask(result) && !isTerminalImageFailure(result)
+            ? {
+              status: "generating",
+              outputAssetId: previousOutputAssetId,
+              outputUrl: previousOutputUrl,
+              errorCode: undefined,
+              errorMessage: "上游图片任务已提交，当前仍在生成中。",
+              debugMessage: undefined,
+              payloadSummary: result.payloadSummary
+            }
+          : { status: "error", errorCode: result.errorCode, errorMessage: result.errorMessage, debugMessage: result.debugMessage, payloadSummary: result.payloadSummary }
       );
     } catch (error) {
       const message = humanizeError(error);
+      if (requestSent && !isTerminalImageFailure({ errorMessage: message })) {
+        const waitingMessage = "图片任务可能已提交到中转，正在等待上游生成完成。";
+        setLocalError(waitingMessage);
+        update(props.id, { status: "generating", errorMessage: waitingMessage, outputAssetId: props.data.outputAssetId, outputUrl: props.data.outputUrl });
+        return;
+      }
       setLocalError(message);
       update(props.id, { status: "error", errorMessage: message });
     }
@@ -451,10 +494,10 @@ function ImageGenerateNodeComponent(props: NodeProps<ImageGenerateNodeData>) {
         <div className="creation-dock-identity">
           <div className="creation-model-field"><ImagePlus size={14} /><Select className="creation-model-select" value={props.data.modelConfigId ?? ""} onChange={(event) => update(props.id, { modelConfigId: event.target.value })}><option value="">选择模型</option>{imageModels.map((model) => <option key={model.id} value={model.id}>{model.displayName}</option>)}</Select></div>
           <div ref={parameterAnchorRef} className={`creation-parameter-wrap nodrag nopan ${parametersOpen ? "is-open" : ""}`}>
-          <button type="button" className="creation-parameter-pill" onClick={() => { setActiveTool(null); setParametersOpen((value) => !value); }}>{props.data.aspectRatio ?? ratios[0]} · {selectedQualityTier}</button>
+          <button type="button" className="creation-parameter-pill" onClick={() => { setActiveTool(null); setParametersOpen((value) => !value); }}>{formatImageAspectRatio(selectedAspectRatio)} · {selectedQualityTier}</button>
           <NodeParameterPopover open={parametersOpen} anchorRef={parameterAnchorRef} onClose={() => setParametersOpen(false)} sections={[
             { label: "生成方式", value: props.data.inputMode, options: availableModes, format: (value) => modeLabels[value as ImageInputMode], onChange: (value) => update(props.id, { inputMode: value }) },
-            { label: "比例", value: props.data.aspectRatio ?? ratios[0], options: ratios, onChange: (value) => update(props.id, { aspectRatio: value }) },
+            { label: "比例", value: selectedAspectRatio, options: ratios, format: formatImageAspectRatio, onChange: (value) => update(props.id, { aspectRatio: String(value) }) },
             { label: "画质", value: selectedQualityTier, options: imageQualityTiers, onChange: (value) => update(props.id, { imageSize: String(value), imageQuality: qualityValueForTier(String(value), qualities) }) }
           ]} />
           </div>

@@ -22,6 +22,7 @@ const cogViewSizes: Record<string, string> = {
 function zhipuImageSize(params: ImageProviderParams) {
   const requested = params.imageSize?.trim();
   if (requested && /^\d+x\d+$/i.test(requested)) return requested.toLowerCase();
+  if (!params.aspectRatio || params.aspectRatio === "auto") return undefined;
   const sizes = params.modelName.toLowerCase() === "glm-image" ? glmImageSizes : cogViewSizes;
   return sizes[params.aspectRatio ?? "1:1"] ?? sizes["1:1"];
 }
@@ -67,13 +68,14 @@ export async function generateImageWithZhipu(params: ImageProviderParams): Promi
     throw new ProviderError("MODEL_MODE_UNSUPPORTED", "智普官方 GLM-Image / CogView 当前图片生成接口仅支持文生图，请移除参考图片或改用支持图生图的模型。");
   }
 
+  const size = zhipuImageSize(params);
   const body = {
     model: params.modelName,
     prompt: params.prompt,
     quality: params.modelName.toLowerCase() === "glm-image"
       ? "hd"
       : params.imageQuality === "high" || params.imageQuality === "hd" ? "hd" : "standard",
-    size: zhipuImageSize(params),
+    ...(size ? { size } : {}),
     watermark_enabled: false
   };
 

@@ -367,7 +367,7 @@ function validateAgainstOfficial(input: {
   if (!official) return;
   if (official.runtimeStatus === "not_implemented") throw new Error("当前模型真实 adapter 尚未完整接入。");
   if (!official.supportedInputModes.includes(input.inputMode)) throw new Error("当前官方模型不支持该输入模式。");
-  if (input.aspectRatio && official.supportedAspectRatios.length && !official.supportedAspectRatios.includes(input.aspectRatio)) {
+  if (input.aspectRatio && input.aspectRatio !== "auto" && official.supportedAspectRatios.length && !official.supportedAspectRatios.includes(input.aspectRatio)) {
     throw new Error(`当前官方模型不支持 ${input.aspectRatio} 比例。`);
   }
   if (input.duration && official.supportedDurations?.length && !official.supportedDurations.includes(input.duration)) {
@@ -944,7 +944,7 @@ async function enforceVideoAspectRatio(result: ProviderGenerateResult, aspectRat
 }
 
 async function enforceImageAspectRatio(result: ProviderGenerateResult, aspectRatio?: string): Promise<ProviderGenerateResult> {
-  if (!aspectRatio) return result;
+  if (!aspectRatio || aspectRatio === "auto") return result;
   const ensured = await ensureImageAspectRatio(result.localPath, aspectRatio);
   if (!ensured) return result;
   return {

@@ -231,7 +231,13 @@ async function pollTask(params: ImageProviderParams, taskId: string, initial: un
     }
     if (Date.now() - startedAt > 30 * 60 * 1000) {
       await saveGenerationTask({ id: taskId, status: "timeout", result: task, errorMessage: "Midjourney 任务超过 30 分钟仍未完成。" });
-      throw new ProviderError("VEO_OPERATION_TIMEOUT", "Midjourney 任务超过 30 分钟仍未完成。");
+      throw new ProviderError("VEO_OPERATION_TIMEOUT", "Midjourney 任务仍在生成中，查询超过等待时间。", undefined, {
+        provider: "midjourney",
+        taskId,
+        taskStatus: midjourneyTaskStatus(task) || "processing",
+        pendingAfterTimeout: true,
+        response: task
+      });
     }
 
     await sleep(4000);

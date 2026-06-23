@@ -123,6 +123,7 @@ export async function generateImageWithAlibaba(params: ImageProviderParams): Pro
   }
   content.push({ text: params.prompt });
   const negativePrompt = buildNegativePrompt({ negativePrompt: params.negativePrompt, realismMode: params.realismMode });
+  const mappedSize = mappedAlibabaImageSize(params.modelName, params.aspectRatio);
 
   const body = {
     model: params.modelName,
@@ -131,8 +132,8 @@ export async function generateImageWithAlibaba(params: ImageProviderParams): Pro
     },
     parameters: {
       n: Math.max(1, params.generateCount || 1),
-      size: mappedAlibabaImageSize(params.modelName, params.aspectRatio),
       watermark: false,
+      ...(mappedSize ? { size: mappedSize } : {}),
       ...(negativePrompt ? { negative_prompt: negativePrompt } : {}),
       ...(params.seed !== undefined ? { seed: params.seed } : {})
     }
@@ -145,7 +146,7 @@ export async function generateImageWithAlibaba(params: ImageProviderParams): Pro
       actualModelName: params.modelName,
       inputMode: params.inputMode,
       aspectRatio: params.aspectRatio,
-      mappedSize: body.parameters.size,
+      mappedSize,
       quality: params.imageQuality,
       qualityMode: params.qualityMode ?? "full_quality",
       hasImageInput: Boolean(params.imageAssetIds?.length),
@@ -162,7 +163,7 @@ export async function generateImageWithAlibaba(params: ImageProviderParams): Pro
       },
       payloadSummary: {
         endpointType: "dashscope.multimodal-generation",
-        size: body.parameters.size,
+        size: mappedSize,
         n: body.parameters.n,
         contentTypes: content.map((item) => Object.keys(item)[0])
       }

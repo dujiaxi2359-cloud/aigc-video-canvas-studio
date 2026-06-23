@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { openAIImageTaskId, openAIImageTaskStatus } from "../services/providers/openaiImage.service.js";
+import { aspectRatioToAlibabaSize, aspectRatioToGoogleSize, aspectRatioToOpenAIImageSize, normalizeImageAspectRatio } from "../utils/imageAspectRatio.js";
 import { extractImagePayload, summarizeImageResponseShape } from "../utils/imageResponseExtractor.js";
 
 const base64 = Buffer.alloc(256, 7).toString("base64");
@@ -27,5 +28,10 @@ assert(openAIImageTaskStatus({ id: "task_123", status: "processing" }) === "proc
 
 const summary = summarizeImageResponseShape({ data: [{ b64_json: base64.repeat(30) }] });
 assert(summary.includes("chars"), "large strings should be summarized");
+
+assert(normalizeImageAspectRatio("auto") === undefined, "auto image ratio should not normalize to 1:1");
+assert(aspectRatioToOpenAIImageSize("auto", "gpt-image-2", "2K") === undefined, "auto OpenAI image ratio should not send a fixed tier size");
+assert(aspectRatioToAlibabaSize("auto") === undefined, "auto Alibaba image ratio should not send a fixed size");
+assert(aspectRatioToGoogleSize("auto") === undefined, "auto Google image ratio should not send imageConfig dimensions");
 
 console.log("Image response extractor tests passed");
