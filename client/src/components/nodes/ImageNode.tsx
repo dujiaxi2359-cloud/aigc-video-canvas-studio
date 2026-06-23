@@ -143,42 +143,45 @@ export function ImageNode(props: NodeProps<ImageNodeData>) {
 
   const floatingToolbar = previewUrl ? (
     <div className="image-asset-production-toolbar nodrag nopan" onPointerDown={(event) => event.stopPropagation()}>
-      <button type="button" className="image-asset-tool is-emphasis" title="全景延展" onClick={() => createImageFollowUp("基于参考图片做全景延展：保持主体与场景真实一致，向画面外自然扩展环境，不改变主体比例和关键细节。", "全景延展")}>
-        <Sparkles size={14} /><span>全景</span><small>NEW</small>
-      </button>
-      <button type="button" className="image-asset-tool" title="多角度视频参考" onClick={() => createVideoFollowUp("基于参考图片生成多角度展示视频：保持主体身份、产品和场景一致，镜头自然切换多个观察角度。", "多角度视频")}>
-        <Orbit size={15} /><span>多角度</span>
-      </button>
-      <button type="button" className="image-asset-tool" title="打光优化" onClick={() => createImageFollowUp("基于参考图片做商业打光优化：保持主体和构图不变，增强自然光影、层次、质感和产品可见度。", "打光优化")}>
-        <SunMedium size={15} /><span>打光</span>
-      </button>
-      <div className={`image-asset-tool-menu ${gridMenuOpen ? "is-open" : ""}`}>
-        <button type="button" className="image-asset-tool" title="九宫格与设定图" onClick={() => setGridMenuOpen((value) => !value)}>
-          <Grid3X3 size={15} /><span>九宫格</span><ChevronDown size={13} />
+      <div className="image-asset-tool-group is-primary">
+        <button type="button" className="image-asset-tool is-emphasis" title="全景延展" onClick={() => createImageFollowUp("基于参考图片做全景延展：保持主体与场景真实一致，向画面外自然扩展环境，不改变主体比例和关键细节。", "全景延展")}>
+          <Sparkles size={14} /><span>全景</span><small>NEW</small>
         </button>
-        {gridMenuOpen && (
-          <div className="image-asset-tool-popover">
-            {imageGridActions.map((item) => {
-              const Icon = item.icon;
-              return (
-                <button key={item.label} type="button" onClick={() => { setGridMenuOpen(false); createImageFollowUp(item.prompt, item.label, item.label.includes("四宫格") ? "1:1" : ratio); }}>
-                  <Icon size={15} /><span>{item.label}</span>
-                </button>
-              );
-            })}
-          </div>
-        )}
+        <button type="button" className="image-asset-tool" title="多角度视频参考" onClick={() => createVideoFollowUp("基于参考图片生成多角度展示视频：保持主体身份、产品和场景一致，镜头自然切换多个观察角度。", "多角度视频")}>
+          <Orbit size={15} /><span>多角度</span>
+        </button>
+        <button type="button" className="image-asset-tool" title="打光优化" onClick={() => createImageFollowUp("基于参考图片做商业打光优化：保持主体和构图不变，增强自然光影、层次、质感和产品可见度。", "打光优化")}>
+          <SunMedium size={15} /><span>打光</span>
+        </button>
+        <div className={`image-asset-tool-menu ${gridMenuOpen ? "is-open" : ""}`}>
+          <button type="button" className="image-asset-tool" title="九宫格与设定图" onClick={() => setGridMenuOpen((value) => !value)}>
+            <Grid3X3 size={15} /><span>九宫格</span><ChevronDown size={13} />
+          </button>
+          {gridMenuOpen && (
+            <div className="image-asset-tool-popover">
+              {imageGridActions.map((item) => {
+                const Icon = item.icon;
+                return (
+                  <button key={item.label} type="button" onClick={() => { setGridMenuOpen(false); createImageFollowUp(item.prompt, item.label, item.label.includes("四宫格") ? "1:1" : ratio); }}>
+                    <Icon size={15} /><span>{item.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+        <button type="button" className="image-asset-tool compact" title="高清增强" onClick={() => createImageFollowUp("基于参考图片做高清增强：保持主体完全一致，提升清晰度、质感和细节，不改变构图与比例。", "高清增强")}>
+          <Badge size={17} /><span>高清</span>
+        </button>
+        <button type="button" className="image-asset-tool" title="宫格切分" onClick={() => createImageFollowUp("将参考图片整理为宫格切分版：按主体、产品、场景和细节模块拆分，适合后续分镜和素材管理。", "宫格切分", "1:1")}>
+          <Scissors size={15} /><span>切分</span>
+        </button>
       </div>
-      <button type="button" className="image-asset-tool compact" title="高清增强" onClick={() => createImageFollowUp("基于参考图片做高清增强：保持主体完全一致，提升清晰度、质感和细节，不改变构图与比例。", "高清增强")}>
-        <Badge size={17} /><span>高清</span>
-      </button>
-      <button type="button" className="image-asset-tool" title="宫格切分" onClick={() => createImageFollowUp("将参考图片整理为宫格切分版：按主体、产品、场景和细节模块拆分，适合后续分镜和素材管理。", "宫格切分", "1:1")}>
-        <Scissors size={15} /><span>宫格切分</span>
-      </button>
-      <span className="image-asset-tool-divider" />
-      <button type="button" className="image-asset-icon-tool" title="编辑涂抹" onClick={() => setEditorOpen(true)}><Brush size={15} /></button>
-      <button type="button" className="image-asset-icon-tool" title="下载" onClick={downloadCurrent}><Download size={15} /></button>
-      <button type="button" className="image-asset-icon-tool" title="放大预览" onClick={() => window.open(previewUrl, "_blank", "noopener,noreferrer")}><Maximize2 size={15} /></button>
+      <div className="image-asset-tool-group is-icons">
+        <button type="button" className="image-asset-icon-tool" title="编辑涂抹" onClick={() => setEditorOpen(true)}><Brush size={15} /></button>
+        <button type="button" className="image-asset-icon-tool" title="下载" onClick={downloadCurrent}><Download size={15} /></button>
+        <button type="button" className="image-asset-icon-tool" title="放大预览" onClick={() => window.open(previewUrl, "_blank", "noopener,noreferrer")}><Maximize2 size={15} /></button>
+      </div>
     </div>
   ) : null;
 

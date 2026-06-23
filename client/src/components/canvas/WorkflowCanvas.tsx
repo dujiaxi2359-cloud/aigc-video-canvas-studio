@@ -27,15 +27,16 @@ const ReactFlowWithExtras = ReactFlow as unknown as React.ComponentType<any>;
 const edgeTypes = { studioEdge: StudioEdge };
 const nodeDragHandleSelector = ".drag-handle, .node-drag-handle";
 
-function ZoomControls({ showGrid, showMiniMap, snapToGrid, onToggleGrid, onToggleMiniMap, onToggleSnap }: {
+function ZoomControls({ showGrid, showMiniMap, snapToGrid, onToggleGrid, onToggleMiniMap, onToggleSnap, onOrganize }: {
   showGrid: boolean;
   showMiniMap: boolean;
   snapToGrid: boolean;
   onToggleGrid: () => void;
   onToggleMiniMap: () => void;
   onToggleSnap: () => void;
+  onOrganize: () => void;
 }) {
-  const { fitView, zoomTo } = useReactFlow();
+  const { zoomTo } = useReactFlow();
   const [zoom, setZoom] = useState(0.85);
   const zoomFrameRef = useRef<number | null>(null);
 
@@ -53,18 +54,18 @@ function ZoomControls({ showGrid, showMiniMap, snapToGrid, onToggleGrid, onToggl
     function handleKeydown(event: KeyboardEvent) {
       if (!event.altKey || event.key.toLowerCase() !== "f") return;
       event.preventDefault();
-      fitView({ padding: 0.28 });
+      onOrganize();
     }
     window.addEventListener("keydown", handleKeydown);
     return () => window.removeEventListener("keydown", handleKeydown);
-  }, [fitView]);
+  }, [onOrganize]);
 
   return (
     <Panel position="bottom-left" className="!bottom-1 !left-1 !m-0">
       <div className="canvas-view-controls">
         <button title="画布小地图" className={showMiniMap ? "is-active" : ""} onClick={onToggleMiniMap}><Map size={16} /></button>
         <button title={showGrid ? "隐藏点阵" : "显示点阵"} className={showGrid ? "is-active" : ""} onClick={onToggleGrid}><Grid3X3 size={16} /></button>
-        <button title="整理画布 ⌥F" onClick={() => fitView({ padding: 0.28 })}><Scan size={16} /></button>
+        <button title="自动整理画布 ⌥F" onClick={onOrganize}><Scan size={16} /></button>
         <button title="网格吸附" className={snapToGrid ? "is-active" : ""} onClick={onToggleSnap}><Magnet size={16} /></button>
         <input title="缩放" type="range" min="30" max="140" value={Math.round(zoom * 100)} onChange={handleZoomChange} />
         <span className="canvas-view-zoom-readout">{Math.round(zoom * 100)}%</span>
@@ -112,7 +113,7 @@ function nearestTargetHandle(point: { x: number; y: number }, sourceNodeId: stri
 }
 
 export function WorkflowCanvas({ showGrid = true, onToggleGrid = () => undefined }: { showGrid?: boolean; onToggleGrid?: () => void }) {
-  const { nodes, edges, onNodesChange, onEdgesChange, connectNodes, addConnectedNode, addAssetNode, selectEdge, clearSelection } = useCanvasStore();
+  const { nodes, edges, onNodesChange, onEdgesChange, connectNodes, addConnectedNode, addAssetNode, selectEdge, clearSelection, organizeCanvas } = useCanvasStore();
   const reactFlowWrapper = useRef<HTMLDivElement | null>(null);
   const connectingNodeRef = useRef<{ nodeId: string | null; handleId?: string | null }>({ nodeId: null, handleId: null });
   const didConnectRef = useRef(false);
@@ -139,6 +140,15 @@ export function WorkflowCanvas({ showGrid = true, onToggleGrid = () => undefined
 
   const displayEdges = useMemo(() => edges.map((edge) => ({ ...edge, type: "studioEdge", animated: false })), [edges]);
   const displayNodes = useMemo(() => nodes.map((node) => ({ ...node, dragHandle: nodeDragHandleSelector })), [nodes]);
+
+  const organizeAndFit = useCallback(() => {
+    organizeCanvas();
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        reactFlow?.fitView?.({ padding: 0.2, duration: 420 });
+      });
+    });
+  }, [organizeCanvas, reactFlow]);
 
   const beginCanvasInteraction = useCallback(() => {
     if (interactionTimeoutRef.current) {
@@ -414,6 +424,7 @@ export function WorkflowCanvas({ showGrid = true, onToggleGrid = () => undefined
           onToggleGrid={onToggleGrid}
           onToggleMiniMap={() => setShowMiniMap((value) => !value)}
           onToggleSnap={() => setSnapToGrid((value) => !value)}
+          onOrganize={organizeAndFit}
         />
         {showMiniMap && (
           <MiniMap

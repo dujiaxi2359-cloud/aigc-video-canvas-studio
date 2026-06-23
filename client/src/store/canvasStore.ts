@@ -55,6 +55,7 @@ type State = {
   disconnectNodeInputs: (id: string) => void;
   disconnectNodeOutputs: (id: string) => void;
   deleteUnconnectedNodes: () => void;
+  organizeCanvas: () => void;
   clearCanvas: () => void;
   selectAll: () => void;
   clearSelection: () => void;
@@ -124,6 +125,98 @@ function ratioFromAsset(asset: { width?: number; height?: number; aspectRatio?: 
   if (Math.abs(value - 9 / 16) < 0.04) return "9:16";
   if (Math.abs(value - 1) < 0.04) return "1:1";
   return `${asset.width}:${asset.height}`;
+}
+
+function nodeHeight(node: Node) {
+  const type = node.type as WorkflowNodeType | undefined;
+  if (type === "video") return 520;
+  if (type === "imageGenerate") return 460;
+  if (type === "image") {
+    const data = (node.data ?? {}) as { aspectRatio?: string; width?: number; height?: number };
+    const ratio = data.aspectRatio?.split(":").map(Number);
+    const value = ratio?.[0] && ratio?.[1] ? ratio[0] / ratio[1] : data.width && data.height ? data.width / data.height : 1;
+    if (value > 1.35) return 260;
+    if (value < 0.72) return 430;
+    return 340;
+  }
+  if (type === "audio" || type === "script" || type === "compose") return 260;
+  return 220;
+}
+
+function organizeNodes(nodes: Node[], edges: Edge[]) {
+  if (nodes.length <= 1) return nodes;
+  const ids = new Set(nodes.map((node) => node.id));
+  const incoming = new Map<string, string[]>();
+  const outgoing = new Map<string, string[]>();
+  nodes.forEach((node) => {
+    incoming.set(node.id, []);
+    outgoing.set(node.id, []);
+  });
+  edges.forEach((edge) => {
+    if (!ids.has(edge.source) || !ids.has(edge.target)) return;
+    outgoing.get(edge.source)?.push(edge.target);
+    incoming.get(edge.target)?.push(edge.source);
+  });
+
+  const level = new Map<string, number>();
+  const roots = nodes.filter((node) => (incoming.get(node.id)?.length ?? 0) === 0);
+  const queue = (roots.length ? roots : nodes).map((node) => node.id);
+  queue.forEach((id) => level.set(id, 0));
+
+  for (let index = 0; index < queue.length; index += 1) {
+    const id = queue[index];
+    const nextLevel = (level.get(id) ?? 0) + 1;
+    (outgoing.get(id) ?? []).forEach((targetId) => {
+      if ((level.get(targetId) ?? -1) >= nextLevel) return;
+      level.set(targetId, nextLevel);
+      queue.push(targetId);
+    });
+  }
+
+  nodes.forEach((node) => {
+    if (level.has(node.id)) return;
+    const parentLevels = (incoming.get(node.id) ?? []).map((id) => level.get(id)).filter((value): value is number => typeof value === "number");
+    level.set(node.id, parentLevels.length ? Math.max(...parentLevels) + 1 : 0);
+  });
+
+  const columns = new Map<number, Node[]>();
+  nodes.forEach((node) => {
+    const column = level.get(node.id) ?? 0;
+    columns.set(column, [...(columns.get(column) ?? []), node]);
+  });
+
+  const sortedColumns = [...columns.keys()].sort((a, b) => a - b);
+  const xByColumn = new Map<number, number>();
+  let cursorX = 120;
+  sortedColumns.forEach((column) => {
+    const columnNodes = columns.get(column) ?? [];
+    const maxWidth = Math.max(...columnNodes.map((node) => nodeWidths[(node.type as WorkflowNodeType) ?? "text"] ?? 360), 360);
+    xByColumn.set(column, cursorX);
+    cursorX += maxWidth + 260;
+  });
+
+  const positioned = new Map<string, { x: number; y: number }>();
+  sortedColumns.forEach((column) => {
+    const columnNodes = [...(columns.get(column) ?? [])].sort((a, b) => {
+      const aParents = incoming.get(a.id) ?? [];
+      const bParents = incoming.get(b.id) ?? [];
+      const aParentY = aParents.length ? Math.min(...aParents.map((id) => positioned.get(id)?.y ?? a.position.y)) : a.position.y;
+      const bParentY = bParents.length ? Math.min(...bParents.map((id) => positioned.get(id)?.y ?? b.position.y)) : b.position.y;
+      return aParentY - bParentY || a.position.y - b.position.y;
+    });
+    const totalHeight = columnNodes.reduce((sum, node) => sum + nodeHeight(node), 0) + Math.max(0, columnNodes.length - 1) * 84;
+    let cursorY = Math.max(80, 240 - totalHeight / 2);
+    columnNodes.forEach((node) => {
+      const height = nodeHeight(node);
+      const parentPositions = (incoming.get(node.id) ?? []).map((id) => positioned.get(id)).filter((value): value is { x: number; y: number } => Boolean(value));
+      const parentY = parentPositions.length ? parentPositions.reduce((sum, item) => sum + item.y, 0) / parentPositions.length : undefined;
+      const y = Math.max(cursorY, parentY !== undefined ? parentY - height * 0.2 : cursorY);
+      positioned.set(node.id, { x: xByColumn.get(column) ?? 120, y });
+      cursorY = y + height + 84;
+    });
+  });
+
+  return nodes.map((node) => ({ ...node, selected: false, position: positioned.get(node.id) ?? node.position }));
 }
 
 export const useCanvasStore = create<State>((set, get) => ({
@@ -230,6 +323,7 @@ export const useCanvasStore = create<State>((set, get) => ({
       const connected = new Set(state.edges.flatMap((edge) => [edge.source, edge.target]));
       return { nodes: state.nodes.filter((node) => connected.has(node.id)) };
     }),
+  organizeCanvas: () => set((state) => ({ nodes: organizeNodes(state.nodes, state.edges), selectedNodeId: undefined })),
   clearCanvas: () => set({ nodes: [], edges: [], selectedNodeId: undefined }),
   selectAll: () => set((state) => ({ selectedNodeId: state.nodes[0]?.id, nodes: state.nodes.map((node) => ({ ...node, selected: true })), edges: state.edges.map((edge) => ({ ...edge, selected: true })) })),
   clearSelection: () => set((state) => ({ selectedNodeId: undefined, nodes: state.nodes.map((node) => ({ ...node, selected: false })), edges: state.edges.map((edge) => ({ ...edge, selected: false })) })),
