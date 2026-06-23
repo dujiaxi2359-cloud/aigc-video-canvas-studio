@@ -201,7 +201,8 @@ function protocolCreateEndpointCandidates(params: SeedanceProviderParams) {
   } else if (apiFamily === "unified_video_create") {
     endpoints.push(joinUrl(root, "/v1/video/create"), joinUrl(root, "/v1/videos"));
   } else if (apiFamily === "omni_fast" || apiFamily === "omni_fast_v2v" || apiFamily === "openai_videos") {
-    endpoints.push(joinUrl(root, "/v1/videos"), joinUrl(root, "/v1/video/create"));
+    endpoints.push(joinUrl(root, "/v1/videos"));
+    if (!isNewTokenRelay(params)) endpoints.push(joinUrl(root, "/v1/video/create"));
   } else {
     endpoints.push(
       ...seedanceEndpointCandidates(params.apiBaseUrl),

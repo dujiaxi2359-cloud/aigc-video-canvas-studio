@@ -247,6 +247,10 @@ assert(
   "Generic Veo relays should not try the official /v1/videos/generations endpoint"
 );
 assert(
+  JSON.stringify(veoProxyCreateEndpointCandidates("https://api.newtoken.club/v1")) === JSON.stringify(["https://api.newtoken.club/v1/videos"]),
+  "NewToken Veo docs pin task creation to /v1/videos without unified-create fallback"
+);
+assert(
   veoProxyCreateEndpointCandidates("https://relay.example/v1")[1] === "https://relay.example/v1/video/create",
   "Generic Veo proxy should fallback from OpenAI videos to unified create"
 );
@@ -852,6 +856,7 @@ const newtokenOmniCandidates = relayCreateEndpointCandidates({
 } as never);
 assert(newtokenOmniCandidates[0] === "https://api.newtoken.club/v1/videos", "Omni relay candidates should prefer /v1/videos even if an old bad endpoint was saved");
 assert(!newtokenOmniCandidates.some((endpoint) => /\/v1\/videos\/generations$/i.test(endpoint)), "Omni relay candidates must not try the incompatible /v1/videos/generations path");
+assert(!newtokenOmniCandidates.some((endpoint) => /\/v1\/video\/create$/i.test(endpoint)), "NewToken Omni must not fallback to /v1/video/create because its docs pin /v1/videos");
 assert(configuredRelayModelName({ modelName: "veo_3_1-fast", apiBaseUrl: "https://api.newtoken.club/v1" } as never) === "veo-3-1", "NewToken Veo should use the documented veo-3-1 model id");
 const newtokenVeoBody = buildVeoProxyBody({
   endpoint: "https://api.newtoken.club/v1/videos",

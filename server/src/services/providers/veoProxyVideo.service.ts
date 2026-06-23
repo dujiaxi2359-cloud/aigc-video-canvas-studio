@@ -85,6 +85,12 @@ function compactObject<T extends Record<string, unknown>>(value: T): T {
 export function veoProxyCreateEndpointCandidates(apiBaseUrl: string) {
   const primary = veoProxyCreateEndpoint(apiBaseUrl);
   const root = endpointRoot(apiBaseUrl);
+  if (isNewTokenEndpoint(apiBaseUrl)) {
+    return unique([
+      primary,
+      `${root}/v1/videos`
+    ]);
+  }
   if (isRunApiEndpoint(apiBaseUrl)) {
     return unique([
       primary,
