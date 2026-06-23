@@ -93,7 +93,7 @@ function humanizeError(error: unknown) {
 
 function isTerminalImageFailure(input: { errorCode?: string; errorMessage?: string; debugMessage?: string }) {
   const text = `${input.errorCode ?? ""}\n${input.errorMessage ?? ""}\n${input.debugMessage ?? ""}`;
-  return /INSUFFICIENT_CREDITS|UPSTREAM_QUOTA_EXHAUSTED|UPSTREAM_CHANNEL_UNAVAILABLE|API_KEY_INVALID|MODEL_ACCESS_DENIED|quota|credit|balance|insufficient|余额|额度|无可用渠道|可用渠道不存在|审核|安全|违规|safety|content policy|policy violation|moderation|blocked|filtered|RAI|privacy|隐私|unauthorized|invalid api key|incorrect api key|forbidden|permission|access denied|无权限|未开通/i.test(text);
+  return /INSUFFICIENT_CREDITS|UPSTREAM_QUOTA_EXHAUSTED|UPSTREAM_CHANNEL_UNAVAILABLE|UPSTREAM_HUMAN_PRIVACY_REVIEW|API_KEY_INVALID|MODEL_ACCESS_DENIED|quota|credit|balance|insufficient|余额|额度|无可用渠道|可用渠道不存在|审核|安全|违规|safety|content policy|policy violation|moderation|blocked|filtered|RAI|privacy|隐私|unauthorized|invalid api key|incorrect api key|forbidden|permission|access denied|无权限|未开通/i.test(text);
 }
 
 function resultHasSubmittedImageTask(result: {

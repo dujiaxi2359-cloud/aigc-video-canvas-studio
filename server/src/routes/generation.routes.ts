@@ -47,10 +47,19 @@ function isChannelUnavailable(text: string) {
   return /无可用渠道|可用渠道不存在|所有分组.*模型|当前分组.*模型|no available channel|channel.*unavailable/i.test(text);
 }
 
+function isSafetyReviewRejection(text: string) {
+  return /官方安全审核拒绝|审核|安全|违规|safety system|safety[_\s-]?violations|content policy|policy violation|moderation|blocked|filtered|rejected by the safety|RAI|privacy|隐私/i.test(text);
+}
+
+function isUpstreamTimeoutOrGateway(text: string) {
+  return /Cloudflare|error 524|a timeout occurred|origin web server timed out|gateway|502|503|504|upstream.*timeout|上游.*超时|中转.*超时|服务不可用/i.test(text);
+}
+
 function isTerminalGenerationFailure(text: string) {
   return isQuotaError(text)
     || isChannelUnavailable(text)
-    || /审核|安全|违规|safety|content policy|policy violation|moderation|blocked|filtered|RAI|privacy|隐私|unauthorized|invalid api key|incorrect api key|forbidden|permission|access denied|无权限|未开通/i.test(text);
+    || isSafetyReviewRejection(text)
+    || /unauthorized|invalid api key|incorrect api key|forbidden|permission|access denied|无权限|未开通/i.test(text);
 }
 
 function submittedTaskSignal(value: unknown): Record<string, unknown> | undefined {
@@ -95,6 +104,24 @@ function generationError(error: unknown) {
         errorMessage: `中转当前分组没有该模型的可用渠道：${error.message}`
       };
     }
+    if (isSafetyReviewRejection(raw)) {
+      return {
+        status: "error" as const,
+        errorCode: "UPSTREAM_HUMAN_PRIVACY_REVIEW",
+        errorMessage: `官方/上游安全审核拒绝：${error.message}`,
+        debugMessage: error.debugMessage,
+        payloadSummary: error.details
+      };
+    }
+    if (isUpstreamTimeoutOrGateway(raw)) {
+      return {
+        status: "error" as const,
+        errorCode: "UPSTREAM_CHANNEL_UNAVAILABLE",
+        errorMessage: `中转/上游线路超时或不可用：${error.message}`,
+        debugMessage: error.debugMessage,
+        payloadSummary: error.details
+      };
+    }
     if (isQuotaError(raw)) {
       return {
         status: "error" as const,
@@ -116,6 +143,20 @@ function generationError(error: unknown) {
       status: "error" as const,
       errorCode: "UPSTREAM_CHANNEL_UNAVAILABLE",
       errorMessage: `中转当前分组没有该模型的可用渠道：${message}`
+    };
+  }
+  if (isSafetyReviewRejection(message)) {
+    return {
+      status: "error" as const,
+      errorCode: "UPSTREAM_HUMAN_PRIVACY_REVIEW",
+      errorMessage: `官方/上游安全审核拒绝：${message}`
+    };
+  }
+  if (isUpstreamTimeoutOrGateway(message)) {
+    return {
+      status: "error" as const,
+      errorCode: "UPSTREAM_CHANNEL_UNAVAILABLE",
+      errorMessage: `中转/上游线路超时或不可用：${message}`
     };
   }
   if (isQuotaError(message)) {

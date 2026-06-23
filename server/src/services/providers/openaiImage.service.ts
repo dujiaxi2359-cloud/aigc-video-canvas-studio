@@ -35,6 +35,10 @@ async function responseJson(response: Response, endpoint: string) {
 
 function humanOpenAIError(message: string) {
   const lower = message.toLowerCase();
+  if (/safety system|safety[_\s-]?violations|content policy|policy violation|moderation|blocked|rejected by the safety/i.test(message)) {
+    const requestId = message.match(/request id\s+([a-z0-9-]+)/i)?.[1];
+    return `OpenAI 官方安全审核拒绝了这次图片请求${requestId ? `（request_id: ${requestId}）` : ""}。这不是画布或前端故障，请调整提示词中的人物、隐私、暴力、敏感或高风险描述后重试。`;
+  }
   if (/openai_compat_non_json_response/i.test(message) || /^<!doctype|<html/i.test(message.trim())) {
     if (/cloudflare|error 524|a timeout occurred/i.test(message)) {
       return "OpenAI 兼容图片中转返回 Cloudflare 超时页面，说明该线路上游生成耗时过长或服务不可用。请稍后重试，或在设置中心切换其它图片中转线路。";
