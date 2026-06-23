@@ -392,6 +392,8 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
   const [pendingMentionRange, setPendingMentionRange] = useState<MentionRange | null>(null);
   const isComposingRef = useRef(false);
   const generatingRef = useRef(false);
+  const recoveringRef = useRef(false);
+  const mountedRef = useRef(true);
   const lastRequestKeyRef = useRef("");
   const promptTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const parameterAnchorRef = useRef<HTMLDivElement | null>(null);
@@ -605,18 +607,21 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
   }
 
   async function recoverVideoFromHistory(startedAt: number) {
-    const deadline = Date.now() + 150_000;
-    while (Date.now() < deadline) {
+    if (recoveringRef.current) return;
+    recoveringRef.current = true;
+    while (mountedRef.current) {
       await new Promise((resolve) => window.setTimeout(resolve, 5000));
+      if (!mountedRef.current) break;
+      const currentNode = useCanvasStore.getState().nodes.find((node) => node.id === props.id);
+      const currentData = currentNode?.data as VideoNodeData | undefined;
+      if (currentData?.status !== "generating" || currentData.generationStartedAt !== startedAt) break;
       try {
         const histories = await historyApi.list();
         const latest = histories.find((item) =>
           item.nodeId === props.id &&
-          item.status === "success" &&
-          Boolean(item.outputUrl) &&
           item.createdAt >= startedAt - 5000
         );
-        if (latest?.outputUrl) {
+        if (latest?.status === "success" && latest.outputUrl) {
           update(props.id, {
             status: "success",
             outputUrl: latest.outputUrl,
@@ -625,17 +630,56 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
             duration: selectedDuration ?? props.data.duration,
             errorCode: undefined,
             errorMessage: undefined,
-            debugMessage: undefined
+            debugMessage: undefined,
+            generationStartedAt: undefined,
+            clientRequestId: undefined
           });
           setLocalError("");
-          return true;
+          recoveringRef.current = false;
+          return;
+        }
+        if (latest?.status === "error") {
+          const message = latest.errorMessage || "上游任务生成失败。";
+          update(props.id, {
+            status: "error",
+            errorMessage: message,
+            generationStartedAt: undefined,
+            clientRequestId: undefined
+          });
+          setLocalError(message);
+          recoveringRef.current = false;
+          return;
         }
       } catch {
         // The original request may still be running behind the proxy; keep polling quietly.
       }
     }
-    return false;
+    recoveringRef.current = false;
   }
+
+  function resultHasSubmittedTask(result: {
+    errorCode?: string;
+    errorMessage?: string;
+    debugMessage?: string;
+    payloadSummary?: Record<string, unknown>;
+  }) {
+    const summary = result.payloadSummary ?? {};
+    return [summary.taskId, summary.proxyTaskId, summary.id, summary.requestId].some((value) => typeof value === "string" && value.length > 0)
+      || summary.pendingAfterTimeout === true
+      || /已提交|排队|生成中|processing|pending|queued/i.test(`${result.errorMessage ?? ""}\n${result.debugMessage ?? ""}`);
+  }
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (props.data.status !== "generating" || !props.data.generationStartedAt) return;
+    void recoverVideoFromHistory(props.data.generationStartedAt);
+  }, [props.data.generationStartedAt, props.data.status]);
 
   function retryWithPrompt(prompt: string) {
     setLocalPrompt(prompt);
@@ -690,7 +734,13 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
       return;
     }
     const promptForRequest = promptOverride ?? localPrompt ?? props.data.prompt;
-    update(props.id, { status: "generating", errorCode: undefined, errorMessage: undefined, debugMessage: undefined });
+    update(props.id, {
+      status: "generating",
+      generationStartedAt: startedAt,
+      errorCode: undefined,
+      errorMessage: undefined,
+      debugMessage: undefined
+    });
     setLocalError("");
     try {
       if (channelDiagnostic.whyBlocked) {
@@ -743,6 +793,7 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
         audioAssetIds
       });
       lastRequestKeyRef.current = clientRequestId;
+      update(props.id, { clientRequestId });
 
       const result = await generationApi.video({
         clientRequestId,
@@ -776,7 +827,9 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
             duration: selectedDuration ?? props.data.duration,
             errorCode: undefined,
             errorMessage: undefined,
-            debugMessage: undefined
+            debugMessage: undefined,
+            generationStartedAt: undefined,
+            clientRequestId: undefined
           }
           : result.status === "processing"
             ? {
@@ -786,7 +839,23 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
               errorMessage: undefined,
               debugMessage: undefined
             }
-          : { status: "error", errorCode: result.errorCode, errorMessage: result.errorMessage, debugMessage: result.debugMessage, payloadSummary: result.payloadSummary }
+          : resultHasSubmittedTask(result)
+            ? {
+              status: "generating",
+              errorCode: undefined,
+              errorMessage: "上游任务仍在排队或生成中，完成后将自动回填画布。",
+              debugMessage: undefined,
+              payloadSummary: result.payloadSummary
+            }
+            : {
+              status: "error",
+              errorCode: result.errorCode,
+              errorMessage: result.errorMessage,
+              debugMessage: result.debugMessage,
+              payloadSummary: result.payloadSummary,
+              generationStartedAt: undefined,
+              clientRequestId: undefined
+            }
       );
     } catch (error) {
       const message = humanizeError(error);
@@ -794,11 +863,15 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
         const waitingMessage = "任务可能已提交到中转，正在等待成功结果回填到画布。";
         setLocalError(waitingMessage);
         update(props.id, { status: "generating", errorMessage: waitingMessage });
-        const recovered = await recoverVideoFromHistory(startedAt);
-        if (!recovered) update(props.id, { status: "error", errorMessage: message });
+        void recoverVideoFromHistory(startedAt);
       } else {
         setLocalError(message);
-        update(props.id, { status: "error", errorMessage: message });
+        update(props.id, {
+          status: "error",
+          errorMessage: message,
+          generationStartedAt: undefined,
+          clientRequestId: undefined
+        });
       }
     } finally {
       generatingRef.current = false;

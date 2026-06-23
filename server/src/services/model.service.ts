@@ -552,7 +552,8 @@ export function hasSubmittedRemoteVideoTask(error: unknown) {
   const details = error.details;
   if (!details || typeof details !== "object") return false;
   const record = details as Record<string, unknown>;
-  return typeof record.proxyTaskId === "string" && record.proxyTaskId.length > 0;
+  return [record.proxyTaskId, record.taskId, record.requestId, record.id]
+    .some((value) => typeof value === "string" && value.length > 0);
 }
 
 function videoProviderPriority(providerId?: string) {
@@ -1079,6 +1080,33 @@ export async function generateVideo(input: GenerateVideoRequest) {
     return { status: "success" as const, outputAssetId: asset?.id, outputUrl: asset?.url ?? result.outputUrl, payloadSummary };
   } catch (error) {
     const meta = providerErrorMeta(model.provider_id, error);
+    if (hasSubmittedRemoteVideoTask(error)) {
+      const details = isProviderError(error) && error.details && typeof error.details === "object"
+        ? error.details as Record<string, unknown>
+        : {};
+      await addHistory({
+        generationType: "video",
+        projectId: input.projectId,
+        nodeId: input.nodeId,
+        modelConfigId: input.modelConfigId,
+        modelDisplayName: model.display_name,
+        inputMode: input.inputMode,
+        prompt: input.prompt,
+        duration: input.duration,
+        aspectRatio: input.aspectRatio,
+        resolution: input.resolution,
+        status: "processing",
+        errorMessage: "上游任务已创建，仍在排队或生成中。"
+      });
+      return {
+        status: "processing" as const,
+        payloadSummary: {
+          ...details,
+          pendingAfterPollInterruption: true,
+          message: "上游任务已创建，仍在排队或生成中。"
+        }
+      };
+    }
     await addHistory({
       generationType: "video",
       projectId: input.projectId,

@@ -657,8 +657,20 @@ export async function generateVideoWithVeoProxy(params: VideoProviderParams): Pr
         throw new ProviderError("VEO_OPERATION_FAILED", `Veo 中转任务失败：${errorMessage(task)}`, JSON.stringify(task));
       }
       if (Date.now() - startedAt > 15 * 60 * 1000) {
-        await saveGenerationTask({ id: taskId, status: "timeout", result: task, errorMessage: "Veo 中转任务超过 15 分钟仍未完成。" });
-        throw new ProviderError("VEO_OPERATION_TIMEOUT", "Veo 中转任务超过 15 分钟仍未完成，请稍后重试。");
+        const pendingMessage = "Veo 中转任务已提交，超过 15 分钟仍在排队或生成中。";
+        await saveGenerationTask({ id: taskId, status: "processing", result: task, errorMessage: pendingMessage });
+        return {
+          status: "processing",
+          rawResponse: task,
+          payloadSummary: {
+            proxyTaskId: taskId,
+            pollUrl,
+            relayModel,
+            relayProtocol: protocol,
+            pendingAfterTimeout: true,
+            message: pendingMessage
+          }
+        };
       }
       await sleep(5000);
       let pollResponse: Response;

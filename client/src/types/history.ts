@@ -9,7 +9,7 @@ export type GenerationHistory = {
   duration?: number;
   aspectRatio?: string;
   resolution?: string;
-  status: "success" | "error";
+  status: "success" | "processing" | "error";
   outputUrl?: string;
   errorMessage?: string;
   createdAt: number;

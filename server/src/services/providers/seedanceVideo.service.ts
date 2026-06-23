@@ -1456,7 +1456,21 @@ export async function generateVideoWithSeedance(params: SeedanceProviderParams):
             pollEndpoint: pollResult.endpoint
           }
         });
-        if (!pollResponse.ok) throw new ProviderError("PROVIDER_ERROR", `${label} 中转任务查询失败：${upstreamFriendlyErrorMessage(label, task)}`, preview(task));
+        if (!pollResponse.ok) {
+          await saveGenerationTask({
+            id,
+            status: "processing",
+            progress: progressValue(task),
+            result: {
+              ...task,
+              pollEndpoint: pollResult.endpoint,
+              retryablePollError: true,
+              upstreamStatus: pollResponse.status
+            },
+            errorMessage: `${label} 中转任务已创建，查询暂时失败，正在继续等待。`
+          });
+          continue;
+        }
         remoteUrl = videoUrl(configuredResult(task, params.videoRequestConfig));
       }
       if (remoteUrl) await saveGenerationTask({ id, status: "success", progress: 100, result: task });

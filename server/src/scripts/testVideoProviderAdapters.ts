@@ -32,6 +32,10 @@ assert(
   "Video fallback should be blocked once an upstream task id exists"
 );
 assert(
+  hasSubmittedRemoteVideoTask(new ProviderError("NETWORK_ERROR", "poll failed", "terminated", { taskId: "task_456" })),
+  "Generic relay task ids should keep the canvas in processing state"
+);
+assert(
   !hasSubmittedRemoteVideoTask(new ProviderError("NETWORK_ERROR", "create failed", "fetch failed")),
   "Video fallback can still run when no upstream task was created"
 );

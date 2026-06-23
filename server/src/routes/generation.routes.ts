@@ -7,7 +7,8 @@ import { assertCreditsAvailable, assertWorkspaceFeature, consumeCredits } from "
 export const generationRouter = Router();
 
 const VIDEO_IDEMPOTENCY_TTL_MS = 5 * 60 * 1000;
-const inflightVideoRequests = new Map<string, { createdAt: number; promise: Promise<unknown> }>();
+const VIDEO_INITIAL_RESPONSE_WAIT_MS = 15 * 1000;
+const inflightVideoRequests = new Map<string, { createdAt: number; settledAt?: number; promise: Promise<unknown> }>();
 
 function videoIdempotencyKey(body: any) {
   const clientRequestId = typeof body?.clientRequestId === "string" ? body.clientRequestId : "";
@@ -20,14 +21,16 @@ function videoIdempotencyKey(body: any) {
 function rememberVideoRequest<T>(key: string, create: () => Promise<T>) {
   const now = Date.now();
   for (const [entryKey, entry] of inflightVideoRequests) {
-    if (now - entry.createdAt > VIDEO_IDEMPOTENCY_TTL_MS) inflightVideoRequests.delete(entryKey);
+    if (entry.settledAt && now - entry.settledAt > VIDEO_IDEMPOTENCY_TTL_MS) inflightVideoRequests.delete(entryKey);
   }
   if (!key) return create();
   const existing = inflightVideoRequests.get(key);
   if (existing) return existing.promise as Promise<T>;
   const promise = create();
-  inflightVideoRequests.set(key, { createdAt: now, promise });
+  const entry = { createdAt: now, promise } as { createdAt: number; settledAt?: number; promise: Promise<T> };
+  inflightVideoRequests.set(key, entry);
   promise.finally(() => {
+    entry.settledAt = Date.now();
     setTimeout(() => {
       const entry = inflightVideoRequests.get(key);
       if (entry?.promise === promise) inflightVideoRequests.delete(key);
@@ -76,12 +79,30 @@ function generationError(error: unknown) {
 
 generationRouter.post("/video", async (req, res) => {
   try {
-    const result = await rememberVideoRequest(videoIdempotencyKey(req.body), async () => {
+    const key = videoIdempotencyKey(req.body);
+    const work = rememberVideoRequest(key, async () => {
       await assertWorkspaceFeature("video_generation"); await assertCreditsAvailable(1);
       const generated = await generateVideo(req.body);
       if ((generated as any)?.status !== "error") await consumeCredits({ actionType: "video_generation", provider: req.body?.provider, modelId: req.body?.modelId || req.body?.modelConfigId, metadata: { projectId: req.body?.projectId, nodeId: req.body?.nodeId } });
       return generated;
     });
+    const pending = Symbol("video-pending");
+    const result = await Promise.race([
+      work,
+      new Promise<typeof pending>((resolve) => setTimeout(() => resolve(pending), VIDEO_INITIAL_RESPONSE_WAIT_MS))
+    ]);
+    if (result === pending) {
+      res.json({
+        status: "processing",
+        payloadSummary: {
+          clientRequestId: req.body?.clientRequestId,
+          nodeId: req.body?.nodeId,
+          pendingInBackground: true,
+          message: "上游任务仍在排队或生成中，完成后将自动回填画布。"
+        }
+      });
+      return;
+    }
     res.json(result);
   } catch (error) {
     if (error instanceof Error && error.message === "INSUFFICIENT_CREDITS") return res.status(402).json({ status: "error", errorCode: "INSUFFICIENT_CREDITS", errorMessage: "当前工作空间额度不足。" });
