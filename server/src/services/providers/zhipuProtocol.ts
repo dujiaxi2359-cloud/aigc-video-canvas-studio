@@ -11,6 +11,7 @@ export const zhipuVideoModels = [
   "cogvideox-3",
   "cogvideox-2",
   "cogvideox-flash",
+  "viduq2",
   "viduq1-text",
   "viduq1-image",
   "vidu2-image",

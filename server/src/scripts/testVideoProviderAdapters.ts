@@ -803,6 +803,33 @@ const newtokenOmniConfig = resolveVideoRequestConfig({
 assert(newtokenOmniConfig.channel === "proxy", "newtoken.club should be recognized as a video relay");
 assert(newtokenOmniConfig.apiFamily === "omni_fast", "veo-omni-flash should use the Omni video protocol");
 assert(newtokenOmniConfig.finalUrl === "https://api.newtoken.club/v1/videos", "Omni relays should create tasks with /v1/videos");
+const newtokenOmniBody = buildProxyBody({
+  providerId: "google",
+  modelName: "veo-omni-flash-vip",
+  apiBaseUrl: "https://api.newtoken.club/v1",
+  apiKey: "sk-test-key",
+  prompt: "newtoken omni test",
+  nodeId: "node",
+  modelConfigId: "model",
+  inputMode: "reference-to-video",
+  duration: 10,
+  aspectRatio: "16:9",
+  resolution: "720p",
+  generateCount: 1
+}, {
+  apiFamily: "omni_fast",
+  mode: "reference_images_to_video",
+  images: ["https://assets.example/ref-1.jpg", "https://assets.example/ref-2.jpg"],
+  videos: [],
+  audios: [],
+  aspectRatio: "16:9",
+  resolution: "720p",
+  seconds: "10"
+}) as Record<string, any>;
+assert(newtokenOmniBody.model === "veo-omni-flash", "NewToken Omni should use the documented model id");
+assert(newtokenOmniBody.duration === 10, "NewToken Omni should send numeric duration");
+assert(Array.isArray(newtokenOmniBody.Ingredients_images) && newtokenOmniBody.Ingredients_images.length === 2, "NewToken Omni reference mode should send Ingredients_images exactly as documented");
+assert(!("images" in newtokenOmniBody), "NewToken Omni reference mode should not send the generic images field first");
 const newtokenOmniCandidates = relayCreateEndpointCandidates({
   providerId: "google",
   modelName: "veo-omni-flash-vip",
@@ -824,6 +851,37 @@ const newtokenOmniCandidates = relayCreateEndpointCandidates({
 } as never);
 assert(newtokenOmniCandidates[0] === "https://api.newtoken.club/v1/videos", "Omni relay candidates should prefer /v1/videos even if an old bad endpoint was saved");
 assert(!newtokenOmniCandidates.some((endpoint) => /\/v1\/videos\/generations$/i.test(endpoint)), "Omni relay candidates must not try the incompatible /v1/videos/generations path");
+assert(configuredRelayModelName({ modelName: "veo_3_1-fast", apiBaseUrl: "https://api.newtoken.club/v1" } as never) === "veo-3-1", "NewToken Veo should use the documented veo-3-1 model id");
+const newtokenVeoBody = buildVeoProxyBody({
+  endpoint: "https://api.newtoken.club/v1/videos",
+  relayModel: "veo-3-1",
+  images: ["https://assets.example/first-frame.jpg", "https://assets.example/last-frame.jpg"],
+  requestAspectRatio: "9:16",
+  requestResolution: "720p",
+  requestSize: "720x1280",
+  isOmni: false,
+  params: {
+    providerId: "google",
+    modelName: "veo_3_1-fast",
+    apiBaseUrl: "https://api.newtoken.club/v1",
+    apiKey: "sk-test-key",
+    prompt: "newtoken veo test",
+    nodeId: "node",
+    modelConfigId: "model",
+    inputMode: "first-last-frame",
+    videoMode: "image_to_video_first_last_frame",
+    imageAssetIds: ["asset1", "asset2"],
+    duration: 8,
+    aspectRatio: "9:16",
+    resolution: "720p",
+    generateCount: 1
+  }
+}) as Record<string, any>;
+assert(newtokenVeoBody.model === "veo-3-1", "NewToken Veo should use the documented body model");
+assert(newtokenVeoBody.duration === 8, "NewToken Veo should send numeric duration");
+assert(newtokenVeoBody.aspect_ratio === "9:16", "NewToken Veo should send aspect_ratio");
+assert(Array.isArray(newtokenVeoBody.images) && newtokenVeoBody.images.length === 2, "NewToken Veo image modes should send images[]");
+assert(!("input_reference" in newtokenVeoBody) && !("seconds" in newtokenVeoBody), "NewToken Veo should not mix generic relay compatibility aliases");
 const configurableOpenAiVideos = resolveVideoRequestConfig({
   providerId: "grok",
   modelName: "grok-video-proxy",
@@ -1410,6 +1468,6 @@ assert(zhipuBody.image_url === "https://example.com/1.png", "Zhipu image-to-vide
 assert(zhipuBody.size === "720x1280", "Zhipu CogVideoX portrait 720p should use 720x1280");
 assert(isZhipuOfficialEndpoint("https://open.bigmodel.cn/api/paas/v4/async/images/generations"), "Zhipu full endpoints should be recognized as official");
 assert(normalizeZhipuBaseUrl("https://open.bigmodel.cn/api/paas/v4/async/images/generations") === "https://open.bigmodel.cn/api/paas/v4", "Zhipu full endpoints should normalize to the official base URL");
-assert(isZhipuImageModel("glm-image") && zhipuImageModels.length === 4 && zhipuVideoModels.length === 9, "Zhipu official model directories should be complete");
+assert(isZhipuImageModel("glm-image") && zhipuImageModels.length === 4 && zhipuVideoModels.includes("viduq2") && zhipuVideoModels.length === 10, "Zhipu official model directories should be complete");
 
 console.log("[test:video-provider-adapters] ok");

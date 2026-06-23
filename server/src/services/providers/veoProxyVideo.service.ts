@@ -39,6 +39,10 @@ function isAi666Endpoint(apiBaseUrl: string) {
   return /(?:^|\.)ai666\.net/i.test(apiBaseUrl);
 }
 
+function isNewTokenEndpoint(apiBaseUrl: string) {
+  return /(?:^|\.)newtoken\.club/i.test(apiBaseUrl);
+}
+
 function cleanEndpoint(value: string) {
   return value.trim().replace(/^(?:POST|GET|PUT|PATCH|DELETE)\s+/i, "").replace(/\/$/, "");
 }
@@ -72,6 +76,10 @@ function endpointRoot(apiBaseUrl: string) {
 
 function unique(items: Array<string | undefined>) {
   return Array.from(new Set(items.filter(Boolean) as string[]));
+}
+
+function compactObject<T extends Record<string, unknown>>(value: T): T {
+  return Object.fromEntries(Object.entries(value).filter(([, item]) => item !== undefined && item !== null && item !== "")) as T;
 }
 
 export function veoProxyCreateEndpointCandidates(apiBaseUrl: string) {
@@ -183,7 +191,8 @@ function relayProtocol(endpoint: string) {
   return /\/v1\/video\/create\/?$/i.test(new URL(endpoint).pathname) ? "unified-create-query" : "openai-videos";
 }
 
-export function configuredRelayModelName(params: Pick<VideoProviderParams, "modelName">) {
+export function configuredRelayModelName(params: Pick<VideoProviderParams, "modelName"> & { apiBaseUrl?: string }) {
+  if (/veo[-_ .]?3[-_ .]?1/i.test(params.modelName) && /newtoken\.club/i.test(params.apiBaseUrl ?? "")) return "veo-3-1";
   return params.modelName;
 }
 
@@ -260,6 +269,17 @@ export function buildVeoProxyBody(input: {
 }) {
   const protocol = relayProtocol(input.endpoint);
   const isRunApi = isRunApiEndpoint(input.endpoint);
+  if (isNewTokenEndpoint(input.endpoint)) {
+    return compactObject({
+      model: input.relayModel,
+      prompt: input.params.prompt,
+      duration: input.params.duration,
+      aspect_ratio: input.requestAspectRatio,
+      images: input.images.length ? input.images : undefined,
+      watermark: false,
+      metadata: { watermark: false }
+    });
+  }
   if (isRunApi) {
     return {
       model: input.relayModel,

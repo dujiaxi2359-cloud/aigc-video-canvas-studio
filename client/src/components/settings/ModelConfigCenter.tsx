@@ -161,12 +161,14 @@ function videoCapabilitiesFor(modelName: string): ModelCapabilities {
       ...veoCapabilities,
       apiFamily: "omni_fast",
       imageTransport: "url",
-      imageField: "first_image_url",
-      inputModes: ["text-to-video", "image-to-video"],
-      supportedInputs: ["text", "image", "first_frame"],
+      imageField: "images",
+      inputModes: ["text-to-video", "image-to-video", "first-last-frame", "reference-to-video"],
+      supportedInputs: ["text", "image", "first_frame", "reference_image", "first_last_frame"],
       supportsImageInput: true,
       supportsReferenceImage: true,
-      maxReferenceImages: 1
+      supportsMultiImageInput: true,
+      supportsFirstLastFrame: true,
+      maxReferenceImages: 5
     };
   }
   if (/doubao[-_]?seedance[-_]?1[-_]?5/.test(name)) {

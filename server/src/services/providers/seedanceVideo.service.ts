@@ -859,8 +859,14 @@ function isRunApiVideoCreate(params: SeedanceProviderParams) {
   return /runapi\.co/.test(value);
 }
 
+function isNewTokenRelay(params: SeedanceProviderParams) {
+  const value = `${params.apiBaseUrl} ${params.videoRequestConfig?.baseUrl ?? ""} ${params.videoRequestConfig?.finalUrl ?? ""}`.toLowerCase();
+  return /newtoken\.club/.test(value);
+}
+
 function normalizeProxyVideoModelName(params: SeedanceProviderParams) {
   const model = params.modelName?.trim() || "";
+  if (isNewTokenRelay(params) && /veo[-_]?omni[-_]?flash/i.test(model)) return "veo-omni-flash";
   if (/agnes[-_ .]?video/i.test(model)) return "agnes-video-v2.0";
   if (!/omni[-_]?flash|omni[-_]?fast/i.test(model)) return model;
   if (isRunApiVideoCreate(params)) return "omni-flash";
@@ -1141,6 +1147,20 @@ export function buildProxyBody(params: SeedanceProviderParams, refs: {
 
   if (refs.apiFamily === "omni_fast") {
     const images = refs.images.slice(0, 5);
+    if (isNewTokenRelay(params)) {
+      return compactObject({
+        ...base,
+        prompt: params.prompt,
+        duration: refs.seconds === "auto" ? undefined : Number(refs.seconds),
+        aspect_ratio: refs.aspectRatio,
+        Ingredients_images: refs.mode === "reference_images_to_video" ? images : undefined,
+        images: refs.mode === "image_to_video_first_frame" || refs.mode === "image_to_video_first_last_frame" ? images.slice(0, refs.mode === "image_to_video_first_last_frame" ? 2 : 1) : undefined,
+        watermark: false,
+        metadata: {
+          watermark: false
+        }
+      });
+    }
     return compactObject({
       ...base,
       prompt: params.prompt,
@@ -1212,6 +1232,23 @@ function protocolFallbackBodies(primaryBody: Record<string, unknown>, refs: {
   if (refs.apiFamily !== "omni_fast") return [];
   if (refs.mode !== "reference_images_to_video") return [];
   if (refs.images.length < 2) return [];
+  if (Array.isArray(primaryBody.Ingredients_images)) {
+    const imagesFallback = compactObject({
+      ...primaryBody,
+      Ingredients_images: undefined,
+      images: refs.images.slice(0, 5)
+    }) as Record<string, unknown>;
+    const firstLastFallback = compactObject({
+      ...primaryBody,
+      Ingredients_images: undefined,
+      first_image_url: refs.images[0],
+      last_image_url: refs.images[1]
+    }) as Record<string, unknown>;
+    return [
+      { body: imagesFallback, source: "protocol_images_fallback" },
+      { body: firstLastFallback, source: "protocol_first_last_fallback" }
+    ];
+  }
   if (!Array.isArray(primaryBody.images)) return [];
   const fallback = compactObject({
     ...primaryBody,

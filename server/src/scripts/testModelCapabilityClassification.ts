@@ -33,5 +33,6 @@ assert.equal(zhipuGlmImage.supportsImageInput, false);
 
 assert.equal(isVeoLikeVideoModel("openai-video", "mimo-v2-omni", { inputModes: ["text-to-video"] }), false, "Bare omni in a non-Google model must not be treated as Veo.");
 assert.equal(isOmniFastVideoModel("omni-fast", { inputModes: ["text-to-video"] }), true);
+assert.equal(isOmniFastVideoModel("veo-omni-flash-vip", { inputModes: ["text-to-video"] }), true);
 
 console.log("model capability classification tests passed");
