@@ -269,6 +269,8 @@ const runApiVeoProxyBody = buildVeoProxyBody({
 }) as Record<string, any>;
 assert(runApiVeoProxyBody.duration === 8, "RunAPI Veo proxy duration should be numeric");
 assert(runApiVeoProxyBody.enable_upsample === false, "RunAPI Veo proxy enable_upsample should be boolean");
+assert(runApiVeoProxyBody.watermark === false, "RunAPI Veo proxy body should request watermark-free output");
+assert((runApiVeoProxyBody.metadata as any).watermark === false, "RunAPI Veo proxy body should also disable watermark in metadata");
 const cy88VeoProxyBody = buildVeoProxyBody({
   endpoint: "https://ai.cy88.ai/v1/video/create",
   relayModel: "veo_3_1-fast",
@@ -299,7 +301,9 @@ assert(cy88VeoProxyBody.aspect_ratio === "9:16", "cy88 Veo proxy body should inc
 assert(cy88VeoProxyBody.size === "720x1280", "cy88 Veo proxy body should include portrait widthxheight size");
 assert(cy88VeoProxyBody.orientation === "portrait", "cy88 Veo proxy body should include documented portrait orientation");
 assert(cy88VeoProxyBody.duration === 8, "cy88 Veo proxy body should include numeric duration");
-assert(!("ratio" in cy88VeoProxyBody) && !("seconds" in cy88VeoProxyBody) && !("metadata" in cy88VeoProxyBody), "cy88 unified body should not mix OpenAI compatibility aliases");
+assert(cy88VeoProxyBody.watermark === false, "cy88 Veo proxy body should request watermark-free output");
+assert((cy88VeoProxyBody.metadata as any).watermark === false, "cy88 Veo proxy body should also disable watermark in metadata");
+assert(!("ratio" in cy88VeoProxyBody) && !("seconds" in cy88VeoProxyBody), "cy88 unified body should not mix OpenAI compatibility aliases");
 const ai666PortraitReferenceBody = buildVeoProxyBody({
   endpoint: "https://ai.ai666.net/v1/videos",
   relayModel: "veo_3_1-fast",
@@ -328,6 +332,8 @@ const ai666PortraitReferenceBody = buildVeoProxyBody({
 }) as Record<string, any>;
 assert(ai666PortraitReferenceBody.size === "720x1280", "ai666 Veo proxy body should use documented portrait size");
 assert(Array.isArray(ai666PortraitReferenceBody.input_reference), "ai666 portrait reference mode should keep multiple reference images");
+assert(ai666PortraitReferenceBody.watermark === false, "ai666 Veo proxy body should request watermark-free output");
+assert((ai666PortraitReferenceBody.metadata as any).watermark === false, "ai666 Veo proxy body should also disable watermark in metadata");
 const ai666UnifiedPortraitBody = buildVeoProxyBody({
   endpoint: "https://ai.ai666.net/v1/video/create",
   params: {
@@ -358,6 +364,8 @@ assert(ai666UnifiedPortraitBody.aspect_ratio === "9:16", "ai666 unified portrait
 assert(ai666UnifiedPortraitBody.duration === 8, "ai666 unified requests should send numeric duration");
 assert(ai666UnifiedPortraitBody.enable_upsample === false, "ai666 portrait requests must not enable landscape-only upsampling");
 assert(Array.isArray(ai666UnifiedPortraitBody.images) && ai666UnifiedPortraitBody.images.length === 2, "ai666 unified portrait requests should preserve reference images");
+assert(ai666UnifiedPortraitBody.watermark === false, "ai666 unified requests should request watermark-free output");
+assert((ai666UnifiedPortraitBody.metadata as any).watermark === false, "ai666 unified requests should also disable watermark in metadata");
 assert(!("input_reference" in ai666UnifiedPortraitBody), "ai666 unified requests should not mix the OpenAI input_reference field");
 const cy88UnifiedPortraitBody = buildVeoProxyBody({
   endpoint: "https://ai.cy88.ai/v1/video/create",
@@ -386,6 +394,8 @@ assert(cy88UnifiedPortraitBody.model === "veo3.1-fast-components", "cy88 portrai
 assert(cy88UnifiedPortraitBody.orientation === "portrait", "cy88 portrait references should send portrait orientation");
 assert(cy88UnifiedPortraitBody.size === "720x1280", "cy88 portrait references should send portrait dimensions");
 assert(cy88UnifiedPortraitBody.aspect_ratio === "9:16", "cy88 portrait references should send 9:16 aspect ratio");
+assert(cy88UnifiedPortraitBody.watermark === false, "cy88 unified requests should request watermark-free output");
+assert((cy88UnifiedPortraitBody.metadata as any).watermark === false, "cy88 unified requests should also disable watermark in metadata");
 assert(ai666PortraitReferenceBody.images.length === 2, "ai666 portrait reference mode should preserve multi-reference images and request native 9:16 through size plus metadata");
 assert(
   configuredRelayModelName({ modelName: "veo_3_1" }) === "veo_3_1",
@@ -683,6 +693,8 @@ assert(omniReferenceBody.aspect_ratio === "9:16", "Omni-fast should preserve nat
 assert(omniReferenceBody.resolution === "4k", "Omni-fast should normalize resolution to the documented lowercase value");
 assert(Array.isArray(omniReferenceBody.images) && omniReferenceBody.images.length === 2, "Omni-fast reference mode should send images[]");
 assert(!omniReferenceBody.first_image_url, "Omni-fast reference mode should not be downgraded to first-frame mode");
+assert(omniReferenceBody.watermark === false, "Omni-fast reference mode should request watermark-free output");
+assert((omniReferenceBody.metadata as any).watermark === false, "Omni-fast reference mode should also disable watermark in metadata");
 const omniFirstLastBody = buildProxyBody({
   providerId: "google",
   modelName: "omni-fast",
@@ -708,6 +720,8 @@ const omniFirstLastBody = buildProxyBody({
 }) as Record<string, any>;
 assert(omniFirstLastBody.first_image_url === "https://assets.example/start.png", "Omni-fast first-last mode should send first_image_url");
 assert(omniFirstLastBody.last_image_url === "https://assets.example/end.png", "Omni-fast first-last mode should send last_image_url");
+assert(omniFirstLastBody.watermark === false, "Omni-fast first-last mode should request watermark-free output");
+assert((omniFirstLastBody.metadata as any).watermark === false, "Omni-fast first-last mode should also disable watermark in metadata");
 const configurableOpenAiVideos = resolveVideoRequestConfig({
   providerId: "grok",
   modelName: "grok-video-proxy",

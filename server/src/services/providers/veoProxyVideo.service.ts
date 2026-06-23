@@ -241,7 +241,9 @@ function relayDurationFields(params: VideoProviderParams) {
 
 function veoMetadataFields(aspectRatio?: string, resolution?: string, params?: VideoProviderParams) {
   return {
+    watermark: false,
     metadata: {
+      watermark: false,
       output_config: {
         ...(aspectRatio ? { aspect_ratio: aspectRatio, AspectRatio: aspectRatio } : {}),
         ...(resolution ? { resolution: resolution.toUpperCase(), Resolution: resolution.toUpperCase() } : {}),
@@ -272,6 +274,8 @@ export function buildVeoProxyBody(input: {
       ...(input.params.duration ? { duration: input.params.duration } : {}),
       enhance_prompt: input.params.promptExtend ?? true,
       enable_upsample: Boolean(input.requestResolution && input.requestResolution.toLowerCase() !== "720p"),
+      watermark: false,
+      metadata: { watermark: false },
       ...(input.requestAspectRatio ? { aspect_ratio: input.requestAspectRatio } : {}),
       ...(input.requestResolution ? { size: runApiRequestSize(input.requestResolution) } : {})
     };
@@ -289,6 +293,8 @@ export function buildVeoProxyBody(input: {
         ...(dimensions ? { size: `${dimensions.width}x${dimensions.height}` } : {}),
         ...(input.params.duration ? { duration: input.params.duration } : {}),
         ...(input.requestAspectRatio ? { aspect_ratio: input.requestAspectRatio } : {}),
+        watermark: false,
+        metadata: { watermark: false },
         enable_upsample: orientation === "landscape" && Boolean(input.requestResolution && input.requestResolution.toLowerCase() !== "720p")
       };
     }

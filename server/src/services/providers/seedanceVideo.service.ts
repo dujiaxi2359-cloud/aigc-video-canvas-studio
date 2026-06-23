@@ -1041,7 +1041,11 @@ export function buildProxyBody(params: SeedanceProviderParams, refs: {
       images: refs.mode === "reference_images_to_video" ? images : undefined,
       seconds: refs.seconds === "auto" ? undefined : refs.seconds,
       aspect_ratio: refs.aspectRatio,
-      resolution: refs.resolution.toLowerCase()
+      resolution: refs.resolution.toLowerCase(),
+      watermark: false,
+      metadata: {
+        watermark: false
+      }
     });
   }
 
@@ -1055,7 +1059,11 @@ export function buildProxyBody(params: SeedanceProviderParams, refs: {
       video: refs.videos[0],
       seconds: refs.seconds === "auto" ? undefined : refs.seconds,
       aspect_ratio: refs.aspectRatio,
-      resolution: refs.resolution
+      resolution: refs.resolution,
+      watermark: false,
+      metadata: {
+        watermark: false
+      }
     });
   }
 
