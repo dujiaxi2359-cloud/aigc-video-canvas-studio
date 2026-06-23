@@ -11,6 +11,7 @@ import { isGrokLikeVideoModel, normalizeVideoCapabilities } from "../services/vi
 import { ProviderError } from "../utils/providerErrors.js";
 import { mapVideoDimensions, normalizeVideoAspectRatio } from "../utils/videoParams.js";
 import { isZhipuImageModel, isZhipuOfficialEndpoint, normalizeZhipuBaseUrl, zhipuImageModels, zhipuVideoModels } from "../services/providers/zhipuProtocol.js";
+import { zhipuImageGenerationEndpointCandidates } from "../services/providers/zhipuImage.service.js";
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
@@ -1468,6 +1469,9 @@ assert(zhipuBody.image_url === "https://example.com/1.png", "Zhipu image-to-vide
 assert(zhipuBody.size === "720x1280", "Zhipu CogVideoX portrait 720p should use 720x1280");
 assert(isZhipuOfficialEndpoint("https://open.bigmodel.cn/api/paas/v4/async/images/generations"), "Zhipu full endpoints should be recognized as official");
 assert(normalizeZhipuBaseUrl("https://open.bigmodel.cn/api/paas/v4/async/images/generations") === "https://open.bigmodel.cn/api/paas/v4", "Zhipu full endpoints should normalize to the official base URL");
+assert(zhipuImageGenerationEndpointCandidates("https://open.bigmodel.cn/api/paas/v4")[0] === "https://open.bigmodel.cn/api/paas/v4/images/generations", "Zhipu image generation should keep the existing official endpoint first");
+assert(zhipuImageGenerationEndpointCandidates("https://open.bigmodel.cn/api/paas/v4").includes("https://open.bigmodel.cn/api/paas/v4/async/images/generations"), "Zhipu image generation should add the async image path as a fallback");
+assert(zhipuImageGenerationEndpointCandidates("https://open.bigmodel.cn/api/paas/v4/async/images/generations")[0] === "https://open.bigmodel.cn/api/paas/v4/async/images/generations", "Zhipu full async image endpoints should be respected when pasted");
 assert(isZhipuImageModel("glm-image") && zhipuImageModels.length === 4 && zhipuVideoModels.includes("viduq2") && zhipuVideoModels.length === 10, "Zhipu official model directories should be complete");
 
 console.log("[test:video-provider-adapters] ok");
