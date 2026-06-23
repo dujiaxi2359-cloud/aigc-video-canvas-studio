@@ -14,7 +14,7 @@ import type { AgentWorkflowPlan, AgentNodeType } from "../types/agent";
 import type { WorkflowNodeType } from "../types/node";
 
 const defaults: Record<WorkflowNodeType, unknown> = {
-  textGenerate: { title: "Gemini 智能体", prompt: "", taskType: "prompt-polish", status: "idle" },
+  textGenerate: { title: "创意工作台", prompt: "", taskType: "prompt-polish", status: "idle" },
   text: { title: "文本节点", content: "" },
   image: { title: "图片素材" },
   imageGenerate: { title: "图片生成", prompt: "", inputMode: "text-to-image", aspectRatio: "1:1", generateCount: 1, status: "idle" },
@@ -73,6 +73,16 @@ function mapAgentNodeType(type: AgentNodeType): WorkflowNodeType {
   if (type === "imageAsset") return "image";
   if (type === "videoGenerate") return "video";
   return type;
+}
+
+function normalizeLegacyNodeTitles(nodes: Node[]) {
+  return nodes.map((node) => {
+    if (node.type !== "textGenerate") return node;
+    const data = (node.data ?? {}) as Record<string, unknown>;
+    const title = String(data.title ?? "").trim();
+    if (title && !/^(Gemini\s*(智能体|Agent)|Agent\s*智能体)$/i.test(title)) return node;
+    return { ...node, data: { ...data, title: "创意工作台" } };
+  });
 }
 
 function nextPosition(nodes: Node[], position?: { x: number; y: number }) {
@@ -339,7 +349,10 @@ export const useCanvasStore = create<State>((set, get) => ({
     nodes: applyConnectionDefaults(state.nodes, connection.source, connection.target),
     edges: addEdge({ ...connection, type: "studioEdge", animated: true, style: edgeStyle() }, state.edges)
   })),
-  loadProject: (nodes, edges) => set({ nodes, edges, selectedNodeId: nodes.find((node) => node.selected)?.id }),
+  loadProject: (nodes, edges) => {
+    const normalizedNodes = normalizeLegacyNodeTitles(nodes);
+    set({ nodes: normalizedNodes, edges, selectedNodeId: normalizedNodes.find((node) => node.selected)?.id });
+  },
   getCanvasState: () => {
     const state = get();
     return {

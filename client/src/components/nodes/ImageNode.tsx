@@ -122,20 +122,6 @@ export function ImageNode(props: NodeProps<ImageNodeData>) {
     });
   }
 
-  function createVideoFollowUp(prompt: string, title = "视频节点", aspectRatio = ratio) {
-    addConnectedNode(props.id, "video", undefined, {
-      title,
-      prompt,
-      inputMode: "reference-to-video",
-      videoMode: "reference_images_to_video",
-      aspectRatio,
-      resolution: "720p",
-      duration: 8,
-      generateCount: 1,
-      status: "idle"
-    });
-  }
-
   function downloadCurrent() {
     if (!previewUrl) return;
     const link = document.createElement("a");
@@ -152,8 +138,9 @@ export function ImageNode(props: NodeProps<ImageNodeData>) {
   const lightingPanel = activePanel === "lighting" ? (
     <div className="image-asset-command-panel is-lighting">
       <button type="button" className="image-asset-panel-close" title="关闭" onClick={() => setActivePanel(null)}><X size={14} /></button>
+      <div className="image-asset-panel-eyebrow"><SunMedium size={14} /> 图片生成工具</div>
       <div className="image-asset-panel-title">打光效果</div>
-      <div className="image-asset-panel-copy">先选光线方向和强度，再生成新的打光参考图。</div>
+      <div className="image-asset-panel-copy">选择光线方案，创建已连接的图生图节点；主体、商品结构和构图保持不变。</div>
       <div className="image-asset-panel-grid">
         {["左侧光", "顶部光", "右侧光", "前方光", "轮廓光", "柔光棚拍"].map((label) => (
           <button key={label} type="button" onClick={() => { setActivePanel(null); createImageFollowUp(`基于参考图片做${label}打光优化：保持主体、构图和比例不变，只调整光线方向、亮度层次、质感和商业精修观感。`, `${label}打光`); }}>{label}</button>
@@ -165,11 +152,12 @@ export function ImageNode(props: NodeProps<ImageNodeData>) {
   const anglePanel = activePanel === "angle" ? (
     <div className="image-asset-command-panel is-angle">
       <button type="button" className="image-asset-panel-close" title="关闭" onClick={() => setActivePanel(null)}><X size={14} /></button>
-      <div className="image-asset-panel-title">多角度编辑器</div>
-      <div className="image-asset-panel-copy">用于生成多镜头观察素材，后续可接图生视频或分镜。</div>
+      <div className="image-asset-panel-eyebrow"><Orbit size={14} /> 图片生成工具</div>
+      <div className="image-asset-panel-title">多角度生成</div>
+      <div className="image-asset-panel-copy">选择观察机位，创建已连接的多角度参考图节点；只改变镜头视角，不改变主体身份与产品结构。</div>
       <div className="image-asset-panel-grid">
         {["鱼眼视角", "倾斜视角", "正面俯拍", "正面仰拍", "全景俯拍", "背面视角"].map((label) => (
-          <button key={label} type="button" onClick={() => { setActivePanel(null); createVideoFollowUp(`基于参考图片生成${label}多角度展示视频：保持主体身份、产品结构、服装和场景一致，镜头自然稳定，适合做电商视频参考。`, `${label}视频`); }}>{label}</button>
+          <button key={label} type="button" onClick={() => { setActivePanel(null); createImageFollowUp(`基于参考图片生成${label}静态参考图：严格保持主体身份、面部特征、产品结构、服装、材质和场景一致，只改变相机观察角度；画面真实自然、细节清晰，可继续连接图生视频或分镜节点。`, `${label}参考图`); }}>{label}</button>
         ))}
       </div>
     </div>

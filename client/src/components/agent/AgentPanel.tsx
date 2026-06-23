@@ -65,7 +65,7 @@ export function AgentPanel() {
               <Bot size={18} />
             </span>
             <div>
-              <h2 className="text-[15px] font-semibold">Moon｜Tv Agent</h2>
+              <h2 className="text-[15px] font-semibold">Moon｜Tv 创作助手</h2>
               <p className="text-[12px] text-white/40">你的工作流副驾驶</p>
             </div>
           </div>
@@ -82,7 +82,7 @@ export function AgentPanel() {
         </div>
 
         <div className="grid gap-2">
-          <label className="text-[12px] text-white/45">默认 Agent 模型</label>
+          <label className="text-[12px] text-white/45">默认创作模型</label>
           <select
             value={selectedModelConfigId ?? ""}
             onChange={(event) => setSelectedModelConfigId(event.target.value || undefined)}

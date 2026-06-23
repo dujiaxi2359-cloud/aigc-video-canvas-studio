@@ -24,7 +24,7 @@ export type DrawerName = "assets" | "templates" | "history" | null;
 const toolbarItems: Array<{ id: Exclude<DrawerName, null> | "agent"; label: string; icon: ElementType }> = [
   { id: "assets", label: "assets.title", icon: Folder },
   { id: "templates", label: "Templates", icon: Blocks },
-  { id: "agent", label: "Agent 对话", icon: MessageCircle },
+  { id: "agent", label: "创作助手", icon: MessageCircle },
   { id: "history", label: "历史记录", icon: History }
 ];
 

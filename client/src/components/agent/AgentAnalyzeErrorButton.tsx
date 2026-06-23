@@ -17,8 +17,7 @@ export function AgentAnalyzeErrorButton({ nodeId, errorMessage, nodeData }: { no
       onKeyDown={(event) => event.stopPropagation()}
     >
       <Bot size={12} />
-      让 Agent 分析
+      让创作助手分析
     </button>
   );
 }
-

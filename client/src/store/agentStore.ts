@@ -68,7 +68,7 @@ export const useAgentStore = create<State>((set, get) => ({
     try {
       const canvasState = useCanvasStore.getState().getCanvasState();
       const result = await agentApi.plan({ prompt: clean, canvasState, mode, modelConfigId: selectedModelConfigId });
-      if (result.status !== "success" || !result.plan) throw new Error(result.errorMessage ?? "Agent 没有返回工作流计划");
+      if (result.status !== "success" || !result.plan) throw new Error(result.errorMessage ?? "创作助手没有返回工作流计划");
       const plan = result.plan;
       set((state) => ({
         status: mode === "auto" ? "running" : "waiting_confirm",
@@ -79,7 +79,7 @@ export const useAgentStore = create<State>((set, get) => ({
       }));
       if (mode === "auto") get().confirmPlan();
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "Agent 规划失败";
+      const errorMessage = error instanceof Error ? error.message : "创作助手规划失败";
       set((state) => ({ status: "error", errorMessage, messages: [...state.messages, message("system", errorMessage)] }));
     }
   },
@@ -105,7 +105,7 @@ export const useAgentStore = create<State>((set, get) => ({
     try {
       const canvasState = useCanvasStore.getState().getCanvasState();
       const result = await agentApi.diagnose({ canvasState, modelConfigId: selectedModelConfigId });
-      if (result.status !== "success" || !result.report) throw new Error(result.errorMessage ?? "Agent 诊断失败");
+      if (result.status !== "success" || !result.report) throw new Error(result.errorMessage ?? "创作助手诊断失败");
       const report = result.report;
       set((state) => ({
         status: "done",
@@ -114,7 +114,7 @@ export const useAgentStore = create<State>((set, get) => ({
         messages: [...state.messages, message("agent", report.summary)]
       }));
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "Agent 诊断失败";
+      const errorMessage = error instanceof Error ? error.message : "创作助手诊断失败";
       set((state) => ({ status: "error", errorMessage, messages: [...state.messages, message("system", errorMessage)] }));
     }
   },
@@ -124,15 +124,15 @@ export const useAgentStore = create<State>((set, get) => ({
     try {
       const canvasState = useCanvasStore.getState().getCanvasState();
       const result = await agentApi.explainError({ nodeId, errorMessage, nodeData, canvasState, modelConfigId: selectedModelConfigId });
-      if (result.status !== "success") throw new Error(result.errorMessage ?? "Agent 分析失败");
+      if (result.status !== "success") throw new Error(result.errorMessage ?? "创作助手分析失败");
       const text = `${result.explanation ?? ""}\n\n建议：${result.suggestion ?? ""}`.trim();
       set((state) => ({
         status: "done",
         provider: result.provider,
-        messages: [...state.messages, message("agent", text || "Agent 已完成分析。")]
+        messages: [...state.messages, message("agent", text || "创作助手已完成分析。")]
       }));
     } catch (error) {
-      const msg = error instanceof Error ? error.message : "Agent 分析失败";
+      const msg = error instanceof Error ? error.message : "创作助手分析失败";
       set((state) => ({ status: "error", errorMessage: msg, messages: [...state.messages, message("system", msg)] }));
     }
   }

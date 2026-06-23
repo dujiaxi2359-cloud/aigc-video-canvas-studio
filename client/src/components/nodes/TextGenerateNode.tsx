@@ -1,10 +1,9 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type CompositionEvent } from "react";
 import type { Edge, Node, NodeProps } from "reactflow";
-import { Copy, Image as ImageIcon, Library, Sparkles } from "lucide-react";
-import { Button } from "../common/Button";
+import { AlertCircle, ArrowUp, Copy, FileText, Image as ImageIcon, Library, Maximize2, Sparkles } from "lucide-react";
 import { Select } from "../common/Select";
 import { Textarea } from "../common/Textarea";
-import { NodeShell } from "./NodeShell";
+import { CreationNodeFrame } from "./CreationNodeFrame";
 import { generationApi } from "../../services/generationApi";
 import { useCanvasStore } from "../../store/canvasStore";
 import { useModelConfigStore } from "../../store/modelConfigStore";
@@ -118,9 +117,18 @@ export function TextGenerateNode(props: NodeProps<TextGenerateNodeData>) {
   const [localError, setLocalError] = useState("");
   const [copyStatus, setCopyStatus] = useState("");
   const [activeTool, setActiveTool] = useState<NodeTool>(null);
+  const [expanded, setExpanded] = useState(false);
   const [pendingMentionRange, setPendingMentionRange] = useState<MentionRange | null>(null);
   const isComposingRef = useRef(false);
   const promptTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const displayTitle = !props.data.title || /^(Gemini\s*(智能体|Agent)|Agent\s*智能体)$/i.test(props.data.title.trim())
+    ? "创意工作台"
+    : props.data.title;
+
+  useEffect(() => {
+    if (props.data.title === displayTitle) return;
+    update(props.id, { title: displayTitle });
+  }, [displayTitle, props.data.title, props.id, update]);
 
   useEffect(() => {
     if (selectedModel || !textModels.length) return;
@@ -190,7 +198,7 @@ export function TextGenerateNode(props: NodeProps<TextGenerateNodeData>) {
 
   async function generate() {
     if (!props.data.modelConfigId || !selectedModel) {
-      update(props.id, { status: "error", errorMessage: "暂无可用文本模型，请先到设置中心配置 Gemini 或 DeepSeek API。" });
+      update(props.id, { status: "error", errorMessage: "暂无可用文本模型，请先到设置中心配置文本生成 API。" });
       return;
     }
 
@@ -260,87 +268,53 @@ export function TextGenerateNode(props: NodeProps<TextGenerateNodeData>) {
     previewUrl: item.previewUrl
   }));
 
-  return (
-    <NodeShell
-      {...props}
-      title={props.data.title}
-      badge="Gemini Agent"
-      width={380}
-      status={statusText(props.data.status)}
-      footer={
-        <div className="nodrag nopan flex h-[42px] items-center gap-2 overflow-hidden">
-          <Select className="h-8 min-w-[132px]" value={props.data.modelConfigId ?? ""} onChange={(event) => update(props.id, { modelConfigId: event.target.value })}>
-            <option value="">选择模型</option>
-            {textModels.map((model) => (
-              <option key={model.id} value={model.id}>
-                {model.displayName}
-              </option>
-            ))}
-          </Select>
-          <Select className="h-8 w-[112px]" value={props.data.taskType} onChange={(event) => update(props.id, { taskType: event.target.value as TextAgentTask })}>
-            {(Object.keys(taskLabels) as TextAgentTask[]).map((task) => (
-              <option key={task} value={task}>
-                {taskLabels[task]}
-              </option>
-            ))}
-          </Select>
-          <Button className="ml-auto h-[34px] min-w-[74px]" variant="primary" disabled={props.data.status === "generating"} onClick={generate}>
-            <Sparkles size={14} /> {buttonText(props.data.status)}
-          </Button>
-        </div>
-      }
-    >
-      <div className="space-y-2.5">
-        {props.data.taskType === "reverse-prompt" && !resolvedImageInputs.hasImageInput && (
-          <div className="rounded-[10px] border border-amber-300/15 bg-amber-300/10 px-2.5 py-2 text-[12px] leading-5 text-amber-100">
-            反推提示词建议连接图片素材或图片生成节点。
-          </div>
-        )}
-        {upstreamText && <div className="line-clamp-3 rounded-[10px] border border-white/[0.06] bg-white/[0.04] px-2.5 py-2 text-[12px] leading-5 text-[#a2acba]">已引用上游节点内容。</div>}
-        {referenceVisualItems.length > 0 && (
-          <div className="nodrag nopan flex max-h-[82px] flex-wrap gap-2 overflow-auto rounded-[10px] border border-white/[0.07] bg-white/[0.035] p-2">
-            {referenceVisualItems.map((item) => (
-              <button key={item.token} type="button" title={`${item.token} · ${item.name}`} onClick={() => insertReferenceToken(item.token)} className="inline-flex max-w-[168px] items-center gap-2 rounded-[9px] border border-white/[0.08] bg-black/20 px-2 py-1 text-left text-[11px] text-white/65 hover:bg-white/[0.07]">
-                {item.previewUrl ? <img src={item.previewUrl} alt="" className="h-7 w-7 rounded-md object-cover" onError={(event) => { const image = event.currentTarget; if (item.fallbackUrl && image.src !== item.fallbackUrl) image.src = item.fallbackUrl; else image.style.display = "none"; }} /> : <ImageIcon size={15} />}
-                <span className="min-w-0 truncate">{item.name}</span>
-                <span className="text-white/35">{item.token}</span>
-              </button>
-            ))}
-          </div>
-        )}
-        <div className="relative">
-          <Textarea
-            ref={promptTextareaRef}
-            className="h-[112px]"
-            placeholder="输入粗略想法，或输入 @ 引用连接图片，例如：帮我把 @素材1 反推成图生视频提示词。"
-            value={localPrompt}
-            onChange={handlePromptChange}
-            onCompositionStart={handleCompositionStart}
-            onCompositionEnd={handleCompositionEnd}
-            onClick={(event) => maybeOpenReferenceMenu(event.currentTarget)}
-            onKeyUp={(event) => maybeOpenReferenceMenu(event.currentTarget)}
-          />
-          {referenceVisualItems.length > 0 && (
-            <button type="button" title="引用连接图片" className="nodrag nopan absolute bottom-2 right-2 inline-flex h-8 items-center gap-1 rounded-full border border-white/[0.08] bg-[#11151c] px-2 text-[11px] text-white/55 hover:bg-white/[0.08] hover:text-white" onClick={() => setActiveTool(activeTool === "assets" ? null : "assets")}>
-              <Library size={13} /> 引用
-            </button>
-          )}
-          <NodeToolPanel tool={activeTool} onClose={() => setActiveTool(null)} onInsert={insertReferenceToken} referenceItems={referenceMenuItems} referenceTitle="图片引用" showReferenceCommands={false} />
-        </div>
-        {props.data.status === "success" && props.data.outputText && (
-          <div className="nodrag nopan nowheel max-h-[160px] overflow-auto rounded-xl border border-white/[0.06] bg-[#0f131a] p-3 text-[12px] leading-5 text-[#d8dee8]">
-            <div className="mb-2 flex items-center justify-between gap-2">
-              <span className="text-[11px] font-medium text-[#7d8796]">输出结果</span>
-              <Button className="h-7 px-2" variant="ghost" type="button" onClick={copyOutput}>
-                <Copy size={13} /> {copyStatus || "复制"}
-              </Button>
-            </div>
-            <pre className="whitespace-pre-wrap font-sans">{props.data.outputText}</pre>
-          </div>
-        )}
-        {(props.data.errorMessage || localError) && <div className="text-[12px] leading-5 text-red-300">{props.data.errorMessage || localError}</div>}
-        {(props.data.errorMessage || localError) && <AgentAnalyzeErrorButton nodeId={props.id} errorMessage={props.data.errorMessage || localError} nodeData={props.data as unknown as Record<string, unknown>} />}
+  const preview = (
+    <div className={`creative-workbench-preview is-${props.data.status}`}>
+      <div className="creative-workbench-preview-head">
+        <span className="creative-workbench-mark"><Sparkles size={17} /></span>
+        <div><strong>{taskLabels[props.data.taskType]}</strong><small>生成结果会保留在这里，可继续连接图片、视频或剧本节点</small></div>
+        {props.data.outputText && <button type="button" title="复制结果" onClick={copyOutput}><Copy size={14} /><span>{copyStatus || "复制"}</span></button>}
       </div>
-    </NodeShell>
+      <div className="creative-workbench-output nodrag nopan nowheel">
+        {props.data.status === "success" && props.data.outputText ? <pre>{props.data.outputText}</pre> :
+          props.data.status === "generating" ? <div className="creative-workbench-empty"><Sparkles className="animate-pulse" size={24} /><strong>正在整理创作内容</strong><span>完成后会自动显示在当前节点</span></div> :
+            props.data.status === "error" ? <div className="creative-workbench-empty is-error"><AlertCircle size={24} /><strong>本次生成未完成</strong><span>请在下方查看原因并重试</span></div> :
+              <div className="creative-workbench-empty"><FileText size={24} /><strong>等待生成内容</strong><span>输入想法、引用素材，再选择任务类型</span></div>}
+      </div>
+    </div>
   );
+
+  const dock = (
+    <div className="creation-dock-content creative-workbench-dock relative">
+      <div className="creation-video-reference-bar">
+        <button type="button" title="引用素材" className={`creation-video-reference-tool ${activeTool === "assets" ? "is-active" : ""}`} onClick={() => setActiveTool(activeTool === "assets" ? null : "assets")}><Sparkles size={17} /></button>
+        <span className="creation-video-reference-divider" />
+        <div className="creation-video-reference-thumbnails">
+          {referenceVisualItems.map((item) => (
+            <button type="button" className="creation-video-reference-thumbnail" key={item.token} title={`${item.token} · ${item.name}`} onClick={() => insertReferenceToken(item.token)}>
+              {item.previewUrl ? <img src={item.previewUrl} alt="" onError={(event) => { const image = event.currentTarget; if (item.fallbackUrl && image.src !== item.fallbackUrl) image.src = item.fallbackUrl; else image.style.display = "none"; }} /> : <ImageIcon size={17} />}
+            </button>
+          ))}
+          <button type="button" title="添加参考素材" className={`creation-video-reference-add ${activeTool === "assets" ? "is-active" : ""}`} onClick={() => setActiveTool(activeTool === "assets" ? null : "assets")}><Library size={18} /></button>
+        </div>
+        <button type="button" title={expanded ? "收起详情" : "展开详情"} className="creation-detail-toggle" onClick={() => setExpanded((value) => !value)}><Maximize2 size={14} /></button>
+      </div>
+      {referenceVisualItems.length > 0 && <div className="creation-video-reference-chips">{referenceVisualItems.map((item) => <span key={item.token} className="creation-video-reference-chip">{item.previewUrl ? <img src={item.previewUrl} alt="" /> : <ImageIcon size={14} />}<button type="button" className="creation-video-reference-token" onClick={() => insertReferenceToken(item.token)}><span>图像</span><strong>{item.name}</strong></button></span>)}</div>}
+      <div className="creation-dock-composer">
+        <Textarea ref={promptTextareaRef} className="creation-prompt-input nodrag nopan nowheel" placeholder="输入创作目标，或输入 @ 引用连接素材" value={localPrompt} onChange={handlePromptChange} onCompositionStart={handleCompositionStart} onCompositionEnd={handleCompositionEnd} onClick={(event) => maybeOpenReferenceMenu(event.currentTarget)} onKeyUp={(event) => maybeOpenReferenceMenu(event.currentTarget)} />
+      </div>
+      {(props.data.errorMessage || localError) && <button type="button" className="creation-error-line" onClick={() => setExpanded(true)}><AlertCircle size={12} /><span>{props.data.errorMessage || localError}</span><strong>诊断</strong></button>}
+      <div className="creation-dock-footer">
+        <div className="creation-dock-identity">
+          <div className="creation-model-field"><Sparkles size={14} /><Select className="creation-model-select" value={props.data.modelConfigId ?? ""} onChange={(event) => update(props.id, { modelConfigId: event.target.value })}><option value="">选择模型</option>{textModels.map((model) => <option key={model.id} value={model.id}>{model.displayName}</option>)}</Select></div>
+          <Select className="creative-workbench-task-select" value={props.data.taskType} onChange={(event) => update(props.id, { taskType: event.target.value as TextAgentTask })}>{(Object.keys(taskLabels) as TextAgentTask[]).map((task) => <option key={task} value={task}>{taskLabels[task]}</option>)}</Select>
+        </div>
+        <div className="creation-dock-actions"><button type="button" title={buttonText(props.data.status)} aria-label={buttonText(props.data.status)} className="creation-generate-button creation-video-generate-button" disabled={!selectedModel || props.data.status === "generating"} onClick={() => void generate()}><ArrowUp size={19} strokeWidth={2.3} /></button></div>
+      </div>
+      <NodeToolPanel tool={activeTool} onClose={() => setActiveTool(null)} onInsert={insertReferenceToken} referenceItems={referenceMenuItems} referenceTitle="图片引用" showReferenceCommands={false} />
+      {expanded && <div className="creation-detail-panel nodrag nopan">{props.data.taskType === "reverse-prompt" && !resolvedImageInputs.hasImageInput && <div className="creation-detail-copy">反推提示词需要连接图片素材或图片生成节点。</div>}{upstreamText && <div className="creation-detail-copy">已引用上游节点内容。</div>}{(props.data.errorMessage || localError) && <AgentAnalyzeErrorButton nodeId={props.id} errorMessage={props.data.errorMessage || localError} nodeData={props.data as unknown as Record<string, unknown>} />}</div>}
+    </div>
+  );
+
+  return <CreationNodeFrame id={props.id} type={props.type} selected={props.selected} title={displayTitle} ratio="16:9" status={props.data.status} preview={preview} dock={dock} />;
 }

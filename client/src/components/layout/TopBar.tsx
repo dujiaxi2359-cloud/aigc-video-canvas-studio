@@ -31,7 +31,7 @@ export function TopBar() {
       return;
     }
     if (!selectedNode.type || !runnableNodeTypes.has(selectedNode.type)) {
-      window.alert("当前选中的节点不能直接运行，请选择智能体、图片生成、视频生成或合成节点。");
+      window.alert("当前选中的节点不能直接运行，请选择创意工作台、图片生成、视频生成或合成节点。");
       return;
     }
     window.dispatchEvent(new CustomEvent("studio:run-node", { detail: { nodeId: selectedNode.id, nodeType: selectedNode.type } }));

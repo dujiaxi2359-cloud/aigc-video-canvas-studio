@@ -21,15 +21,15 @@ export function AgentSettingsPanel() {
     setMessage("");
     try {
       const result = await agentApi.plan({
-        prompt: "测试 Agent，生成一个图生视频工作流计划",
+        prompt: "测试创作助手，生成一个图生视频工作流计划",
         canvasState: useCanvasStore.getState().getCanvasState(),
         mode: "manual_confirm",
         modelConfigId: selectedModelConfigId
       });
-      if (result.status !== "success") throw new Error(result.errorMessage ?? "Agent 测试失败");
-      setMessage(`${result.provider === "rule-based" ? "本地规则引擎" : "Gemini Agent"} 连接成功，已返回 workflowPlan JSON。`);
+      if (result.status !== "success") throw new Error(result.errorMessage ?? "创作助手连接测试失败");
+      setMessage(`${result.provider === "rule-based" ? "本地规则引擎" : "创作模型"}连接成功，已返回工作流规划。`);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Agent 测试失败");
+      setMessage(error instanceof Error ? error.message : "创作助手连接测试失败");
     } finally {
       setTesting(false);
     }
@@ -43,8 +43,8 @@ export function AgentSettingsPanel() {
             <Bot size={18} />
           </span>
           <div>
-            <h2 className="text-[16px] font-semibold text-white">Agent 智能体</h2>
-            <p className="mt-1 text-[12px] text-white/42">选择推理模型和执行策略；密钥仍由 API 接入统一管理。</p>
+            <h2 className="text-[16px] font-semibold text-white">创作助手</h2>
+            <p className="mt-1 text-[12px] text-white/42">选择创作模型和执行策略；密钥仍由 API 接入统一管理。</p>
           </div>
         </div>
         <button
@@ -54,19 +54,19 @@ export function AgentSettingsPanel() {
           className="settings-primary-button"
         >
           {testing ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />}
-          测试 Agent
+          测试连接
         </button>
       </div>
 
       <div className="mt-4 grid gap-4 md:grid-cols-[1.2fr_0.8fr]">
         <div className="grid gap-2">
-          <label className="text-[12px] text-white/45">默认 Agent 模型</label>
+          <label className="text-[12px] text-white/45">默认创作模型</label>
           <select
             value={selectedModelConfigId ?? ""}
             onChange={(event) => setSelectedModelConfigId(event.target.value || undefined)}
             className="settings-select"
           >
-            <option value="">自动选择 Gemini / DeepSeek / 本地规则引擎</option>
+            <option value="">自动选择可用文本模型或本地规则引擎</option>
             {textModels.map((model) => (
               <option key={model.id} value={model.id}>{model.displayName}</option>
             ))}
@@ -77,7 +77,7 @@ export function AgentSettingsPanel() {
         </div>
 
         <div className="grid gap-2">
-          <label className="text-[12px] text-white/45">Agent 执行模式</label>
+          <label className="text-[12px] text-white/45">工作流执行模式</label>
           <div className="grid grid-cols-2 gap-2">
             <button type="button" onClick={() => setMode("manual_confirm")} className={`settings-segment ${mode === "manual_confirm" ? "is-active" : ""}`}>
               手动确认

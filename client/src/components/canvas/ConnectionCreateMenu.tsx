@@ -10,7 +10,7 @@ export type ConnectionCreateMenuState = {
 
 const meta: Record<WorkflowNodeType, { label: string; icon: React.ElementType }> = {
   text: { label: "文本", icon: FileText },
-  textGenerate: { label: "Gemini 智能体", icon: Sparkles },
+  textGenerate: { label: "创意工作台", icon: Sparkles },
   image: { label: "图片素材", icon: Image },
   imageGenerate: { label: "图片生成", icon: Image },
   video: { label: "视频生成", icon: Film },

@@ -8,7 +8,7 @@ const items: Array<{ type: WorkflowNodeType; label: string; description: string;
   { type: "imageGenerate", label: "图片", description: "生成、编辑与风格控制", icon: Image, group: "创作节点" },
   { type: "video", label: "视频", description: "文生、图生与参考生视频", icon: Film, group: "创作节点" },
   { type: "audio", label: "音频", description: "配乐与旁白", icon: Music, group: "创作节点" },
-  { type: "textGenerate", label: "AI 智能体", description: "提示词优化与反推", icon: Sparkles, group: "辅助工具" },
+  { type: "textGenerate", label: "创意工作台", description: "提示词、脚本与视觉反推", icon: Sparkles, group: "辅助工具" },
   { type: "script", label: "分镜脚本", description: "镜头规划与 Shot Prompt", icon: ScrollText, group: "辅助工具" },
   { type: "compose", label: "视频合成", description: "视频、音频与字幕", icon: Clapperboard, group: "辅助工具" },
   { type: "image", label: "上传素材", description: "从本地添加图片素材", icon: Upload, group: "添加资源" }

@@ -15,7 +15,7 @@ export function AgentFloatingButton() {
       }`}
     >
       <Sparkles size={16} strokeWidth={1.8} />
-      Agent
+      助手
     </button>
   );
 }
