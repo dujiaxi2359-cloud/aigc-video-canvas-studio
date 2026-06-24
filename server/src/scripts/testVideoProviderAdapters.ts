@@ -1431,6 +1431,24 @@ assert(agnesConfig.apiFamily === "agnes_video", "Agnes official route should use
 assert(agnesConfig.finalUrl === "https://apihub.agnes-ai.com/v1/videos", "Agnes create endpoint should match the official API");
 assert(agnesConfig.pollEndpoint === "/agnesapi?video_id={taskId}", "Agnes polling should use video_id");
 assert(agnesConfig.imageTransport === "url", "Agnes image inputs should use public URLs");
+const agnesStaleTransportConfig = resolveVideoRequestConfig({
+  providerId: "openai-video",
+  modelName: "agnes-video-v2.0",
+  apiBaseUrl: "https://apihub.agnes-ai.com",
+  apiKey: "test",
+  prompt: "test",
+  inputMode: "reference-to-video",
+  imageAssetIds: ["asset-1"],
+  duration: 5,
+  aspectRatio: "9:16",
+  resolution: "720p"
+} as never, normalizeVideoCapabilities({
+  inputModes: ["reference-to-video"],
+  imageTransport: "base64_json",
+  channelCapability: { imageTransport: "base64_json" }
+}, "openai-video", "agnes-video-v2.0"));
+assert(agnesStaleTransportConfig.apiFamily === "agnes_video", "Agnes host/model should still infer the Agnes API family from stale relay configs");
+assert(agnesStaleTransportConfig.imageTransport === "url", "Agnes official route must override stale base64 image transport");
 const agnesBody = buildProxyBody({ modelName: "agnes-video-v2.0", prompt: "test", apiBaseUrl: "https://apihub.agnes-ai.com", apiKey: "test" } as never, {
   apiFamily: "agnes_video",
   mode: "reference_images_to_video",

@@ -205,10 +205,10 @@ function defaultTaskField(apiFamily: VideoApiFamily, capabilities: ModelCapabili
 }
 
 function defaultImageTransport(channel: VideoChannel, apiFamily: VideoApiFamily, capabilities: ModelCapabilities): VideoImageTransport {
+  if (apiFamily === "agnes_video" || apiFamily === "zhipu_video") return "url";
   if (capabilities.imageTransport) return capabilities.imageTransport;
   if (!supportedInputs(capabilities).some((input) => ["image", "first_frame", "reference_image", "first_last_frame"].includes(input))) return "unsupported";
   if (apiFamily === "seedance2_native") return "url_or_asset";
-  if (apiFamily === "agnes_video" || apiFamily === "zhipu_video") return "url";
   if (apiFamily === "grok_video") return "multipart_file";
   if (channel === "official") return "multipart_file";
   if (apiFamily === "doubao_seedance15") return "multipart_file";
