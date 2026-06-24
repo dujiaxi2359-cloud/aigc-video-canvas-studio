@@ -2731,10 +2731,10 @@ select {
 .creation-node-delete { position: absolute; right: 9px; top: 9px; z-index: 10; display: grid; width: 28px; height: 28px; place-items: center; border-radius: 10px; background: rgba(7,8,10,.62); color: rgba(255,255,255,.5); opacity: 0; backdrop-filter: blur(14px); }
 .creation-preview-card:hover .creation-node-delete { opacity: 1; }
 .creation-node-delete:hover { color: #fecaca; background: rgba(248,113,113,.12); }
-.creation-preview-status { position: absolute; left: 10px; top: 10px; z-index: 8; border-radius: 999px; background: rgba(9,10,12,.66); padding: 4px 8px; color: rgba(255,255,255,.54); font-size: 10px; backdrop-filter: blur(12px); }
-.creation-preview-status.is-success { color: #a7f3d0; }
-.creation-preview-status.is-error { color: #fecaca; }
-.creation-preview-status.is-generating { color: #bae6fd; }
+.creation-preview-status { position: absolute; left: 10px; top: 10px; z-index: 8; border: 1px solid rgba(255,255,255,.08); border-radius: 999px; background: rgba(9,10,12,.72); padding: 4px 9px; color: rgba(255,255,255,.58); font-size: 10px; font-weight: 650; backdrop-filter: blur(12px); }
+.creation-preview-status.is-success { border-color: rgba(141,232,212,.2); background: rgba(14,55,48,.68); color: #a7f3d0; }
+.creation-preview-status.is-error { border-color: rgba(248,113,113,.24); background: rgba(68,18,24,.68); color: #fecaca; }
+.creation-preview-status.is-generating { border-color: rgba(125,211,252,.18); background: rgba(14,40,62,.68); color: #bae6fd; }
 .creation-media-preview { width: 100%; height: 100%; border: 0; border-radius: inherit; background: transparent; }
 .creation-media-preview .media-preview-frame { width: 100%; height: 100%; max-width: 100%; border: 0; border-radius: inherit; background: transparent; box-shadow: none; }
 .creation-node[data-node-type="image"] .creation-preview-card,

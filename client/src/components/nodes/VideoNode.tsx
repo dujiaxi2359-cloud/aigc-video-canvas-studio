@@ -598,6 +598,15 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
   const outputIsVideo = Boolean(props.data.outputUrl);
   const effectiveStatus = outputIsVideo ? "success" : props.data.status;
   const frameStatus = effectiveStatus === "success" && !outputIsVideo ? "idle" : effectiveStatus;
+  const frameStatusLabel = outputIsVideo
+    ? "已完成 · 可下载"
+    : effectiveStatus === "generating"
+      ? "中转生成中"
+      : effectiveStatus === "error"
+        ? "失败 · 可重试"
+        : effectiveStatus === "success"
+          ? "等待回填"
+          : "未生成";
   const displayRatio = displayAspectRatio(props.data.aspectRatio, selectedAspectRatio);
   const selectedChannelHost = channelHost(selectedModel?.apiBaseUrl);
   const actualOutputInfo = outputInfo(props.data.payloadSummary, props.data.resolution);
@@ -1139,7 +1148,7 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
     </div>
   );
 
-  return <CreationNodeFrame id={props.id} type={props.type} selected={props.selected} title={props.data.title || "Video"} ratio={displayRatio} status={frameStatus} preview={preview} toolbar={<MediaPreviewActions kind="video" url={outputIsVideo ? props.data.outputUrl : undefined} assetId={props.data.outputAssetId} title={props.data.title} nodeId={props.id} onSaved={(assetId) => update(props.id, { outputAssetId: assetId })} />} dock={dock} />;
+  return <CreationNodeFrame id={props.id} type={props.type} selected={props.selected} title={props.data.title || "Video"} ratio={displayRatio} status={frameStatus} statusLabel={frameStatusLabel} preview={preview} toolbar={<MediaPreviewActions kind="video" url={outputIsVideo ? props.data.outputUrl : undefined} assetId={props.data.outputAssetId} title={props.data.title} nodeId={props.id} onSaved={(assetId) => update(props.id, { outputAssetId: assetId })} />} dock={dock} />;
 }
 
 export const VideoNode = memo(VideoNodeComponent);

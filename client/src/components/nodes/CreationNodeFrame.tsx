@@ -24,13 +24,14 @@ function frameWidth(type: string | undefined, cardWidth: number, hasDock: boolea
   return Math.max(cardWidth, hasDock ? 640 : 520);
 }
 
-function CreationNodeFrameComponent({ id, type, selected, title, ratio, status, preview, toolbar, floatingToolbar, dock, hideInlineControls }: {
+function CreationNodeFrameComponent({ id, type, selected, title, ratio, status, statusLabel, preview, toolbar, floatingToolbar, dock, hideInlineControls }: {
   id: string;
   type?: string;
   selected?: boolean;
   title: string;
   ratio?: string;
   status?: string;
+  statusLabel?: string;
   preview: ReactNode;
   toolbar?: ReactNode;
   floatingToolbar?: ReactNode;
@@ -61,7 +62,7 @@ function CreationNodeFrameComponent({ id, type, selected, title, ratio, status, 
           {!hideInlineControls && toolbar}
           {!hideInlineControls && <button type="button" title="删除节点" className="creation-node-delete nodrag nopan" onClick={() => deleteNode(id)}><Trash2 size={13} /></button>}
           {preview}
-          {status && <span className={`creation-preview-status is-${status}`}>{status === "generating" ? "生成中" : status === "success" ? "已完成" : status === "error" ? "失败" : "未生成"}</span>}
+          {status && <span className={`creation-preview-status is-${status}`}>{statusLabel || (status === "generating" ? "生成中" : status === "success" ? "已完成" : status === "error" ? "失败" : "未生成")}</span>}
         </div>
       </div>
       {dock && (
