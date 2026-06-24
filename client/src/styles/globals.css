@@ -8818,9 +8818,9 @@ video:-webkit-full-screen,
 }
 
 :root[data-theme="light"] .studio-home-nav {
-  border-bottom-color: rgba(30, 30, 30, 0.07);
-  background: rgba(247, 244, 238, 0.72);
-  box-shadow: 0 12px 38px rgba(82, 72, 58, 0.08);
+  border-bottom-color: rgba(35, 34, 40, 0.065);
+  background: rgba(250, 249, 246, 0.78);
+  box-shadow: 0 14px 42px rgba(64, 58, 72, 0.08);
 }
 
 :root[data-theme="light"] .studio-home-nav .brand-identity,
@@ -8837,8 +8837,8 @@ video:-webkit-full-screen,
 }
 
 :root[data-theme="light"] .studio-home-nav nav {
-  border-color: rgba(30, 30, 30, 0.08) !important;
-  background: rgba(255, 255, 255, 0.48) !important;
+  border-color: rgba(35, 34, 40, 0.075) !important;
+  background: rgba(255, 255, 255, 0.58) !important;
 }
 
 :root[data-theme="light"] .studio-home-nav nav button {
@@ -9144,7 +9144,7 @@ video:-webkit-full-screen,
 }
 
 :root[data-theme="light"] .home-gateway {
-  background: #f5f6fb;
+  background: #f7f6f2;
 }
 
 :root[data-theme="light"] .home-unicorn-hero {
@@ -9165,14 +9165,14 @@ video:-webkit-full-screen,
 
 :root[data-theme="light"] .home-page-plasma {
   background:
-    radial-gradient(circle at 47% 28%, rgba(139, 92, 246, 0.08), transparent 35%),
-    radial-gradient(circle at 76% 66%, rgba(6, 182, 212, 0.045), transparent 36%),
-    #f5f6fb;
+    radial-gradient(circle at 46% 24%, rgba(124, 115, 145, 0.075), transparent 38%),
+    radial-gradient(circle at 76% 68%, rgba(181, 188, 202, 0.13), transparent 42%),
+    linear-gradient(135deg, #faf8f3 0%, #f4f5f8 48%, #f8f6f0 100%);
 }
 
 :root[data-theme="light"] .home-plasma-canvas {
-  opacity: 1;
-  filter: saturate(1.08) contrast(1.02);
+  opacity: 0.76;
+  filter: saturate(0.54) contrast(0.88) brightness(1.14);
   mix-blend-mode: normal;
 }
 
@@ -9186,23 +9186,45 @@ video:-webkit-full-screen,
 
 :root[data-theme="light"] .home-unicorn-copy::before {
   background:
-    radial-gradient(ellipse at 50% 45%, rgba(245, 246, 251, 0.34) 0%, rgba(245, 246, 251, 0.16) 38%, transparent 72%);
+    radial-gradient(ellipse at 50% 46%, rgba(250, 249, 246, 0.76) 0%, rgba(250, 249, 246, 0.42) 38%, rgba(250, 249, 246, 0) 72%);
 }
 
 :root[data-theme="light"] .home-unicorn-eyebrow {
-  color: rgba(28, 27, 31, 0.52);
-  text-shadow: 0 1px 18px rgba(255, 255, 255, 0.58);
+  color: rgba(40, 38, 46, 0.56);
+  text-shadow: 0 1px 18px rgba(255, 255, 255, 0.72);
 }
 
 :root[data-theme="light"] .home-unicorn-brand-title,
 :root[data-theme="light"] .home-unicorn-en-title {
-  color: rgba(28, 27, 31, 0.88);
-  text-shadow: 0 12px 50px rgba(82, 72, 58, 0.16);
+  color: rgba(33, 31, 39, 0.94);
+  text-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.72),
+    0 18px 56px rgba(70, 64, 82, 0.14);
 }
 
 :root[data-theme="light"] .home-unicorn-cn-title {
-  color: #7a4fd8;
-  text-shadow: 0 12px 46px rgba(122, 79, 216, 0.14);
+  color: rgba(64, 58, 76, 0.9);
+  text-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.72),
+    0 16px 46px rgba(70, 64, 82, 0.12);
+}
+
+:root[data-theme="light"] .home-unicorn-start-button {
+  border-color: rgba(35, 34, 40, 0.1);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(229, 228, 224, 0.94));
+  color: rgba(32, 30, 36, 0.92);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.82),
+    0 18px 42px rgba(63, 58, 70, 0.16);
+}
+
+:root[data-theme="light"] .home-unicorn-start-button:hover {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(236, 235, 231, 0.98));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.88),
+    0 22px 50px rgba(63, 58, 70, 0.18);
 }
 
 :root[data-theme="light"] .moon-logo-orbit {

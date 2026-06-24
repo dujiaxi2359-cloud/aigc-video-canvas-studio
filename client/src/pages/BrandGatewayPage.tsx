@@ -76,7 +76,16 @@ export function BrandGatewayPage({ onNavigate }: { onNavigate: (page: Page, proj
     >
       {!launchComplete ? <HomeLaunchIntro onFinish={() => setLaunchComplete(true)} /> : null}
       {launchComplete && resolvedTheme === "dark" ? <FerrofluidBackground className="home-page-ferrofluid" /> : null}
-      {launchComplete && resolvedTheme === "light" ? <HomePlasmaBackground className="home-page-plasma" /> : null}
+      {launchComplete && resolvedTheme === "light" ? (
+        <HomePlasmaBackground
+          className="home-page-plasma"
+          color="#756f82"
+          speed={0.42}
+          scale={0.62}
+          opacity={0.74}
+          mouseInteractive={false}
+        />
+      ) : null}
       <HomeTopNav page="home" onNavigate={onNavigate} />
 
       <main className="home-flagship-content">
