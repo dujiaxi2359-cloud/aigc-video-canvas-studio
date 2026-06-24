@@ -6,6 +6,8 @@ const veoInputModes: ModelInputMode[] = ["text-to-video", "image-to-video", "ref
 const veoSupportedInputs: VideoSupportedInput[] = ["text", "image", "first_frame", "reference_image", "first_last_frame"];
 const grokInputModes: ModelInputMode[] = ["text-to-video", "image-to-video", "reference-to-video", "first-last-frame", "video-to-video"];
 const grokSupportedInputs: VideoSupportedInput[] = ["text", "image", "first_frame", "reference_image", "first_last_frame", "video"];
+const grokRelayGenerationInputModes: ModelInputMode[] = ["text-to-video", "image-to-video", "reference-to-video", "first-last-frame"];
+const grokRelayGenerationSupportedInputs: VideoSupportedInput[] = ["text", "image", "first_frame", "reference_image", "first_last_frame"];
 const seedance2InputModes: ModelInputMode[] = ["text-to-video", "image-to-video", "reference-to-video", "first-last-frame", "video-to-video"];
 const seedance2SupportedInputs: VideoSupportedInput[] = ["text", "image", "first_frame", "reference_image", "first_last_frame", "video"];
 const kling3InputModes: ModelInputMode[] = ["text-to-video", "image-to-video", "reference-to-video", "first-last-frame"];
@@ -45,6 +47,11 @@ function modelIdentity(providerId?: string, modelName?: string, capabilities?: M
 
 export function isGrokLikeVideoModel(providerId?: string, modelName?: string, capabilities?: ModelCapabilities) {
   return /(?:^|\s|[-_])grok(?:\s|[-_.]|$)/.test(modelIdentity(providerId, modelName, capabilities));
+}
+
+function isDuoyuanGrokGenerationModel(modelName?: string, capabilities?: ModelCapabilities) {
+  const identity = `${modelName ?? ""} ${capabilities?.modelCapability?.model ?? ""}`.toLowerCase();
+  return /grok[-_.]?video[-_.]?3|grok[-_.]?1[-_.]?5[-_.]?video/.test(identity);
 }
 
 export function isAgnesVideoModel(providerId?: string, modelName?: string, capabilities?: ModelCapabilities) {
@@ -263,6 +270,14 @@ export function normalizeVideoCapabilities(
       apiFamily: "omni_fast",
       inputModes: omniFastInputModes,
       supportedInputs: omniFastSupportedInputs,
+      modelCapability: {
+        ...capabilities.modelCapability,
+        supportsTextToVideo: true,
+        supportsImageToVideo: true,
+        supportsReferenceToVideo: true,
+        supportsFirstLastFrame: true,
+        supportsVideoToVideo: false
+      },
       duration: { type: "fixed", value: 10 },
       supportedDurations: omniFastDurations,
       aspectRatios: union(capabilities.aspectRatios, ["16:9", "9:16"]),
@@ -294,6 +309,14 @@ export function normalizeVideoCapabilities(
       ...capabilities,
       inputModes: union(capabilities.inputModes, kling3InputModes),
       supportedInputs: union(capabilities.supportedInputs, kling3SupportedInputs),
+      modelCapability: {
+        ...capabilities.modelCapability,
+        supportsTextToVideo: true,
+        supportsImageToVideo: true,
+        supportsReferenceToVideo: true,
+        supportsFirstLastFrame: true,
+        supportsVideoToVideo: false
+      },
       imageTransport: capabilities.imageTransport === "unsupported" ? "url_or_asset" : capabilities.imageTransport ?? "url_or_asset",
       supportsImageInput: true,
       supportsReferenceImage: true,
@@ -315,27 +338,40 @@ export function normalizeVideoCapabilities(
   }
 
   if (isGrokLikeVideoModel(providerId, modelName, capabilities)) {
+    const isRelayGeneration = isDuoyuanGrokGenerationModel(modelName, capabilities);
+    const inputModes = isRelayGeneration ? grokRelayGenerationInputModes : union(capabilities.inputModes, grokInputModes);
+    const supportedInputs = isRelayGeneration ? grokRelayGenerationSupportedInputs : union(capabilities.supportedInputs, grokSupportedInputs);
     const normalized: ModelCapabilities = {
       ...capabilities,
-      inputModes: union(capabilities.inputModes, grokInputModes),
-      supportedInputs: union(capabilities.supportedInputs, grokSupportedInputs),
+      inputModes,
+      supportedInputs,
+      modelCapability: {
+        ...capabilities.modelCapability,
+        supportsTextToVideo: true,
+        supportsImageToVideo: true,
+        supportsReferenceToVideo: true,
+        supportsFirstLastFrame: true,
+        supportsVideoToVideo: !isRelayGeneration
+      },
       imageTransport: capabilities.imageTransport === "unsupported" ? undefined : capabilities.imageTransport,
-      videoTransport: capabilities.videoTransport === "unsupported" ? "multipart_file" : capabilities.videoTransport ?? "multipart_file",
+      videoTransport: isRelayGeneration ? undefined : capabilities.videoTransport === "unsupported" ? "multipart_file" : capabilities.videoTransport ?? "multipart_file",
       supportsImageInput: true,
       supportsReferenceImage: true,
       supportsFirstLastFrame: true,
       supportsMultiImageInput: true,
-      supportsVideoInput: true,
+      supportsVideoInput: !isRelayGeneration,
       maxReferenceImages: capabilities.maxReferenceImages ?? 7
     };
     if (capabilities.channelCapability) {
       normalized.channelCapability = {
         ...capabilities.channelCapability,
-        supportedInputs: union(capabilities.channelCapability.supportedInputs, grokSupportedInputs),
+        supportedInputs: isRelayGeneration ? grokRelayGenerationSupportedInputs : union(capabilities.channelCapability.supportedInputs, grokSupportedInputs),
         imageTransport: capabilities.channelCapability.imageTransport === "unsupported" ? undefined : capabilities.channelCapability.imageTransport,
-        videoTransport: capabilities.channelCapability.videoTransport === "unsupported"
-          ? "multipart_file"
-          : capabilities.channelCapability.videoTransport ?? "multipart_file"
+        videoTransport: isRelayGeneration
+          ? undefined
+          : capabilities.channelCapability.videoTransport === "unsupported"
+            ? "multipart_file"
+            : capabilities.channelCapability.videoTransport ?? "multipart_file"
       };
     }
     return normalized;

@@ -34,27 +34,61 @@ function constraintMatches(constraint: ModelConstraint, context: VideoNodeContex
   return true;
 }
 
-export function calculateAvailableVideoOptions(capabilities: ModelCapabilities, nodeContext: VideoNodeContext): AvailableVideoOptions {
+function channelSupportsInput(capabilities: ModelCapabilities, input: NonNullable<ModelCapabilities["supportedInputs"]>[number]) {
   const channel = { ...capabilities, ...capabilities.channelCapability };
-  const inputModes = new Set(capabilities.inputModes);
+  return (channel.supportedInputs ?? capabilities.supportedInputs ?? []).includes(input);
+}
+
+function imageTransportAvailable(capabilities: ModelCapabilities) {
+  const channel = { ...capabilities, ...capabilities.channelCapability };
+  return channel.imageTransport !== "unsupported";
+}
+
+function videoTransportAvailable(capabilities: ModelCapabilities) {
+  const channel = { ...capabilities, ...capabilities.channelCapability };
+  return channel.videoTransport !== "unsupported";
+}
+
+function availableVideoInputModes(capabilities: ModelCapabilities) {
+  const channel = { ...capabilities, ...capabilities.channelCapability };
+  const modes = new Set((capabilities.inputModes ?? []).filter((mode) =>
+    ["text-to-video", "image-to-video", "first-last-frame", "reference-to-video", "video-to-video"].includes(mode)
+  ));
   const theoretical = capabilities.modelCapability;
-  if (theoretical?.supportsTextToVideo) inputModes.add("text-to-video");
-  if (theoretical?.supportsImageToVideo) inputModes.add("image-to-video");
-  if (theoretical?.supportsFirstLastFrame) inputModes.add("first-last-frame");
-  if (theoretical?.supportsVideoToVideo) inputModes.add("video-to-video");
+
+  if (theoretical?.supportsTextToVideo) modes.add("text-to-video");
+  if (theoretical?.supportsImageToVideo) modes.add("image-to-video");
+  if (theoretical?.supportsReferenceToVideo) modes.add("reference-to-video");
+  if (theoretical?.supportsFirstLastFrame) modes.add("first-last-frame");
+  if (theoretical?.supportsVideoToVideo) modes.add("video-to-video");
+
   for (const input of channel.supportedInputs ?? []) {
-    if (input === "text") inputModes.add("text-to-video");
-    if (["image", "first_frame"].includes(input)) inputModes.add("image-to-video");
-    if (input === "reference_image") inputModes.add("reference-to-video");
-    if (input === "first_last_frame") inputModes.add("first-last-frame");
-    if (input === "video") inputModes.add("video-to-video");
+    if (input === "text") modes.add("text-to-video");
+    if (["image", "first_frame"].includes(input)) modes.add("image-to-video");
+    if (input === "reference_image") modes.add("reference-to-video");
+    if (input === "first_last_frame") modes.add("first-last-frame");
+    if (input === "video") modes.add("video-to-video");
   }
+
+  if (!imageTransportAvailable(capabilities)) {
+    modes.delete("image-to-video");
+    modes.delete("reference-to-video");
+    modes.delete("first-last-frame");
+  }
+  if (!videoTransportAvailable(capabilities)) modes.delete("video-to-video");
+  if (!channelSupportsInput(capabilities, "image") && !channelSupportsInput(capabilities, "first_frame") && !capabilities.supportsImageInput) modes.delete("image-to-video");
+  if (!channelSupportsInput(capabilities, "reference_image") && !capabilities.supportsReferenceImage) modes.delete("reference-to-video");
+  if (!channelSupportsInput(capabilities, "first_last_frame") && !capabilities.supportsFirstLastFrame) modes.delete("first-last-frame");
+  if (!channelSupportsInput(capabilities, "video") && !capabilities.supportsVideoInput) modes.delete("video-to-video");
+
+  return Array.from(modes) as Array<"text-to-video" | "image-to-video" | "first-last-frame" | "reference-to-video" | "video-to-video">;
+}
+
+export function calculateAvailableVideoOptions(capabilities: ModelCapabilities, nodeContext: VideoNodeContext): AvailableVideoOptions {
   let availableDurations = capabilities.supportedDurations?.length ? [...capabilities.supportedDurations] : durationsFromCapability(capabilities.duration);
   let availableResolutions = [...(capabilities.supportedResolutions ?? capabilities.resolutions ?? [])];
   let availableAspectRatios = [...(capabilities.supportedAspectRatios ?? capabilities.aspectRatios ?? [])];
-  const availableInputModes = Array.from(inputModes).filter((mode) =>
-    ["text-to-video", "image-to-video", "first-last-frame", "reference-to-video", "video-to-video"].includes(mode)
-  );
+  const availableInputModes = availableVideoInputModes(capabilities);
   const lockedFields: AvailableVideoOptions["lockedFields"] = {};
   let warningMessage: string | undefined;
 

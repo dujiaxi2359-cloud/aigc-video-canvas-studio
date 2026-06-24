@@ -110,6 +110,7 @@ function modelInputModes(model: ModelConfig | undefined) {
   const modes = new Set(channel.inputModes ?? []);
   if (theoretical?.supportsTextToVideo) modes.add("text-to-video");
   if (theoretical?.supportsImageToVideo) modes.add("image-to-video");
+  if (theoretical?.supportsReferenceToVideo) modes.add("reference-to-video");
   if (theoretical?.supportsFirstLastFrame) modes.add("first-last-frame");
   if (theoretical?.supportsVideoToVideo) modes.add("video-to-video");
   for (const input of channel.supportedInputs ?? []) {
@@ -119,11 +120,18 @@ function modelInputModes(model: ModelConfig | undefined) {
     if (input === "first_last_frame") modes.add("first-last-frame");
     if (input === "video") modes.add("video-to-video");
   }
-  if (isVeoModel(model)) {
+  if (channel.imageTransport === "unsupported") {
+    modes.delete("image-to-video");
+    modes.delete("reference-to-video");
+    modes.delete("first-last-frame");
+  }
+  if (channel.videoTransport === "unsupported") modes.delete("video-to-video");
+  if (!(channel.supportedInputs ?? []).some((input) => input === "image" || input === "first_frame") && !model.capabilities.supportsImageInput) modes.delete("image-to-video");
+  if (!(channel.supportedInputs ?? []).includes("reference_image") && !model.capabilities.supportsReferenceImage) modes.delete("reference-to-video");
+  if (!(channel.supportedInputs ?? []).includes("first_last_frame") && !model.capabilities.supportsFirstLastFrame) modes.delete("first-last-frame");
+  if (!(channel.supportedInputs ?? []).includes("video") && !model.capabilities.supportsVideoInput) modes.delete("video-to-video");
+  if (isVeoModel(model) && modes.size === 0) {
     modes.add("text-to-video");
-    modes.add("image-to-video");
-    modes.add("reference-to-video");
-    modes.add("first-last-frame");
   }
   return Array.from(modes) as VideoInputMode[];
 }
@@ -146,6 +154,14 @@ function defaultModeForCategory(category: OfficialVideoCategory): OfficialVideoM
   if (category === "first_last_frame_video") return "image_to_video_first_last_frame";
   if (category === "video_edit") return "video_edit";
   return "video_extension";
+}
+
+function modesForCategory(category: OfficialVideoCategory, modes: OfficialVideoMode[]) {
+  return modes.filter((mode) => categoryForOfficialVideoMode(mode) === category);
+}
+
+function firstModeForCategory(category: OfficialVideoCategory, modes: OfficialVideoMode[]) {
+  return modesForCategory(category, modes)[0] ?? defaultModeForCategory(category);
 }
 
 function maxImagesForMode(model: ModelConfig | undefined, mode: OfficialVideoMode) {
@@ -433,19 +449,15 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
     };
   }, []);
 
-  useEffect(() => {
-    const currentCategory = categoryForOfficialVideoMode(props.data.videoMode ?? legacyInputModeToOfficialMode(props.data.inputMode));
-    if (currentCategory !== videoCategory && modelSupportsVideoCategory(selectedModel ?? ({} as ModelConfig), currentCategory)) setVideoCategory(currentCategory);
-  }, [props.data.inputMode, props.data.videoMode, selectedModel, videoCategory]);
-
   function changeVideoCategory(category: OfficialVideoCategory) {
-    const reason = disabledCategoryReason(selectedModel, category);
-    if (reason) {
-      setLocalError(reason);
+    if (!supportedVideoCategories.includes(category)) {
+      setLocalError("当前模型没有这个生成方式。");
       return;
     }
-    const nextMode = defaultModeForCategory(category);
-    const nextModel = dedupeModelConfigsForSelect(allModels.filter((model) => model.enabled && model.category === "video" && isRuntimeUsableVideoModel(model) && modelSupportsVideoCategory(model, category)))[0];
+    const nextMode = firstModeForCategory(category, availableVideoModes);
+    const nextModel = selectedModel && modelSupportsVideoCategory(selectedModel, category)
+      ? selectedModel
+      : dedupeModelConfigsForSelect(allModels.filter((model) => model.enabled && model.category === "video" && isRuntimeUsableVideoModel(model) && modelSupportsVideoCategory(model, category)))[0];
     setVideoCategory(category);
     update(props.id, {
       modelConfigId: nextModel?.id ?? props.data.modelConfigId,
@@ -541,6 +553,10 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
   const selectedResolutions = selectedModel?.capabilities?.resolutions;
   const availableModes = useMemo(() => (dynamicOptions?.availableInputModes ?? selectedInputModes ?? emptyVideoModes) as VideoInputMode[], [dynamicOptions?.availableInputModes, selectedInputModes]);
   const availableVideoModes = useMemo(() => dynamicOptions?.availableVideoModes ?? availableModes.map((mode) => legacyInputModeToOfficialMode(mode)) ?? emptyOfficialVideoModes, [availableModes, dynamicOptions?.availableVideoModes]);
+  const supportedVideoCategories = useMemo(() => {
+    const categories = new Set(availableVideoModes.map(categoryForOfficialVideoMode));
+    return videoCategories.filter((category) => categories.has(category));
+  }, [availableVideoModes]);
   const availableRatios = useMemo(() => dynamicOptions?.availableAspectRatios ?? selectedAspectRatios ?? emptyStrings, [dynamicOptions?.availableAspectRatios, selectedAspectRatios]);
   const availableResolutions = useMemo(() => dynamicOptions?.availableResolutions ?? selectedResolutions ?? emptyStrings, [dynamicOptions?.availableResolutions, selectedResolutions]);
   const availableDurations = useMemo(() => dynamicOptions?.availableDurations ?? durationOptions(selectedModel) ?? emptyNumbers, [dynamicOptions?.availableDurations, selectedModel]);
@@ -573,6 +589,11 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
   const selectedDuration = parameterValue(props.data.duration, availableDurations);
   const selectedVideoMode = props.data.videoMode ?? legacyInputModeToOfficialMode(props.data.inputMode);
   const selectedVideoModeLabel = videoModeLabelForModel(selectedModel, selectedVideoMode, dynamicOptions?.videoModeLabels?.[selectedVideoMode]);
+
+  useEffect(() => {
+    const currentCategory = categoryForOfficialVideoMode(selectedVideoMode);
+    if (currentCategory !== videoCategory && supportedVideoCategories.includes(currentCategory)) setVideoCategory(currentCategory);
+  }, [selectedVideoMode, supportedVideoCategories, videoCategory]);
   const outputUrl = absoluteUploadUrl(props.data.outputUrl);
   const outputIsVideo = Boolean(props.data.outputUrl);
   const frameStatus = props.data.status === "success" && !outputIsVideo ? "idle" : props.data.status;
@@ -1074,7 +1095,7 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
       </div>
       <NodeToolPanel tool={activeTool} onClose={() => setActiveTool(null)} onInsert={activeTool === "assets" ? insertReferenceToken : insertPromptContext} referenceItems={referenceMenuItems} />
       {expanded && <div className="creation-detail-panel nodrag nopan">
-        <div className="creation-detail-section"><strong>生成方式</strong><div className="flex flex-wrap gap-1.5">{videoCategories.map((category) => { const disabledReason = disabledCategoryReason(selectedModel, category); return <button key={category} disabled={Boolean(disabledReason)} title={disabledReason} className={videoCategory === category ? "is-active" : ""} onClick={() => changeVideoCategory(category)}>{videoCategoryLabelForModel(selectedModel, category)}</button>; })}</div></div>
+        <div className="creation-detail-section"><strong>生成方式</strong><div className="flex flex-wrap gap-1.5">{supportedVideoCategories.map((category) => <button key={category} className={videoCategory === category ? "is-active" : ""} onClick={() => changeVideoCategory(category)}>{videoCategoryLabelForModel(selectedModel, category)}</button>)}</div></div>
         {actualOutputInfo && props.data.status === "success" && <div className="creation-detail-copy">实际输出：{actualOutputInfo.width && actualOutputInfo.height ? `${actualOutputInfo.width}×${actualOutputInfo.height}` : "未知尺寸"}{actualOutputInfo.ratio ? ` · ${actualOutputInfo.ratio}` : ""}{actualOutputInfo.duration ? ` · ${actualOutputInfo.duration.toFixed(1)}s` : ""}</div>}
         {dynamicOptions?.warningMessage && <div className="creation-detail-copy">{dynamicOptions.warningMessage}</div>}
         {channelDiagnostic.whyBlocked && <div className="creation-detail-copy is-error">{channelDiagnostic.sameModelImageCapableChannels[0]

@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { createRequire } from "node:module";
 import { inferImageModelType, inferImageProvider, normalizeImageCapabilities } from "../services/imageCapabilityNormalization.js";
+import { normalizeVideoCapabilities } from "../services/videoCapabilityNormalization.js";
 import type { ModelCapabilities } from "../types/model.js";
 import { canonicalDuoyuanGrokModelName } from "../utils/grokRelayModels.js";
 
@@ -74,7 +75,7 @@ function customerInviteCode() {
 
 async function migrateAi666VideoProtocols(database: AppDatabase) {
   const rows = await database.all<Array<{ id: string; api_base_url: string; display_name: string; model_name: string; capabilities_json: string }>>(
-    "SELECT id, api_base_url, display_name, model_name, capabilities_json FROM model_configs WHERE lower(api_base_url) LIKE '%ai666.net%' OR lower(api_base_url) LIKE '%cy88.ai%' OR lower(model_name) LIKE '%seedance%' OR lower(model_name) LIKE '%kling%' OR lower(model_name) LIKE '%grok%'"
+    "SELECT id, api_base_url, display_name, model_name, capabilities_json FROM model_configs WHERE lower(api_base_url) LIKE '%ai666.net%' OR lower(api_base_url) LIKE '%cy88.ai%' OR lower(model_name) LIKE '%seedance%' OR lower(model_name) LIKE '%kling%' OR lower(model_name) LIKE '%grok%' OR lower(model_name) LIKE '%omni%'"
   );
   for (const row of rows) {
     const modelName = canonicalDuoyuanGrokModelName(row.model_name, row.api_base_url);
@@ -180,15 +181,15 @@ async function migrateAi666VideoProtocols(database: AppDatabase) {
       assignDisplayName(grokKnownModel.displayName);
       const existingChannel = capabilities.channelCapability && typeof capabilities.channelCapability === "object" ? capabilities.channelCapability as Record<string, unknown> : {};
       assign({
-        inputModes: ["text-to-video", "image-to-video", "reference-to-video", "video-to-video"],
+        inputModes: ["text-to-video", "image-to-video", "reference-to-video", "first-last-frame"],
         duration: grokKnownModel.duration,
         aspectRatios: ["16:9", "9:16", "2:3", "3:2", "1:1"],
         resolutions: ["720P", "1080P"],
         supportsImageInput: true, supportsReferenceImage: true, supportsMultiImageInput: true,
-        supportsVideoInput: true, supportsAudio: true,
+        supportsFirstLastFrame: true, supportsVideoInput: false, supportsAudio: true,
         maxReferenceImages: 7,
         supportedDurations: grokKnownModel.supportedDurations,
-        modelCapability: { model: grokKnownModel.model, supportsTextToVideo: true, supportsImageToVideo: true, supportsReferenceToVideo: true, supportsVideoToVideo: true },
+        modelCapability: { model: grokKnownModel.model, supportsTextToVideo: true, supportsImageToVideo: true, supportsReferenceToVideo: true, supportsFirstLastFrame: true, supportsVideoToVideo: false },
         channelCapability: {
           ...existingChannel,
           provider: existingChannel.provider ?? "grok",
@@ -200,10 +201,10 @@ async function migrateAi666VideoProtocols(database: AppDatabase) {
           requestFormat: existingChannel.requestFormat ?? "multipart",
           imageTransport: existingChannel.imageTransport ?? "multipart_file",
           supportedInputs: Array.isArray(existingChannel.supportedInputs) && existingChannel.supportedInputs.length
-            ? existingChannel.supportedInputs
-            : ["text", "image", "first_frame", "reference_image", "video"]
+            ? existingChannel.supportedInputs.filter((input) => input !== "video")
+            : ["text", "image", "first_frame", "reference_image", "first_last_frame"]
         },
-        supportedInputs: ["text", "image", "first_frame", "reference_image", "video"]
+        supportedInputs: ["text", "image", "first_frame", "reference_image", "first_last_frame"]
       });
     }
 
@@ -240,21 +241,35 @@ async function migrateAi666VideoProtocols(database: AppDatabase) {
         || String(existingChannel.videoTransport ?? "") === "unsupported";
       if (needsReferenceRepair) {
         const isOfficialGrok = /api\.x\.ai/i.test(row.api_base_url);
+        const grokInputs = isDuoyuanGrok
+          ? ["text-to-video", "image-to-video", "reference-to-video", "first-last-frame"]
+          : ["text-to-video", "image-to-video", "reference-to-video", "first-last-frame", "video-to-video"];
+        const grokSupportedInputs = isDuoyuanGrok
+          ? ["text", "image", "first_frame", "reference_image", "first_last_frame"]
+          : ["text", "image", "first_frame", "reference_image", "first_last_frame", "video"];
         assign({
-          inputModes: ["text-to-video", "image-to-video", "reference-to-video", "first-last-frame", "video-to-video"],
+          inputModes: grokInputs,
           supportsImageInput: true,
           supportsReferenceImage: true,
           supportsFirstLastFrame: true,
           supportsMultiImageInput: true,
-          supportsVideoInput: true,
+          supportsVideoInput: !isDuoyuanGrok,
           maxReferenceImages: Number(capabilities.maxReferenceImages ?? 7),
+          modelCapability: {
+            ...(capabilities.modelCapability && typeof capabilities.modelCapability === "object" ? capabilities.modelCapability as Record<string, unknown> : {}),
+            supportsTextToVideo: true,
+            supportsImageToVideo: true,
+            supportsReferenceToVideo: true,
+            supportsFirstLastFrame: true,
+            supportsVideoToVideo: !isDuoyuanGrok
+          },
           ...(isDuoyuanGrok ? {
             aspectRatios: ["16:9", "9:16", "2:3", "3:2", "1:1"],
             supportedAspectRatios: ["16:9", "9:16", "2:3", "3:2", "1:1"],
             resolutions: ["720P", "1080P"],
             supportedResolutions: ["720P", "1080P"]
           } : {}),
-          supportedInputs: ["text", "image", "first_frame", "reference_image", "first_last_frame", "video"],
+          supportedInputs: grokSupportedInputs,
           channelCapability: {
             ...existingChannel,
             provider: existingChannel.provider ?? "grok",
@@ -265,11 +280,18 @@ async function migrateAi666VideoProtocols(database: AppDatabase) {
             pollEndpoint: isRunApiGrok ? "/v1/videos/{taskId}" : existingChannel.pollEndpoint ?? "/v1/videos/{taskId}",
             requestFormat: isOfficialGrok || isRunApiGrok ? "json" : "multipart",
             imageTransport: isOfficialGrok ? "base64_json" : isRunApiGrok ? "url" : "multipart_file",
-            videoTransport: isOfficialGrok ? "base64_json" : isRunApiGrok ? "url_or_base64_json" : "multipart_file",
-            supportedInputs: ["text", "image", "first_frame", "reference_image", "first_last_frame", "video"]
+            videoTransport: isDuoyuanGrok ? undefined : isOfficialGrok ? "base64_json" : isRunApiGrok ? "url_or_base64_json" : "multipart_file",
+            supportedInputs: grokSupportedInputs
           }
         });
       }
+    }
+
+    if (/grok|omni[-_ .]?(?:fast|flash)/.test(name)) {
+      const beforeNormalize = JSON.stringify(capabilities);
+      const normalized = normalizeVideoCapabilities(capabilities as ModelCapabilities, undefined, modelName);
+      Object.assign(capabilities, normalized);
+      if (JSON.stringify(capabilities) !== beforeNormalize) changed = true;
     }
 
     if (changed) {

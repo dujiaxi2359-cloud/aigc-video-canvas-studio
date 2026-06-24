@@ -984,6 +984,64 @@ const repairedGrokReferenceConfig = resolveVideoRequestConfig({
 });
 assert(repairedGrokReferenceConfig.supportedInputs.includes("reference_image"), "Known Grok video channels should repair stale text-only reference capabilities");
 assert(repairedGrokReferenceConfig.imageTransport !== "unsupported", "Known Grok video channels should restore a usable image transport");
+const normalizedGrokVideo3 = normalizeVideoCapabilities({
+  inputModes: ["text-to-video", "image-to-video", "reference-to-video", "video-to-video"],
+  supportedInputs: ["text", "image", "reference_image", "video"],
+  modelCapability: {
+    model: "grok-video-3",
+    supportsTextToVideo: true,
+    supportsImageToVideo: true,
+    supportsReferenceToVideo: true,
+    supportsVideoToVideo: true
+  },
+  channelCapability: {
+    apiFamily: "grok_video",
+    supportedInputs: ["text", "image", "reference_image", "video"],
+    imageTransport: "multipart_file",
+    videoTransport: "multipart_file"
+  } as any,
+  duration: { type: "range", min: 1, max: 15, step: 1 },
+  aspectRatios: ["16:9", "9:16"],
+  resolutions: ["720P", "1080P"]
+}, "grok", "grok-video-3");
+const normalizedGrokVideo3Options = calculateAvailableVideoOptions(normalizedGrokVideo3, {
+  inputMode: "video-to-video",
+  videoMode: "video_to_video",
+  selectedDuration: 10,
+  selectedAspectRatio: "9:16",
+  selectedResolution: "720P",
+  hasImageInput: true,
+  hasVideoInput: true,
+  hasReferenceImage: true,
+  hasFirstLastFrame: false
+});
+assert(!normalizedGrokVideo3Options.availableInputModes.includes("video-to-video"), "Duoyuan Grok Video 3 UI options must not expose undocumented video-to-video generation");
+assert(normalizedGrokVideo3Options.availableInputModes.includes("reference-to-video"), "Duoyuan Grok Video 3 should keep documented multi-image reference generation");
+assert(normalizedGrokVideo3Options.availableInputModes.includes("first-last-frame"), "Duoyuan Grok Video 3 should keep documented first/last-frame generation");
+const normalizedGrokImagine = normalizeVideoCapabilities({
+  inputModes: ["text-to-video", "reference-to-video"],
+  supportedInputs: ["text", "reference_image"],
+  modelCapability: {
+    model: "grok-imagine-video",
+    supportsTextToVideo: true,
+    supportsReferenceToVideo: true,
+    supportsVideoToVideo: true
+  },
+  channelCapability: {
+    supportedInputs: ["text", "reference_image", "video"],
+    imageTransport: "base64_json",
+    videoTransport: "base64_json"
+  } as any
+}, "grok", "grok-imagine-video");
+const normalizedGrokImagineOptions = calculateAvailableVideoOptions(normalizedGrokImagine, {
+  inputMode: "video-to-video",
+  videoMode: "video_to_video",
+  hasImageInput: true,
+  hasVideoInput: true,
+  hasReferenceImage: true,
+  hasFirstLastFrame: false
+});
+assert(normalizedGrokImagineOptions.availableInputModes.includes("video-to-video"), "Official-style Grok Imagine capabilities should not be restricted by Duoyuan Grok Video 3 rules");
 
 const repairedSeedanceReferenceConfig = resolveVideoRequestConfig({
   providerId: "seedance",
@@ -1095,6 +1153,38 @@ const normalizedOmniV2vOptions = calculateAvailableVideoOptions(normalizedOmniV2
 assert(omniV2vConfig.apiFamily === "omni_fast_v2v", "Omni-fast-v2v should use its video reference family");
 assert(omniV2vConfig.videoField === "video", "Omni-fast-v2v should send the video field");
 assert(omniV2vConfig.videoTransport === "url_or_base64_json", "Omni-fast-v2v should preserve video transport");
+const normalizedOmniFast = normalizeVideoCapabilities({
+  inputModes: ["text-to-video", "image-to-video", "reference-to-video", "video-to-video"],
+  supportedInputs: ["text", "image", "reference_image", "video"],
+  modelCapability: {
+    supportsTextToVideo: true,
+    supportsImageToVideo: true,
+    supportsReferenceToVideo: true,
+    supportsFirstLastFrame: true,
+    supportsVideoToVideo: true
+  },
+  channelCapability: {
+    apiFamily: "omni_fast",
+    supportedInputs: ["text", "image", "reference_image", "video"],
+    imageTransport: "url",
+    videoTransport: "url_or_base64_json"
+  } as any,
+  duration: { type: "enum", values: [4, 8, 10] },
+  supportedDurations: [4, 8, 10]
+}, "openai-video", "omni-fast");
+const normalizedOmniFastOptions = calculateAvailableVideoOptions(normalizedOmniFast, {
+  inputMode: "video-to-video",
+  videoMode: "video_to_video",
+  selectedDuration: 8,
+  selectedAspectRatio: "9:16",
+  selectedResolution: "720p",
+  hasImageInput: true,
+  hasVideoInput: true,
+  hasReferenceImage: true,
+  hasFirstLastFrame: true
+});
+assert(!normalizedOmniFastOptions.availableInputModes.includes("video-to-video"), "Omni-fast UI options must not expose omni-fast-v2v-only video-to-video");
+assert(normalizedOmniFastOptions.availableDurations.length === 1 && normalizedOmniFastOptions.availableDurations[0] === 10, "Omni-fast should expose only fixed 10s duration");
 assert(normalizedOmniV2v.inputModes?.length === 1 && normalizedOmniV2v.inputModes[0] === "video-to-video", "Omni-fast-v2v must only expose video-to-video");
 assert(normalizedOmniV2v.supportedInputs?.length === 1 && normalizedOmniV2v.supportedInputs[0] === "video", "Omni-fast-v2v must only accept video input");
 assert(normalizedOmniV2v.supportedDurations?.length === 1 && normalizedOmniV2v.supportedDurations[0] === 10, "Omni-fast-v2v normalized capability should be fixed at 10 seconds");
