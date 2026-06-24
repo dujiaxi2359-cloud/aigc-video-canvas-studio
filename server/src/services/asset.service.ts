@@ -530,11 +530,12 @@ export async function getAssetDownloadInfo(id: string) {
   const safeBaseName = sanitizeFilename(rawName.replace(/\.[^.]+$/, ""));
   const filename = `${safeBaseName || "asset"}${ext}`;
   if (asset.storageKey) {
+    const cachePath = path.join(assetRoot(), "download-cache", `${asset.id}${ext || ".bin"}`);
+    if (!fs.existsSync(cachePath)) {
+      await downloadCosFileToLocal({ fileKey: asset.storageKey, localPath: cachePath, expiresSeconds: 900 });
+    }
     return {
-      redirectUrl: await cachedSignedCosUrl({
-        fileKey: asset.storageKey,
-        responseContentDisposition: `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`
-      }),
+      localPath: cachePath,
       filename,
       contentType: asset.mimeType || contentTypeForFilename(filename)
     };

@@ -6356,7 +6356,11 @@ select optgroup {
 }
 
 video:fullscreen,
-video:-webkit-full-screen {
+video:-webkit-full-screen,
+.media-preview video:fullscreen,
+.media-preview video:-webkit-full-screen,
+.creation-media-preview .media-preview-frame video:fullscreen,
+.creation-media-preview .media-preview-frame video:-webkit-full-screen {
   width: 100vw !important;
   height: 100vh !important;
   background: #000 !important;

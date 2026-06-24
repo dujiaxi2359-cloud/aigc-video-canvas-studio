@@ -57,16 +57,40 @@ function normalizeGeneratedOutputNodes(nodes: unknown[]) {
   });
 }
 
-async function hydrateProjectNodes(nodes: ProjectNode[]) {
+async function hydrateProjectNodes(nodes: ProjectNode[], projectId?: string) {
   const assetIds = new Set<string>();
+  const nodeIds = new Set<string>();
   for (const node of nodes) {
     const data = node.data;
+    if (node.id && ["video", "imageGenerate", "compose"].includes(node.type ?? "")) nodeIds.add(node.id);
     for (const key of ["assetId", "outputAssetId"]) {
       const value = data?.[key];
       if (typeof value === "string" && value) assetIds.add(value);
     }
   }
-  if (!assetIds.size) {
+  const db = await getDb();
+  const nodeAssets = new Map<string, Awaited<ReturnType<typeof getAsset>>>();
+  if (nodeIds.size) {
+    const workspaceId = requireRequestContext().workspace.id;
+    const placeholders = [...nodeIds].map(() => "?").join(",");
+    const rows = await db.all(
+      `SELECT id, node_id
+       FROM assets
+       WHERE workspace_id = ?
+         AND deleted_at IS NULL
+         AND node_id IN (${placeholders})
+         ${projectId ? "AND (project_id = ? OR project_id IS NULL)" : ""}
+       ORDER BY created_at DESC`,
+      workspaceId,
+      ...nodeIds,
+      ...(projectId ? [projectId] : [])
+    );
+    for (const row of rows as Array<{ id: string; node_id: string }>) {
+      if (!nodeAssets.has(row.node_id)) nodeAssets.set(row.node_id, await getAsset(row.id).catch(() => undefined));
+    }
+  }
+
+  if (!assetIds.size && !nodeAssets.size) {
     return nodes.map((node) => {
       const data = node.data;
       return data ? { ...node, data: normalizeNodeData(node, data) } : node;
@@ -81,7 +105,8 @@ async function hydrateProjectNodes(nodes: ProjectNode[]) {
     if (!data) return node;
     const assetId = typeof data.assetId === "string" ? data.assetId : undefined;
     const outputAssetId = typeof data.outputAssetId === "string" ? data.outputAssetId : undefined;
-    const asset = (outputAssetId && assets.get(outputAssetId)) || (assetId && assets.get(assetId));
+    const nodeAsset = node.id ? nodeAssets.get(node.id) : undefined;
+    const asset = (outputAssetId && assets.get(outputAssetId)) || (assetId && assets.get(assetId)) || nodeAsset;
     if (!asset) return { ...node, data: normalizeNodeData(node, data) };
 
     const nextData = { ...data };
@@ -89,12 +114,14 @@ async function hydrateProjectNodes(nodes: ProjectNode[]) {
       if (!nextData.thumbnailUrl && asset.thumbnailUrl) nextData.thumbnailUrl = asset.thumbnailUrl;
       if (!nextData.url && asset.url) nextData.url = asset.url;
       if (!nextData.outputUrl && outputAssetId && asset.url) nextData.outputUrl = asset.url;
+      if (!nextData.outputAssetId && node.type === "imageGenerate") nextData.outputAssetId = asset.id;
       if (!nextData.width && asset.width) nextData.width = asset.width;
       if (!nextData.height && asset.height) nextData.height = asset.height;
     }
     if (asset.type === "video") {
       if (!nextData.thumbnailUrl && asset.thumbnailUrl) nextData.thumbnailUrl = asset.thumbnailUrl;
-      if (!nextData.outputUrl && asset.url) nextData.outputUrl = asset.url;
+      if (asset.url) nextData.outputUrl = asset.url;
+      if (!nextData.outputAssetId) nextData.outputAssetId = asset.id;
       if (!nextData.duration && asset.duration) nextData.duration = asset.duration;
     }
     return { ...node, data: normalizeNodeData(node, nextData) };
@@ -105,7 +132,7 @@ async function parseProject(row: any) {
   return {
     id: row.id,
     name: row.name,
-    nodes: await hydrateProjectNodes(JSON.parse(row.nodes_json)),
+    nodes: await hydrateProjectNodes(JSON.parse(row.nodes_json), row.id),
     edges: JSON.parse(row.edges_json),
     createdAt: row.created_at,
     updatedAt: row.updated_at
