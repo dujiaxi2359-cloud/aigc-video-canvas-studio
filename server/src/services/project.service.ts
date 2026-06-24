@@ -11,6 +11,9 @@ type ProjectNode = {
   [key: string]: unknown;
 };
 
+const videoResultTimeoutMs = 30 * 60 * 1000;
+const videoResultTimeoutMessage = "上游/中转超过 30 分钟没有返回可用视频，当前任务已停止等待。请直接重试，或切换一条可用的视频中转线路。";
+
 function completeGeneratedOutput(node: ProjectNode, data: Record<string, unknown>) {
   if (typeof data.outputUrl !== "string" || !data.outputUrl) return data;
   if (!["video", "imageGenerate", "compose"].includes(node.type ?? "")) return data;
@@ -26,12 +29,31 @@ function completeGeneratedOutput(node: ProjectNode, data: Record<string, unknown
   };
 }
 
+function failStaleVideoGeneration(node: ProjectNode, data: Record<string, unknown>) {
+  if (node.type !== "video" || data.status !== "generating" || typeof data.outputUrl === "string" && data.outputUrl) return data;
+  const startedAt = typeof data.generationStartedAt === "number" ? data.generationStartedAt : Number(data.generationStartedAt);
+  if (!Number.isFinite(startedAt) || now() - startedAt < videoResultTimeoutMs) return data;
+  return {
+    ...data,
+    status: "error",
+    errorCode: "UPSTREAM_RESULT_NOT_RETURNED",
+    errorMessage: videoResultTimeoutMessage,
+    debugMessage: "该视频节点超过 30 分钟没有成功历史或 outputUrl，已从无限生成中恢复为可重试状态。",
+    generationStartedAt: undefined,
+    clientRequestId: undefined
+  };
+}
+
+function normalizeNodeData(node: ProjectNode, data: Record<string, unknown>) {
+  return failStaleVideoGeneration(node, completeGeneratedOutput(node, data));
+}
+
 function normalizeGeneratedOutputNodes(nodes: unknown[]) {
   return nodes.map((item) => {
     if (!item || typeof item !== "object") return item;
     const node = item as ProjectNode;
     const data = node.data;
-    return data ? { ...node, data: completeGeneratedOutput(node, data) } : node;
+    return data ? { ...node, data: normalizeNodeData(node, data) } : node;
   });
 }
 
@@ -47,7 +69,7 @@ async function hydrateProjectNodes(nodes: ProjectNode[]) {
   if (!assetIds.size) {
     return nodes.map((node) => {
       const data = node.data;
-      return data ? { ...node, data: completeGeneratedOutput(node, data) } : node;
+      return data ? { ...node, data: normalizeNodeData(node, data) } : node;
     });
   }
 
@@ -60,7 +82,7 @@ async function hydrateProjectNodes(nodes: ProjectNode[]) {
     const assetId = typeof data.assetId === "string" ? data.assetId : undefined;
     const outputAssetId = typeof data.outputAssetId === "string" ? data.outputAssetId : undefined;
     const asset = (outputAssetId && assets.get(outputAssetId)) || (assetId && assets.get(assetId));
-    if (!asset) return node;
+    if (!asset) return { ...node, data: normalizeNodeData(node, data) };
 
     const nextData = { ...data };
     if (asset.type === "image") {
@@ -75,7 +97,7 @@ async function hydrateProjectNodes(nodes: ProjectNode[]) {
       if (!nextData.outputUrl && asset.url) nextData.outputUrl = asset.url;
       if (!nextData.duration && asset.duration) nextData.duration = asset.duration;
     }
-    return { ...node, data: completeGeneratedOutput(node, nextData) };
+    return { ...node, data: normalizeNodeData(node, nextData) };
   });
 }
 

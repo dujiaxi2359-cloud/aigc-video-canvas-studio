@@ -37,6 +37,9 @@ const emptyOfficialVideoModes: OfficialVideoMode[] = ["text_to_video"];
 const emptyStrings: string[] = [];
 const emptyNumbers: number[] = [];
 const videoCategories: OfficialVideoCategory[] = ["text_to_video", "image_to_video", "reference_to_video", "first_last_frame_video", "video_edit", "video_extension"];
+const videoRecoveryPollMs = 5000;
+const videoResultTimeoutMs = 30 * 60 * 1000;
+const videoResultTimeoutMessage = "上游/中转超过 30 分钟没有返回可用视频，当前任务已停止等待。请直接重试，或切换一条可用的视频中转线路。";
 const genericCategoryInputModes: Record<OfficialVideoCategory, VideoInputMode[]> = {
   text_to_video: ["text-to-video"],
   image_to_video: ["image-to-video"],
@@ -642,7 +645,7 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
     if (recoveringRef.current) return;
     recoveringRef.current = true;
     while (mountedRef.current) {
-      await new Promise((resolve) => window.setTimeout(resolve, 5000));
+      await new Promise((resolve) => window.setTimeout(resolve, videoRecoveryPollMs));
       if (!mountedRef.current) break;
       const currentNode = useCanvasStore.getState().nodes.find((node) => node.id === props.id);
       const currentData = currentNode?.data as VideoNodeData | undefined;
@@ -710,8 +713,39 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
           recoveringRef.current = false;
           return;
         }
+        if (Date.now() - startedAt > videoResultTimeoutMs && !currentData.outputUrl) {
+          update(props.id, {
+            status: "error",
+            outputAssetId: currentData.outputAssetId,
+            outputUrl: currentData.outputUrl,
+            errorCode: "UPSTREAM_RESULT_NOT_RETURNED",
+            errorMessage: videoResultTimeoutMessage,
+            debugMessage: latest
+              ? `最近一条生成历史状态：${latest.status}${latest.errorMessage ? `；${latest.errorMessage}` : ""}`
+              : "没有找到该节点对应的成功生成历史。",
+            generationStartedAt: undefined,
+            clientRequestId: undefined
+          });
+          setLocalError(videoResultTimeoutMessage);
+          recoveringRef.current = false;
+          return;
+        }
       } catch {
-        // The original request may still be running behind the proxy; keep polling quietly.
+        if (Date.now() - startedAt > videoResultTimeoutMs && !currentData.outputUrl) {
+          update(props.id, {
+            status: "error",
+            outputAssetId: currentData.outputAssetId,
+            outputUrl: currentData.outputUrl,
+            errorCode: "UPSTREAM_RESULT_NOT_RETURNED",
+            errorMessage: videoResultTimeoutMessage,
+            debugMessage: "轮询生成历史失败，且等待时间已超过保护阈值。",
+            generationStartedAt: undefined,
+            clientRequestId: undefined
+          });
+          setLocalError(videoResultTimeoutMessage);
+          recoveringRef.current = false;
+          return;
+        }
       }
     }
     recoveringRef.current = false;
