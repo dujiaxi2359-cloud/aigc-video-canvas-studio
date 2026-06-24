@@ -166,7 +166,7 @@ export function AssetLibraryPage({ onNavigate }: { onNavigate: (page: Page, proj
   ];
 
   return (
-    <div className="h-full overflow-hidden bg-[#0b0b0c] px-5 pb-5 pt-[88px]">
+    <div className="asset-library-page h-full overflow-hidden bg-[#0b0b0c] px-5 pb-5 pt-[88px]">
       <HomeTopNav page="assets" onNavigate={onNavigate} />
       <div className="mx-auto grid h-full max-w-[1480px] grid-cols-[250px_1fr] gap-3">
         <aside className="overflow-auto rounded-[10px] border border-white/[0.1] bg-[#151516] p-3">

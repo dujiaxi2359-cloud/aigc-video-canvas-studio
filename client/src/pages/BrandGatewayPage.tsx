@@ -3,10 +3,12 @@ import { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import gsap from "gsap";
 import type { Page } from "../App";
+import { FerrofluidBackground } from "../components/home/FerrofluidBackground";
 import { HomeLaunchIntro } from "../components/home/HomeLaunchIntro";
 import { HomePlasmaBackground } from "../components/home/HomePlasmaBackground";
 import { HomeTopNav } from "../components/home/HomeTopNav";
 import { useI18nStore } from "../i18n";
+import { useThemeStore } from "../store/themeStore";
 
 const ICP_RECORD = "粤ICP备2026074382号";
 const STUDIO_NAME = "Moon｜Tv";
@@ -16,6 +18,7 @@ export function BrandGatewayPage({ onNavigate }: { onNavigate: (page: Page, proj
   const heroCopyRef = useRef<HTMLDivElement>(null);
   const spotlightFrameRef = useRef(0);
   const t = useI18nStore((state) => state.t);
+  const resolvedTheme = useThemeStore((state) => state.resolvedTheme);
   const [launchComplete, setLaunchComplete] = useState(() => {
     if (typeof window === "undefined") return false;
     const shouldSkipLaunch = window.sessionStorage.getItem("moon.home.skipLaunch") === "1";
@@ -72,7 +75,8 @@ export function BrandGatewayPage({ onNavigate }: { onNavigate: (page: Page, proj
       onMouseMove={updateSpotlight}
     >
       {!launchComplete ? <HomeLaunchIntro onFinish={() => setLaunchComplete(true)} /> : null}
-      {launchComplete ? <HomePlasmaBackground className="home-page-plasma" /> : null}
+      {launchComplete && resolvedTheme === "dark" ? <FerrofluidBackground className="home-page-ferrofluid" /> : null}
+      {launchComplete && resolvedTheme === "light" ? <HomePlasmaBackground className="home-page-plasma" /> : null}
       <HomeTopNav page="home" onNavigate={onNavigate} />
 
       <main className="home-flagship-content">

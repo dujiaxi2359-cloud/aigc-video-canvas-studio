@@ -56,7 +56,7 @@ export function AgentPanel() {
       initial={{ opacity: 0, x: 28, scale: 0.98 }}
       animate={{ opacity: 1, x: 0, scale: 1 }}
       exit={{ opacity: 0, x: 28, scale: 0.98 }}
-      className="nodrag nopan fixed right-5 top-[72px] z-[9998] flex max-h-[calc(100vh-96px)] w-[380px] flex-col overflow-hidden rounded-3xl border border-white/[0.08] bg-[#10131a]/95 shadow-[0_24px_80px_rgba(0,0,0,0.48)] backdrop-blur-2xl"
+      className="agent-panel nodrag nopan fixed right-5 top-[72px] z-[9998] flex max-h-[calc(100vh-96px)] w-[380px] flex-col overflow-hidden rounded-3xl border border-white/[0.08] bg-[#10131a]/95 shadow-[0_24px_80px_rgba(0,0,0,0.48)] backdrop-blur-2xl"
     >
       <header className="flex items-start justify-between border-b border-white/[0.06] px-5 py-4">
         <div>

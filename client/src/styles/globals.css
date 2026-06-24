@@ -56,26 +56,26 @@
 
 :root[data-theme="light"] {
   color-scheme: light;
-  --moon-bg: #f7f4ee;
+  --moon-bg: #f5f6fb;
   --moon-card: rgba(255, 255, 255, 0.72);
   --moon-card-glass: rgba(255, 255, 255, 0.72);
   --moon-fg: #1c1b1f;
-  --moon-muted: #6f6a63;
+  --moon-muted: #686b73;
   --moon-border: rgba(30, 30, 30, 0.08);
   --moon-hover: rgba(0, 0, 0, 0.035);
   --moon-accent: #8b5cf6;
   --moon-accent-2: #06b6d4;
-  --moon-shadow: rgba(72, 61, 45, 0.16);
+  --moon-shadow: rgba(70, 74, 92, 0.14);
   --moon-canvas-gradients:
-    radial-gradient(circle at 54% 5%, rgba(139, 92, 246, 0.12), transparent 30%),
-    radial-gradient(circle at 80% 36%, rgba(6, 182, 212, 0.10), transparent 26%),
-    radial-gradient(circle at 20% 82%, rgba(190, 155, 92, 0.10), transparent 32%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.38), rgba(242, 236, 224, 0.22));
-  --moon-grid-dot: rgba(92, 82, 68, 0.16);
+    radial-gradient(circle at 54% 5%, rgba(139, 92, 246, 0.10), transparent 30%),
+    radial-gradient(circle at 82% 35%, rgba(6, 182, 212, 0.08), transparent 28%),
+    radial-gradient(circle at 18% 82%, rgba(120, 118, 178, 0.08), transparent 34%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.42), rgba(236, 239, 247, 0.18));
+  --moon-grid-dot: rgba(111, 91, 179, 0.22);
   --moon-noise-opacity: 0.045;
   --moon-noise-blend: multiply;
-  --bg-app: #f7f4ee;
-  --bg-canvas: #f5f2ea;
+  --bg-app: #f5f6fb;
+  --bg-canvas: #f5f6fb;
   --bg-surface: rgba(255, 255, 255, 0.66);
   --bg-card: rgba(255, 255, 255, 0.72);
   --bg-card-soft: rgba(255, 255, 255, 0.58);
@@ -87,12 +87,12 @@
   --accent-primary: #8b5cf6;
   --accent-primary-hover: #7c3aed;
   --accent-line: rgba(78, 80, 92, 0.42);
-  --canvas-bg: #f5f2ea;
-  --canvas-bg-soft: #efe9df;
+  --canvas-bg: #f5f6fb;
+  --canvas-bg-soft: #f8f9fd;
   --panel-bg: rgba(255, 255, 255, 0.68);
   --panel-bg-strong: rgba(255, 255, 255, 0.86);
   --node-bg: rgba(255, 255, 255, 0.74);
-  --node-border: rgba(42, 36, 30, 0.14);
+  --node-border: rgba(45, 48, 62, 0.13);
   --node-glow: rgba(139, 92, 246, 0.16);
   --dock-bg: rgba(255, 255, 255, 0.72);
   --popover-bg: rgba(255, 255, 255, 0.9);
@@ -1686,8 +1686,8 @@ select {
   z-index: 0;
   overflow: hidden;
   background:
-    radial-gradient(circle at 48% 38%, rgba(246, 220, 151, 0.10), transparent 38%),
-    #050506;
+    radial-gradient(circle at 50% 28%, rgba(139, 92, 246, 0.08), transparent 36%),
+    #f5f6fb;
   pointer-events: none;
 }
 
@@ -3799,12 +3799,14 @@ select {
 
 .canvas-space.is-interacting,
 .canvas-space.is-interacting .studio-flow {
-  background: #010203 !important;
+  background:
+    var(--moon-canvas-gradients),
+    var(--canvas-bg) !important;
 }
 
 .canvas-space.is-interacting .react-flow__background,
 .canvas-space.is-interacting .obsidian-noise {
-  opacity: 0 !important;
+  opacity: 0.58 !important;
 }
 
 .canvas-space.is-interacting .react-flow__edge,
@@ -5570,7 +5572,9 @@ select optgroup {
 
 .canvas-space.is-interacting,
 .canvas-space.is-interacting .studio-flow {
-  background: #030303 !important;
+  background:
+    var(--moon-canvas-gradients),
+    var(--canvas-bg) !important;
 }
 
 .canvas-space.is-interacting::before {
@@ -8934,8 +8938,8 @@ video:-webkit-full-screen,
   z-index: 0;
   overflow: hidden;
   pointer-events: none;
-  opacity: 0.96;
-  mix-blend-mode: multiply;
+  opacity: 0.82;
+  mix-blend-mode: screen;
 }
 
 .canvas-moonlight-dot-field canvas,
@@ -9133,14 +9137,14 @@ video:-webkit-full-screen,
 :root[data-theme="light"] .login-shell,
 :root[data-theme="light"] .invite-shell {
   background:
-    radial-gradient(circle at 76% 12%, rgba(139, 92, 246, 0.12), transparent 32%),
-    radial-gradient(circle at 18% 82%, rgba(6, 182, 212, 0.09), transparent 30%),
+    radial-gradient(circle at 76% 12%, rgba(139, 92, 246, 0.10), transparent 32%),
+    radial-gradient(circle at 18% 82%, rgba(6, 182, 212, 0.07), transparent 30%),
     var(--moon-bg);
   color: var(--moon-fg);
 }
 
 :root[data-theme="light"] .home-gateway {
-  background: #f5f1e8;
+  background: #f5f6fb;
 }
 
 :root[data-theme="light"] .home-unicorn-hero {
@@ -9161,13 +9165,14 @@ video:-webkit-full-screen,
 
 :root[data-theme="light"] .home-page-plasma {
   background:
-    radial-gradient(circle at 45% 32%, rgba(246, 218, 145, 0.08), transparent 35%),
-    #f5f1e8;
+    radial-gradient(circle at 47% 28%, rgba(139, 92, 246, 0.08), transparent 35%),
+    radial-gradient(circle at 76% 66%, rgba(6, 182, 212, 0.045), transparent 36%),
+    #f5f6fb;
 }
 
 :root[data-theme="light"] .home-plasma-canvas {
   opacity: 1;
-  filter: saturate(1.18) contrast(1.06);
+  filter: saturate(1.08) contrast(1.02);
   mix-blend-mode: normal;
 }
 
@@ -9181,7 +9186,7 @@ video:-webkit-full-screen,
 
 :root[data-theme="light"] .home-unicorn-copy::before {
   background:
-    radial-gradient(ellipse at 50% 45%, rgba(247, 244, 238, 0.74) 0%, rgba(247, 244, 238, 0.38) 38%, transparent 72%);
+    radial-gradient(ellipse at 50% 45%, rgba(245, 246, 251, 0.34) 0%, rgba(245, 246, 251, 0.16) 38%, transparent 72%);
 }
 
 :root[data-theme="light"] .home-unicorn-eyebrow {
@@ -9196,8 +9201,8 @@ video:-webkit-full-screen,
 }
 
 :root[data-theme="light"] .home-unicorn-cn-title {
-  color: #a9791f;
-  text-shadow: 0 12px 46px rgba(169, 121, 31, 0.16);
+  color: #7a4fd8;
+  text-shadow: 0 12px 46px rgba(122, 79, 216, 0.14);
 }
 
 :root[data-theme="light"] .moon-logo-orbit {
@@ -9266,6 +9271,147 @@ video:-webkit-full-screen,
   border-color: rgba(139, 92, 246, 0.28);
   background: rgba(28, 27, 31, 0.96);
   color: #fff;
+}
+
+:root[data-theme="light"] .canvas-space.is-interacting,
+:root[data-theme="light"] .canvas-space.is-interacting .studio-flow {
+  background:
+    var(--moon-canvas-gradients),
+    var(--canvas-bg) !important;
+}
+
+:root[data-theme="light"] .canvas-space.is-interacting .react-flow__background {
+  opacity: 0.62 !important;
+}
+
+:root[data-theme="light"] .canvas-space.is-interacting .obsidian-noise {
+  opacity: 0.18 !important;
+}
+
+:root[data-theme="light"] .canvas-space.is-interacting .canvas-moonlight-dot-field,
+:root[data-theme="light"] .canvas-moonlight-dot-field {
+  opacity: 1 !important;
+  mix-blend-mode: multiply;
+}
+
+:root[data-theme="light"] .canvas-add-node-menu {
+  border-color: rgba(43, 45, 58, 0.12) !important;
+  background:
+    radial-gradient(circle at 0% 0%, rgba(139, 92, 246, 0.08), transparent 32%),
+    rgba(255, 255, 255, 0.9) !important;
+  color: rgba(28, 27, 31, 0.92);
+  box-shadow: 0 28px 80px rgba(70, 74, 92, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.92) !important;
+}
+
+:root[data-theme="light"] .canvas-add-node-menu .text-white,
+:root[data-theme="light"] .canvas-add-node-menu .text-white\/88 {
+  color: rgba(28, 27, 31, 0.92) !important;
+}
+
+:root[data-theme="light"] .canvas-add-node-menu .text-white\/58,
+:root[data-theme="light"] .canvas-add-node-menu .text-white\/38,
+:root[data-theme="light"] .canvas-add-node-menu .text-white\/35 {
+  color: rgba(28, 27, 31, 0.54) !important;
+}
+
+:root[data-theme="light"] .canvas-add-node-menu button:hover {
+  background: rgba(28, 27, 31, 0.055) !important;
+}
+
+:root[data-theme="light"] .canvas-add-node-menu span.bg-white\/\[0\.06\] {
+  border-color: rgba(43, 45, 58, 0.09) !important;
+  background: rgba(28, 27, 31, 0.045) !important;
+}
+
+:root[data-theme="light"] .agent-panel {
+  border-color: rgba(43, 45, 58, 0.12) !important;
+  background:
+    radial-gradient(circle at 0% 0%, rgba(139, 92, 246, 0.08), transparent 34%),
+    rgba(255, 255, 255, 0.88) !important;
+  color: rgba(28, 27, 31, 0.92);
+  box-shadow: 0 32px 90px rgba(70, 74, 92, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.9) !important;
+}
+
+:root[data-theme="light"] .agent-panel header {
+  border-color: rgba(43, 45, 58, 0.09) !important;
+}
+
+:root[data-theme="light"] .agent-panel .text-white,
+:root[data-theme="light"] .agent-panel .text-white\/80 {
+  color: rgba(28, 27, 31, 0.9) !important;
+}
+
+:root[data-theme="light"] .agent-panel .text-white\/60,
+:root[data-theme="light"] .agent-panel .text-white\/55,
+:root[data-theme="light"] .agent-panel .text-white\/50,
+:root[data-theme="light"] .agent-panel .text-white\/45,
+:root[data-theme="light"] .agent-panel .text-white\/40,
+:root[data-theme="light"] .agent-panel .text-white\/25 {
+  color: rgba(28, 27, 31, 0.55) !important;
+}
+
+:root[data-theme="light"] .agent-panel select,
+:root[data-theme="light"] .agent-panel textarea,
+:root[data-theme="light"] .agent-panel .bg-\[\#0b0e14\] {
+  border-color: rgba(43, 45, 58, 0.1) !important;
+  background: rgba(255, 255, 255, 0.74) !important;
+  color: rgba(28, 27, 31, 0.88) !important;
+}
+
+:root[data-theme="light"] .agent-panel textarea::placeholder {
+  color: rgba(28, 27, 31, 0.42) !important;
+}
+
+:root[data-theme="light"] .asset-library-page {
+  background:
+    radial-gradient(circle at 82% 4%, rgba(139, 92, 246, 0.08), transparent 34%),
+    radial-gradient(circle at 12% 90%, rgba(6, 182, 212, 0.06), transparent 32%),
+    #f5f6fb !important;
+  color: rgba(28, 27, 31, 0.9);
+}
+
+:root[data-theme="light"] .asset-library-page aside,
+:root[data-theme="light"] .asset-library-page section,
+:root[data-theme="light"] .asset-library-page .bg-\[\#121213\],
+:root[data-theme="light"] .asset-library-page .bg-\[\#151516\],
+:root[data-theme="light"] .asset-library-page .bg-\[\#1b1b1d\]\/\[0\.94\] {
+  border-color: rgba(43, 45, 58, 0.1) !important;
+  background: rgba(255, 255, 255, 0.76) !important;
+  color: rgba(28, 27, 31, 0.9);
+  box-shadow: 0 24px 70px rgba(70, 74, 92, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.82);
+}
+
+:root[data-theme="light"] .asset-library-page .text-white,
+:root[data-theme="light"] .asset-library-page .text-white\/70,
+:root[data-theme="light"] .asset-library-page .text-white\/65 {
+  color: rgba(28, 27, 31, 0.9) !important;
+}
+
+:root[data-theme="light"] .asset-library-page .text-white\/58,
+:root[data-theme="light"] .asset-library-page .text-white\/52,
+:root[data-theme="light"] .asset-library-page .text-white\/44,
+:root[data-theme="light"] .asset-library-page .text-white\/42,
+:root[data-theme="light"] .asset-library-page .text-white\/38,
+:root[data-theme="light"] .asset-library-page .text-white\/34,
+:root[data-theme="light"] .asset-library-page .text-white\/32,
+:root[data-theme="light"] .asset-library-page .text-white\/30 {
+  color: rgba(28, 27, 31, 0.52) !important;
+}
+
+:root[data-theme="light"] .asset-library-page input,
+:root[data-theme="light"] .asset-library-page select {
+  border-color: rgba(43, 45, 58, 0.1) !important;
+  background: rgba(255, 255, 255, 0.72) !important;
+  color: rgba(28, 27, 31, 0.88) !important;
+}
+
+:root[data-theme="light"] .asset-library-page input::placeholder {
+  color: rgba(28, 27, 31, 0.42) !important;
+}
+
+:root[data-theme="light"] .asset-library-page .bg-black\/20,
+:root[data-theme="light"] .asset-library-page .bg-black\/60 {
+  background: rgba(28, 27, 31, 0.045) !important;
 }
 
 :root[data-theme="light"] #admin-settings section {
