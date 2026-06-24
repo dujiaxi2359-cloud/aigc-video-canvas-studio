@@ -193,6 +193,26 @@ function firstModeForCategory(category: OfficialVideoCategory, modes: OfficialVi
   return modesForCategory(category, modes)[0] ?? defaultModeForCategory(category);
 }
 
+function preferredVideoInputModel(models: ModelConfig[], current?: ModelConfig) {
+  if (current && (supportsVideoExtension(current) || supportsVideoEdit(current))) return current;
+  const videoInputModels = dedupeModelConfigsForSelect(models.filter((model) =>
+    model.enabled
+    && model.category === "video"
+    && isRuntimeUsableVideoModel(model)
+    && (supportsVideoExtension(model) || supportsVideoEdit(model))
+  ));
+  return videoInputModels.find(isOmniFastV2vModel)
+    ?? videoInputModels.find((model) => supportsVideoExtension(model))
+    ?? videoInputModels[0];
+}
+
+function preferredVideoInputMode(model?: ModelConfig) {
+  if (!model) return undefined;
+  if (supportsVideoExtension(model)) return "video_extension" as OfficialVideoMode;
+  if (supportsVideoEdit(model)) return "video_edit" as OfficialVideoMode;
+  return undefined;
+}
+
 function maxImagesForMode(model: ModelConfig | undefined, mode: OfficialVideoMode) {
   if (!model) return undefined;
   if (mode === "reference_images_to_video") {
@@ -589,6 +609,26 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
   const availableRatios = useMemo(() => dynamicOptions?.availableAspectRatios ?? selectedAspectRatios ?? emptyStrings, [dynamicOptions?.availableAspectRatios, selectedAspectRatios]);
   const availableResolutions = useMemo(() => dynamicOptions?.availableResolutions ?? selectedResolutions ?? emptyStrings, [dynamicOptions?.availableResolutions, selectedResolutions]);
   const availableDurations = useMemo(() => dynamicOptions?.availableDurations ?? durationOptions(selectedModel) ?? emptyNumbers, [dynamicOptions?.availableDurations, selectedModel]);
+
+  useEffect(() => {
+    if (!resolvedInputs.hasVideoInput) return;
+    const currentMode = props.data.videoMode ?? legacyInputModeToOfficialMode(props.data.inputMode);
+    const currentCategory = categoryForOfficialVideoMode(currentMode);
+    const currentModelHandlesVideo = selectedModel && (supportsVideoExtension(selectedModel) || supportsVideoEdit(selectedModel));
+    if (currentModelHandlesVideo && (currentCategory === "video_extension" || currentCategory === "video_edit")) return;
+    const nextModel = preferredVideoInputModel(allModels, selectedModel);
+    const nextMode = preferredVideoInputMode(nextModel);
+    if (!nextModel || !nextMode) return;
+    setVideoCategory(categoryForOfficialVideoMode(nextMode));
+    update(props.id, {
+      modelConfigId: nextModel.id,
+      videoMode: nextMode,
+      inputMode: officialModeToLegacyInputMode(nextMode),
+      errorCode: undefined,
+      errorMessage: undefined,
+      debugMessage: undefined
+    });
+  }, [allModels, props.data.inputMode, props.data.videoMode, props.id, resolvedInputs.hasVideoInput, selectedModel, update]);
 
   useEffect(() => {
     if (!selectedModel || !availableVideoModes.length) return;
