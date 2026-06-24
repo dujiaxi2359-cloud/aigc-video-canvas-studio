@@ -73,6 +73,33 @@ assert(
   ),
   "Omni-fast-v2v fallback must not switch to the image/text omni-fast route"
 );
+const upstreamVeoCapabilities = normalizeVideoCapabilities({
+  capabilitySource: "upstream",
+  inputModes: ["text-to-video", "reference-to-video"],
+  supportedInputs: ["text", "image", "reference_image"],
+  duration: { type: "enum", values: [4, 6, 8] },
+  supportedDurations: [4, 6, 8],
+  supportedAspectRatios: ["16:9", "9:16"],
+  supportedResolutions: ["720p", "1080p"]
+}, "google", "veo-3-1");
+const upstreamVeoReferenceOptions = calculateAvailableVideoOptions(upstreamVeoCapabilities, {
+  inputMode: "reference-to-video",
+  hasImageInput: true,
+  hasReferenceImage: true,
+  hasVideoInput: false,
+  hasFirstLastFrame: false,
+  selectedDuration: 15,
+  selectedAspectRatio: "9:16",
+  selectedResolution: "720p"
+});
+assert(
+  upstreamVeoReferenceOptions.availableDurations.length === 1 && upstreamVeoReferenceOptions.availableDurations[0] === 8,
+  "Upstream Veo 3.1 reference-to-video must inherit the fixed 8s hard constraint"
+);
+assert(
+  upstreamVeoReferenceOptions.normalizedSelection.duration === 8,
+  "Upstream Veo 3.1 requests should normalize unsupported durations before adapter calls"
+);
 assert(
   !shouldUseVideoFallbackCandidate(
     {

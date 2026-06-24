@@ -51,6 +51,9 @@ function humanOpenAIError(message: string) {
   if (/cloudflare.*524|error code 524|a timeout occurred|origin web server timed out/i.test(message)) {
     return "OpenAI 图片中转上游响应超时，请稍后重试或切换其它图片线路。";
   }
+  if (/method not allowed|not found|\b404\b|\b405\b/i.test(message)) {
+    return `OpenAI 兼容图片中转不支持当前图片接口路径或方法：${message}。系统会优先尝试其它可用图片线路；如果仍失败，请在设置中心切换到支持该输入模式的中转。`;
+  }
   if (/please wait and try again later|try again later|temporarily unavailable|service busy|fully loaded/i.test(message)) {
     return "OpenAI 图片中转暂时繁忙，请稍后重试或切换其它图片线路。";
   }

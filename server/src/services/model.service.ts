@@ -329,6 +329,51 @@ function validateVideoRequest(capabilities: ModelCapabilities, input: GenerateVi
   if (input.resolution && options.availableResolutions.length && !options.availableResolutions.includes(input.resolution)) throw new Error("当前模型不支持该分辨率");
 }
 
+function normalizeVideoRequestForCapabilities(capabilities: ModelCapabilities, input: GenerateVideoRequest, providerId?: string, modelName?: string) {
+  const effectiveCapabilities = normalizeVideoCapabilities(capabilities, providerId, modelName);
+  const options = calculateAvailableVideoOptions(effectiveCapabilities, {
+    inputMode: input.inputMode,
+    hasImageInput: Boolean(input.imageAssetIds?.length),
+    hasVideoInput: Boolean(input.videoAssetIds?.length),
+    hasReferenceImage: Boolean(input.imageAssetIds?.length),
+    hasFirstLastFrame: Boolean(input.imageAssetIds && input.imageAssetIds.length >= 2),
+    selectedDuration: input.duration,
+    selectedAspectRatio: input.aspectRatio,
+    selectedResolution: input.resolution
+  });
+  const normalized = options.normalizedSelection;
+  if (normalized.duration !== undefined && input.duration !== normalized.duration) {
+    console.warn("[video normalize] adjusted unsupported duration before provider call", {
+      providerId,
+      modelName,
+      inputMode: input.inputMode,
+      from: input.duration,
+      to: normalized.duration,
+      reason: options.warningMessage
+    });
+    input.duration = normalized.duration;
+  }
+  if (normalized.aspectRatio && input.aspectRatio !== normalized.aspectRatio) {
+    console.warn("[video normalize] adjusted unsupported aspect ratio before provider call", {
+      providerId,
+      modelName,
+      from: input.aspectRatio,
+      to: normalized.aspectRatio
+    });
+    input.aspectRatio = normalized.aspectRatio;
+  }
+  if (normalized.resolution && input.resolution !== normalized.resolution) {
+    console.warn("[video normalize] adjusted unsupported resolution before provider call", {
+      providerId,
+      modelName,
+      from: input.resolution,
+      to: normalized.resolution
+    });
+    input.resolution = normalized.resolution;
+  }
+  return input;
+}
+
 async function assertSelectedVideoChannelSupportsAssets(
   model: NonNullable<InternalModelConfig>,
   providerParams: Parameters<typeof resolveVideoRequestConfig>[0],
@@ -455,7 +500,7 @@ function effectiveImageRuntime(input: {
 
 function isRetryableImageRelayError(error: unknown) {
   const text = error instanceof Error ? error.message : safeStringify(error);
-  return /OpenAI 兼容图片中转返回|Cloudflare|OPENAI_COMPAT_NON_JSON_RESPONSE|HTML 页面|上游响应超时|upstream request failed|upstream_error|temporarily unavailable|service busy|fully loaded|error code 524|a timeout occurred|502|503|504/i.test(text);
+  return /OpenAI 兼容图片中转返回|Cloudflare|OPENAI_COMPAT_NON_JSON_RESPONSE|HTML 页面|上游响应超时|upstream request failed|upstream_error|temporarily unavailable|service busy|fully loaded|method not allowed|not found|unsupported (?:endpoint|route|path)|error code 524|a timeout occurred|404|405|502|503|504/i.test(text);
 }
 
 function imageProviderPriority(providerId?: string) {
@@ -792,6 +837,7 @@ async function tryVideoFallback(input: {
       const configuredCapabilities = JSON.parse(candidate.capabilities_json) as ModelCapabilities;
       const capabilities = normalizeVideoCapabilities(configuredCapabilities, candidate.provider_id, candidate.model_name);
       const candidateRequest: GenerateVideoRequest = { ...input.request };
+      normalizeVideoRequestForCapabilities(capabilities, candidateRequest, candidate.provider_id, candidate.model_name);
       validateVideoRequest(capabilities, candidateRequest, candidate.provider_id, candidate.model_name);
       const apiKey = candidate.encrypted_api_key ? decryptApiKey(candidate.encrypted_api_key) : "";
       if (!apiKey) continue;
@@ -1057,6 +1103,7 @@ export async function generateVideo(input: GenerateVideoRequest) {
   const capabilities = normalizeVideoCapabilities(configuredCapabilities, model.provider_id, model.model_name);
   const inputForGeneration: GenerateVideoRequest = { ...input, generateCount: 1 };
   try {
+    normalizeVideoRequestForCapabilities(capabilities, inputForGeneration, model.provider_id, model.model_name);
     validateVideoRequest(capabilities, inputForGeneration, model.provider_id, model.model_name);
     if (forceMock) {
       const asset = await writeMockAsset({

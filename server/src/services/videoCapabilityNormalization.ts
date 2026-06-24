@@ -161,7 +161,10 @@ export function normalizeVideoCapabilities(
   providerId?: string,
   modelName?: string
 ): ModelCapabilities {
-  if (capabilities.capabilitySource === "upstream" || capabilities.capabilitySource === "official") {
+  if (capabilities.capabilitySource === "official") {
+    return capabilities;
+  }
+  if (capabilities.capabilitySource === "upstream" && !isVeoLikeVideoModel(providerId, modelName, capabilities)) {
     return capabilities;
   }
   if (isAgnesVideoModel(providerId, modelName, capabilities)) {
@@ -414,6 +417,17 @@ export function normalizeVideoCapabilities(
     ...capabilities,
     inputModes: union(capabilities.inputModes, veoInputModes),
     supportedInputs: union(capabilities.supportedInputs, veoSupportedInputs),
+    duration: capabilities.duration ?? { type: "enum", values: [4, 6, 8] },
+    supportedDurations: union(capabilities.supportedDurations, [4, 6, 8]).sort((a, b) => a - b),
+    aspectRatios: union(capabilities.aspectRatios, ["16:9", "9:16"]),
+    supportedAspectRatios: union(capabilities.supportedAspectRatios, ["16:9", "9:16"]),
+    resolutions: union(capabilities.resolutions, ["720p", "1080p", "4k"]),
+    supportedResolutions: union(capabilities.supportedResolutions, ["720p", "1080p", "4k"]),
+    constraints: [
+      ...(capabilities.constraints ?? []),
+      { when: { resolution: ["1080p", "4k"] }, forceDuration: 8, reason: "Veo 3.1 在 1080p / 4k 下固定为 8 秒" },
+      { when: { inputMode: ["reference-to-video"] }, forceDuration: 8, reason: "Veo 3.1 使用参考图时固定为 8 秒" }
+    ],
     imageTransport: capabilities.imageTransport === "unsupported" ? undefined : capabilities.imageTransport,
     supportsImageInput: true,
     supportsReferenceImage: true,
