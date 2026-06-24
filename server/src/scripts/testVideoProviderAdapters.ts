@@ -713,8 +713,10 @@ assert(omniConfig.finalUrl === "https://ai.ai666.net/v1/videos", "Omni-fast shou
 assert(omniConfig.imageTransport === "url", "Omni-fast image input should use first_image_url with public URL");
 assert(omniConfig.imageField === "first_image_url", "Omni-fast should keep its configured first frame field");
 assert(omniConfig.supportedInputs.includes("image"), "/v1/videos must not force Omni-fast to text-only");
-assert(omniConfig.supportedDurations.includes(30), "Omni-fast should accept the documented 4-30 second range");
+assert(omniConfig.supportedDurations.length === 1 && omniConfig.supportedDurations[0] === 10, "Omni-fast should be fixed at 10 seconds");
+assert(!omniConfig.supportedDurations.includes(8) && !omniConfig.supportedDurations.includes(30), "Omni-fast must not inherit stale flexible duration ranges");
 assert(omniConfig.supportedResolutions.includes("4k"), "Omni-fast should accept the documented 4k resolution");
+assert(!omniConfig.supportedResolutions.includes("2k"), "Omni-fast should not inherit stale 2k resolution metadata");
 const legacyOmniFlash = normalizeVideoCapabilities({
   inputModes: ["text-to-video", "image-to-video", "reference-to-video"],
   aspectRatios: ["16:9", "9:16"],
@@ -808,6 +810,7 @@ const newtokenOmniConfig = resolveVideoRequestConfig({
 assert(newtokenOmniConfig.channel === "proxy", "newtoken.club should be recognized as a video relay");
 assert(newtokenOmniConfig.apiFamily === "omni_fast", "veo-omni-flash should use the Omni video protocol");
 assert(newtokenOmniConfig.finalUrl === "https://api.newtoken.club/v1/videos", "Omni relays should create tasks with /v1/videos");
+assert(newtokenOmniConfig.supportedDurations.length === 1 && newtokenOmniConfig.supportedDurations[0] === 10, "Omni relays should stay fixed at 10 seconds even with stale custom metadata");
 const newtokenOmniBody = buildProxyBody({
   providerId: "google",
   modelName: "veo-omni-flash-vip",
@@ -1019,9 +1022,21 @@ const omniV2vConfig = resolveVideoRequestConfig({
   supportedInputs: ["video"],
   videoTransport: "url_or_base64_json"
 });
+const normalizedOmniV2v = normalizeVideoCapabilities({
+  inputModes: ["text-to-video", "image-to-video", "reference-to-video", "video-to-video"],
+  supportedInputs: ["text", "image", "reference_image", "video"],
+  duration: { type: "enum", values: [4, 6, 8, 10] },
+  supportedDurations: [4, 6, 8, 10],
+  videoTransport: "url_or_base64_json"
+}, "openai-video", "omni-fast-v2v");
 assert(omniV2vConfig.apiFamily === "omni_fast_v2v", "Omni-fast-v2v should use its video reference family");
 assert(omniV2vConfig.videoField === "video", "Omni-fast-v2v should send the video field");
 assert(omniV2vConfig.videoTransport === "url_or_base64_json", "Omni-fast-v2v should preserve video transport");
+assert(normalizedOmniV2v.inputModes?.length === 1 && normalizedOmniV2v.inputModes[0] === "video-to-video", "Omni-fast-v2v must only expose video-to-video");
+assert(normalizedOmniV2v.supportedInputs?.length === 1 && normalizedOmniV2v.supportedInputs[0] === "video", "Omni-fast-v2v must only accept video input");
+assert(normalizedOmniV2v.supportedDurations?.length === 1 && normalizedOmniV2v.supportedDurations[0] === 10, "Omni-fast-v2v normalized capability should be fixed at 10 seconds");
+assert(omniV2vConfig.supportedInputs.length === 1 && omniV2vConfig.supportedInputs[0] === "video", "Omni-fast-v2v must only accept video input");
+assert(omniV2vConfig.supportedDurations.length === 1 && omniV2vConfig.supportedDurations[0] === 10, "Omni-fast-v2v should be fixed at 10 seconds");
 const unifiedConfig = resolveVideoRequestConfig({
   providerId: "openai-video",
   modelName: "viduq2",

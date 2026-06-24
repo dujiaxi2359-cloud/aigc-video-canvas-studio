@@ -12,6 +12,10 @@ const kling3InputModes: ModelInputMode[] = ["text-to-video", "image-to-video", "
 const kling3SupportedInputs: VideoSupportedInput[] = ["text", "image", "first_frame", "reference_image", "first_last_frame"];
 const omniFastInputModes: ModelInputMode[] = ["text-to-video", "image-to-video", "reference-to-video", "first-last-frame"];
 const omniFastSupportedInputs: VideoSupportedInput[] = ["text", "image", "first_frame", "reference_image", "first_last_frame"];
+const omniFastV2vInputModes: ModelInputMode[] = ["video-to-video"];
+const omniFastV2vSupportedInputs: VideoSupportedInput[] = ["video"];
+const omniFastDurations = [10];
+const omniFastResolutions = ["720p", "1080p", "4k"];
 const agnesInputModes: ModelInputMode[] = ["text-to-video", "image-to-video", "reference-to-video", "first-last-frame"];
 const agnesSupportedInputs: VideoSupportedInput[] = ["text", "image", "first_frame", "reference_image", "first_last_frame"];
 
@@ -28,6 +32,11 @@ export function isOmniFastVideoModel(modelName?: string, capabilities?: ModelCap
   const identity = `${modelName ?? ""} ${capabilities?.modelCapability?.model ?? ""} ${capabilities?.apiFamily ?? ""}`.toLowerCase();
   if (/omni[-_]?flash[-_]?10s/.test(identity)) return false;
   return /omni[-_]?(?:fast|flash)(?:$|\s|[-_])/.test(identity) && !/omni[-_]?fast[-_]?v2v/.test(identity);
+}
+
+function isOmniFastV2VVideoModel(modelName?: string, capabilities?: ModelCapabilities) {
+  const identity = `${modelName ?? ""} ${capabilities?.modelCapability?.model ?? ""} ${capabilities?.apiFamily ?? ""}`.toLowerCase();
+  return /omni[-_]?fast[-_]?v2v/.test(identity);
 }
 
 function modelIdentity(providerId?: string, modelName?: string, capabilities?: ModelCapabilities) {
@@ -204,18 +213,54 @@ export function normalizeVideoCapabilities(
     return zhipuCapabilities(modelName ?? capabilities.modelCapability?.model ?? "", capabilities);
   }
 
+  if (isOmniFastV2VVideoModel(modelName, capabilities)) {
+    const normalized: ModelCapabilities = {
+      ...capabilities,
+      apiFamily: "omni_fast_v2v",
+      inputModes: omniFastV2vInputModes,
+      supportedInputs: omniFastV2vSupportedInputs,
+      duration: { type: "fixed", value: 10 },
+      supportedDurations: omniFastDurations,
+      aspectRatios: ["16:9", "9:16"],
+      supportedAspectRatios: ["16:9", "9:16"],
+      resolutions: omniFastResolutions,
+      supportedResolutions: omniFastResolutions,
+      imageTransport: "unsupported",
+      videoTransport: capabilities.videoTransport ?? "url_or_base64_json",
+      videoField: "video",
+      supportsVideoInput: true,
+      supportsImageInput: false,
+      supportsReferenceImage: false,
+      supportsFirstLastFrame: false,
+      supportsMultiImageInput: false,
+      maxReferenceImages: 0,
+      maxReferenceVideos: 1
+    };
+    if (capabilities.channelCapability) {
+      normalized.channelCapability = {
+        ...capabilities.channelCapability,
+        apiFamily: "omni_fast_v2v",
+        supportedInputs: omniFastV2vSupportedInputs,
+        imageTransport: "unsupported",
+        videoTransport: capabilities.channelCapability.videoTransport ?? "url_or_base64_json",
+        videoField: capabilities.channelCapability.videoField ?? "video"
+      };
+    }
+    return normalized;
+  }
+
   if (isOmniFastVideoModel(modelName, capabilities)) {
     const normalized: ModelCapabilities = {
       ...capabilities,
       apiFamily: "omni_fast",
-      inputModes: union(capabilities.inputModes, omniFastInputModes),
-      supportedInputs: union(capabilities.supportedInputs, omniFastSupportedInputs),
-      duration: { type: "range", min: 4, max: 30, step: 1 },
-      supportedDurations: Array.from({ length: 27 }, (_, index) => index + 4),
+      inputModes: omniFastInputModes,
+      supportedInputs: omniFastSupportedInputs,
+      duration: { type: "fixed", value: 10 },
+      supportedDurations: omniFastDurations,
       aspectRatios: union(capabilities.aspectRatios, ["16:9", "9:16"]),
       supportedAspectRatios: union(capabilities.supportedAspectRatios, ["16:9", "9:16"]),
-      resolutions: union(capabilities.resolutions, ["720p", "1080p", "2k", "4k"]),
-      supportedResolutions: union(capabilities.supportedResolutions, ["720p", "1080p", "2k", "4k"]),
+      resolutions: omniFastResolutions,
+      supportedResolutions: omniFastResolutions,
       imageTransport: "url",
       imageField: "first_image_url",
       supportsImageInput: true,
@@ -228,7 +273,7 @@ export function normalizeVideoCapabilities(
       normalized.channelCapability = {
         ...capabilities.channelCapability,
         apiFamily: "omni_fast",
-        supportedInputs: union(capabilities.channelCapability.supportedInputs, omniFastSupportedInputs),
+        supportedInputs: omniFastSupportedInputs,
         imageTransport: "url",
         imageField: capabilities.channelCapability.imageField ?? "images"
       };
