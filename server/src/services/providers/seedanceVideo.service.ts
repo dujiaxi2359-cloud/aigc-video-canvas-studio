@@ -1327,7 +1327,7 @@ export async function generateVideoWithSeedance(params: SeedanceProviderParams):
   const label = proxyVideoLabel(params);
   const routeLabel = videoRouteLabel(params);
   const mode = params.videoMode ?? legacyInputModeToOfficialMode(params.inputMode, "seedance");
-  if (!["text_to_video", "image_to_video_first_frame", "image_to_video_first_last_frame", "reference_images_to_video", "video_edit", "video_extension"].includes(mode)) {
+  if (!["text_to_video", "image_to_video_first_frame", "image_to_video_first_last_frame", "reference_images_to_video", "reference_video_to_video", "video_edit", "video_extension", "video_to_video"].includes(mode)) {
     throw new ProviderError("MODEL_MODE_UNSUPPORTED", `${label} 当前通道不支持这个视频生成模式。`);
   }
 
@@ -1365,7 +1365,7 @@ export async function generateVideoWithSeedance(params: SeedanceProviderParams):
     if (mode === "reference_images_to_video" && imageCount + videos.length + audios.length === 0) {
       throw new ProviderError("MISSING_INPUT_ASSET", `${label} 全能参考至少需要连接一张图片、一个视频或一段音频。`);
     }
-    if (["video_edit", "video_extension"].includes(mode) && !videos.length) {
+    if (["reference_video_to_video", "video_edit", "video_extension", "video_to_video"].includes(mode) && !videos.length) {
       throw new ProviderError("MISSING_VIDEO_INPUT", mode === "video_extension" ? `${label} 视频延展需要连接原视频。` : `${label} 视频编辑需要连接视频素材。`);
     }
 

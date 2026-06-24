@@ -1,7 +1,7 @@
 import { getDb } from "../db/database.js";
 import { requireRequestContext } from "./requestContext.js";
 import { getVideoModelCapabilityOrLegacy } from "../config/videoModelCapabilities.js";
-import { officialModeToLegacyInputMode, officialVideoModeLabels } from "../types/videoModes.js";
+import { officialModeToLegacyInputMode, officialVideoModeLabels, type OfficialVideoMode } from "../types/videoModes.js";
 import { normalizeImageCapabilities } from "./imageCapabilityNormalization.js";
 import { normalizeVideoCapabilities } from "./videoCapabilityNormalization.js";
 import type {
@@ -89,8 +89,16 @@ export function calculateAvailableVideoOptions(capabilities: ModelCapabilities, 
   let availableResolutions = [...(capabilities.supportedResolutions ?? capabilities.resolutions ?? [])];
   let availableAspectRatios = [...(capabilities.supportedAspectRatios ?? capabilities.aspectRatios ?? [])];
   const availableInputModes = availableVideoInputModes(capabilities);
+  const apiFamily = capabilities.channelCapability?.apiFamily ?? capabilities.apiFamily;
+  const availableVideoModes: OfficialVideoMode[] | undefined = apiFamily === "omni_fast_v2v"
+    ? ["video_extension", "video_edit"]
+    : undefined;
   const lockedFields: AvailableVideoOptions["lockedFields"] = {};
   let warningMessage: string | undefined;
+  const selectedVideoMode = nodeContext.videoMode && availableVideoModes?.includes(nodeContext.videoMode)
+    ? nodeContext.videoMode
+    : availableVideoModes?.[0];
+  const selectedLegacyInputMode = selectedVideoMode ? officialModeToLegacyInputMode(selectedVideoMode) : undefined;
 
   if (capabilities.duration?.type === "fixed") lockedFields.duration = true;
 
@@ -111,13 +119,22 @@ export function calculateAvailableVideoOptions(capabilities: ModelCapabilities, 
     availableAspectRatios,
     availableResolutions,
     availableInputModes,
+    ...(availableVideoModes ? {
+      availableVideoModes,
+      videoModeLabels: {
+        ...officialVideoModeLabels,
+        video_extension: "视频延续",
+        video_edit: "视频编辑"
+      }
+    } : {}),
     lockedFields,
     warningMessage,
     normalizedSelection: {
       duration: availableDurations.includes(nodeContext.selectedDuration ?? NaN) ? nodeContext.selectedDuration : availableDurations[0],
       aspectRatio: availableAspectRatios.includes(nodeContext.selectedAspectRatio ?? "") ? nodeContext.selectedAspectRatio : availableAspectRatios[0],
       resolution: availableResolutions.includes(nodeContext.selectedResolution ?? "") ? nodeContext.selectedResolution : availableResolutions[0],
-      inputMode: availableInputModes.includes(nodeContext.inputMode) ? nodeContext.inputMode : availableInputModes[0]
+      inputMode: selectedLegacyInputMode ?? (availableInputModes.includes(nodeContext.inputMode) ? nodeContext.inputMode : availableInputModes[0]),
+      ...(selectedVideoMode ? { videoMode: selectedVideoMode } : {})
     }
   };
 }

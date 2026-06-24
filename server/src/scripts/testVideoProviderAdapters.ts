@@ -1189,7 +1189,9 @@ assert(normalizedOmniV2v.inputModes?.length === 1 && normalizedOmniV2v.inputMode
 assert(normalizedOmniV2v.supportedInputs?.length === 1 && normalizedOmniV2v.supportedInputs[0] === "video", "Omni-fast-v2v must only accept video input");
 assert(normalizedOmniV2v.supportedDurations?.length === 1 && normalizedOmniV2v.supportedDurations[0] === 10, "Omni-fast-v2v normalized capability should be fixed at 10 seconds");
 assert(normalizedOmniV2vOptions.availableInputModes.length === 1 && normalizedOmniV2vOptions.availableInputModes[0] === "video-to-video", "Omni-fast-v2v UI options must not show first/last-frame video");
+assert(normalizedOmniV2vOptions.availableVideoModes?.join(",") === "video_extension,video_edit", "Omni-fast-v2v should expose video extension/edit modes instead of generic unsupported mode");
 assert(normalizedOmniV2vOptions.normalizedSelection.inputMode === "video-to-video", "Omni-fast-v2v should normalize stale first/last selections back to video-to-video");
+assert(normalizedOmniV2vOptions.normalizedSelection.videoMode === "video_extension", "Omni-fast-v2v should default video input to video extension");
 assert(omniV2vConfig.supportedInputs.length === 1 && omniV2vConfig.supportedInputs[0] === "video", "Omni-fast-v2v must only accept video input");
 assert(omniV2vConfig.supportedDurations.length === 1 && omniV2vConfig.supportedDurations[0] === 10, "Omni-fast-v2v should be fixed at 10 seconds");
 const unifiedConfig = resolveVideoRequestConfig({

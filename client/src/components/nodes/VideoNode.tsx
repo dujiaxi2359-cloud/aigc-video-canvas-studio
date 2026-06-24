@@ -86,6 +86,31 @@ function isKlingOmniModel(model?: ModelConfig) {
   return /kling|可灵/.test(identity) && /(3[._ -]?0|v3|omni)/.test(identity);
 }
 
+function modelApiFamily(model?: ModelConfig) {
+  return `${model?.capabilities?.channelCapability?.apiFamily ?? model?.capabilities?.apiFamily ?? ""}`.toLowerCase();
+}
+
+function isOmniFastV2vModel(model?: ModelConfig) {
+  return modelApiFamily(model) === "omni_fast_v2v" || /omni[-_]?fast[-_]?v2v/.test(modelIdentity(model));
+}
+
+function supportsVideoExtension(model?: ModelConfig) {
+  const identity = modelIdentity(model);
+  if (isOmniFastV2vModel(model)) return true;
+  if (/seedance[-_ .]?2(?:[-_ .]?0)?|doubao[-_]?seedance[-_]?2[-_]?0/.test(identity)) return true;
+  if (/grok/.test(identity)) return true;
+  if (isVeoModel(model) && /veo[-_ .]?3(?:[-_ .]?1)?|veo_3(?:_1)?/.test(identity) && !/lite|omni[-_]?flash|omni[-_]?fast/.test(identity)) return true;
+  return false;
+}
+
+function supportsVideoEdit(model?: ModelConfig) {
+  const identity = modelIdentity(model);
+  if (isOmniFastV2vModel(model)) return true;
+  if (/seedance[-_ .]?2(?:[-_ .]?0)?|doubao[-_]?seedance[-_]?2[-_]?0/.test(identity)) return true;
+  if (/grok/.test(identity)) return true;
+  return modelInputModes(model).includes("video-to-video") && !isVeoModel(model);
+}
+
 function supportsUniversalReference(model?: ModelConfig) {
   return (isSeedanceModel(model) && !isSeedance15Model(model)) || isKlingOmniModel(model);
 }
@@ -140,7 +165,8 @@ function modelInputModes(model: ModelConfig | undefined) {
 }
 
 function modelSupportsVideoCategory(model: ModelConfig, category: OfficialVideoCategory) {
-  if (category === "video_extension") return modelInputModes(model).includes("video-to-video");
+  if (category === "video_extension") return supportsVideoExtension(model);
+  if (category === "video_edit") return supportsVideoEdit(model);
   return genericCategoryInputModes[category].some((mode) => modelInputModes(model).includes(mode));
 }
 
@@ -569,7 +595,20 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
     const currentMode = props.data.videoMode ?? legacyInputModeToOfficialMode(props.data.inputMode);
     const currentModeAvailable = availableVideoModes.includes(currentMode);
     let nextMode: OfficialVideoMode | undefined;
-    if (resolvedInputs.hasImageInput && (currentMode === "text_to_video" || !currentModeAvailable)) {
+    if (resolvedInputs.hasVideoInput && (currentMode === "text_to_video" || currentMode === "image_to_video_first_frame" || currentMode === "reference_images_to_video" || !currentModeAvailable)) {
+      nextMode = availableVideoModes.includes("video_extension")
+        ? "video_extension"
+        : availableVideoModes.includes("video_continuation")
+          ? "video_continuation"
+          : availableVideoModes.includes("video_edit")
+            ? "video_edit"
+            : availableVideoModes.includes("video_to_video")
+              ? "video_to_video"
+              : availableVideoModes.includes("reference_video_to_video")
+                ? "reference_video_to_video"
+                : undefined;
+    }
+    if (!nextMode && resolvedInputs.hasImageInput && (currentMode === "text_to_video" || !currentModeAvailable)) {
       nextMode = availableVideoModes.includes("reference_images_to_video")
         ? "reference_images_to_video"
         : availableVideoModes.includes("image_to_video_first_frame")
@@ -586,7 +625,7 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
       errorMessage: undefined,
       debugMessage: undefined
     });
-  }, [availableVideoModes, props.data.inputMode, props.data.videoMode, props.id, resolvedInputs.hasImageInput, selectedModel, update]);
+  }, [availableVideoModes, props.data.inputMode, props.data.videoMode, props.id, resolvedInputs.hasImageInput, resolvedInputs.hasVideoInput, selectedModel, update]);
   const selectedAspectRatio = parameterValue(props.data.aspectRatio, availableRatios);
   const selectedResolution = parameterValue(props.data.resolution, availableResolutions);
   const selectedDuration = parameterValue(props.data.duration, availableDurations);
@@ -821,8 +860,8 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
       ];
     }
     if (mode === "image_to_video_first_frame") return [{ icon: ImageIcon, label: "首帧图", connected: resolvedInputs.hasImageInput }];
-    if (mode === "video_continuation") return [{ icon: BoxSelect, label: "续写视频", connected: resolvedInputs.hasVideoInput }];
-    if (mode === "video_edit" || mode === "video_to_video") return [{ icon: BoxSelect, label: "视频输入", connected: resolvedInputs.hasVideoInput }];
+    if (mode === "video_continuation" || mode === "video_extension") return [{ icon: BoxSelect, label: "续写视频", connected: resolvedInputs.hasVideoInput }];
+    if (mode === "reference_video_to_video" || mode === "video_edit" || mode === "video_to_video") return [{ icon: BoxSelect, label: "视频输入", connected: resolvedInputs.hasVideoInput }];
     if (mode === "audio_driven_video") return [
       { icon: ImageIcon, label: "首帧图", connected: resolvedInputs.hasImageInput },
       { icon: BoxSelect, label: "驱动音频", connected: resolvedInputs.audioInputs.length > 0 }
