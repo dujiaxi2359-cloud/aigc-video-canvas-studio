@@ -131,14 +131,25 @@ function isUpstreamQuotaError(text: string) {
 }
 
 function isUpstreamChannelUnavailable(text: string) {
-  return /无可用渠道|可用渠道不存在|所有分组.*模型|当前分组.*模型|no available channel|channel.*unavailable|model.*not available.*group/i.test(text);
+  return /无可用渠道|可用渠道不存在|所有分组.*模型|当前分组.*模型|分组.*模型.*(?:调用权限|权限)|distributor|no available channel|channel.*unavailable|model.*not available.*group/i.test(text);
 }
 
 function upstreamChannelMessage(text: string) {
-  const firstLine = text.split("\n")[0]?.trim() ?? "";
-  if (/^中转当前分组没有该模型的可用渠道/.test(firstLine)) return firstLine;
-  const detail = text.replace(/^.*?(?:生成失败|调用失败)[：:]\s*/s, "").split("\n")[0]?.trim();
-  return `中转当前分组没有该模型的可用渠道${detail ? `：${detail}` : "，请在中转后台切换分组、开通模型或联系中转管理员。"}`;
+  const modelName = text.match(/模型\s*[「"']?([A-Za-z0-9._-]+)[」"']?/i)?.[1]
+    ?? text.match(/model\s*[:"']+\s*([A-Za-z0-9._-]+)/i)?.[1];
+  const modelPart = modelName ? `「${modelName}」` : "当前模型";
+  return `通道权限问题：当前中转账号/分组没有${modelPart}的可用渠道。请在设置中心切换到已开通的线路，或让中转后台开通该模型；这不是提示词、素材或额度问题。`;
+}
+
+function isReferenceBlockedByPolicy(text: string) {
+  return /Reference upload failed|image reference\s*\d+\s*blocked|previously flagged|content policy|policy violation|素材.*(?:审核|拦截|违规)|参考图.*(?:审核|拦截|违规)/i.test(text);
+}
+
+function referenceBlockedMessage(text: string) {
+  const referenceIndex = text.match(/image reference\s*(\d+)\s*blocked/i)?.[1]
+    ?? text.match(/参考图\s*(\d+)/i)?.[1];
+  const target = referenceIndex ? `第 ${referenceIndex} 张参考图` : "参考图素材";
+  return `素材审核拦截：${target}被上游内容策略拦截或曾被标记。请删除/替换这张素材后重试；这不是额度问题，也不是接口路径问题。`;
 }
 
 function isUpstreamSocketClosed(error: unknown) {
@@ -151,6 +162,14 @@ function providerErrorMeta(providerId: string | undefined, error: unknown) {
   console.error("[provider adapter error]", providerId, error);
   if (isProviderError(error)) {
     const text = `${error.message}\n${error.debugMessage ?? ""}\n${safeStringify(error.details)}`;
+    if (isReferenceBlockedByPolicy(text)) {
+      return {
+        errorCode: "UPSTREAM_REFERENCE_BLOCKED",
+        errorMessage: referenceBlockedMessage(text),
+        debugMessage: text,
+        payloadSummary: error.details
+      };
+    }
     if (isUpstreamChannelUnavailable(text)) {
       return {
         errorCode: "UPSTREAM_CHANNEL_UNAVAILABLE",
@@ -175,6 +194,13 @@ function providerErrorMeta(providerId: string | undefined, error: unknown) {
     };
   }
   const message = error instanceof Error ? error.message : "生成失败";
+  if (isReferenceBlockedByPolicy(message)) {
+    return {
+      errorCode: "UPSTREAM_REFERENCE_BLOCKED",
+      errorMessage: referenceBlockedMessage(message),
+      debugMessage: message
+    };
+  }
   if (isUpstreamChannelUnavailable(message)) {
     return {
       errorCode: "UPSTREAM_CHANNEL_UNAVAILABLE",

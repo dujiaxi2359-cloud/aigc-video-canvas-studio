@@ -92,6 +92,14 @@ type AdminFailureLog = {
 function displayFailureMessage(message?: string) {
   if (!message) return "未知失败原因";
   if (/token quota|quota is not enough|remain quota|need quota|RESOURCE_EXHAUSTED|USER_QUOTA_REACHED|credit|balance|insufficient|余额不足|额度不足|额度耗尽/i.test(message)) return "额度不足";
+  if (/Reference upload failed|image reference\s*\d+\s*blocked|previously flagged|content policy|policy violation|素材审核拦截|参考图.*(?:审核|拦截|违规)/i.test(message)) {
+    const referenceIndex = message.match(/image reference\s*(\d+)\s*blocked/i)?.[1] ?? message.match(/第\s*(\d+)\s*张参考图/)?.[1];
+    return `素材审核拦截：${referenceIndex ? `第 ${referenceIndex} 张参考图` : "参考图素材"}被上游内容策略拦截，请删除或替换后重试。`;
+  }
+  if (/无可用渠道|可用渠道不存在|所有分组.*模型|当前分组.*模型|分组.*模型.*(?:调用权限|权限)|distributor|no available channel|channel.*unavailable|通道权限问题/i.test(message)) {
+    const modelName = message.match(/模型\s*[「"']?([A-Za-z0-9._-]+)[」"']?/i)?.[1];
+    return `通道权限问题：当前中转账号/分组没有${modelName ? `「${modelName}」` : "该模型"}可用渠道，请切换线路或开通模型。`;
+  }
   return message;
 }
 
