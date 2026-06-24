@@ -54,11 +54,9 @@ function normalizeDroppedImage(file: File) {
   return new File([file], file.name, { type: mimeType, lastModified: file.lastModified });
 }
 
-function ZoomControls({ showGrid, showMiniMap, snapToGrid, onToggleGrid, onToggleMiniMap, onToggleSnap, onOrganize }: {
-  showGrid: boolean;
+function ZoomControls({ showMiniMap, snapToGrid, onToggleMiniMap, onToggleSnap, onOrganize }: {
   showMiniMap: boolean;
   snapToGrid: boolean;
-  onToggleGrid: () => void;
   onToggleMiniMap: () => void;
   onToggleSnap: () => void;
   onOrganize: () => void;
@@ -91,7 +89,6 @@ function ZoomControls({ showGrid, showMiniMap, snapToGrid, onToggleGrid, onToggl
     <Panel position="bottom-left" className="!bottom-1 !left-1 !m-0">
       <div className="canvas-view-controls">
         <button title="画布小地图" aria-label="画布小地图" className={showMiniMap ? "is-active" : ""} onClick={onToggleMiniMap}><Map size={16} /><span>小地图</span></button>
-        <button title={showGrid ? "隐藏点阵" : "显示点阵"} aria-label={showGrid ? "隐藏点阵" : "显示点阵"} className={showGrid ? "is-active" : ""} onClick={onToggleGrid}><Grid3X3 size={16} /><span>点阵</span></button>
         <button title="自动整理画布 ⌥F" aria-label="自动整理画布" onClick={onOrganize}><Scan size={16} /><span>整理</span></button>
         <button title="网格吸附" aria-label="网格吸附" className={snapToGrid ? "is-active" : ""} onClick={onToggleSnap}><Magnet size={16} /><span>吸附</span></button>
         <div className="canvas-view-zoom-control" title="缩放画布">
@@ -578,10 +575,8 @@ export function WorkflowCanvas({ showGrid = true, onToggleGrid = () => undefined
         defaultEdgeOptions={defaultEdgeOptions}
       >
         <ZoomControls
-          showGrid={showGrid}
           showMiniMap={showMiniMap}
           snapToGrid={snapToGrid}
-          onToggleGrid={onToggleGrid}
           onToggleMiniMap={() => setShowMiniMap((value) => !value)}
           onToggleSnap={() => setSnapToGrid((value) => !value)}
           onOrganize={organizeAndFit}
