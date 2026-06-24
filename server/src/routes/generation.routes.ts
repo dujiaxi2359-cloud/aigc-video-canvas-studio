@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { getGenerationTask } from "../services/generationTask.service.js";
+import { getGenerationTask, getLatestGenerationTaskForNode } from "../services/generationTask.service.js";
 import { generateImage, generateText, generateVideo } from "../services/model.service.js";
 import { isProviderError } from "../utils/providerErrors.js";
 import { assertCreditsAvailable, assertWorkspaceFeature, consumeCredits } from "../services/billing.service.js";
@@ -267,6 +267,21 @@ generationRouter.post("/text", async (req, res) => {
     if (error instanceof Error && error.message === "INSUFFICIENT_CREDITS") return res.status(402).json({ status: "error", errorCode: "INSUFFICIENT_CREDITS", errorMessage: "当前工作空间额度不足。" });
     res.json(generationError(error));
   }
+});
+
+generationRouter.get("/tasks/latest", async (req, res) => {
+  const nodeId = typeof req.query.nodeId === "string" ? req.query.nodeId.trim() : "";
+  const since = typeof req.query.since === "string" ? Number(req.query.since) : undefined;
+  if (!nodeId) {
+    res.status(400).json({ status: "error", errorMessage: "缺少节点 ID。" });
+    return;
+  }
+  const task = await getLatestGenerationTaskForNode(nodeId, since);
+  if (!task) {
+    res.status(404).json({ status: "error", errorMessage: "未找到该节点对应的上游任务。" });
+    return;
+  }
+  res.json(task);
 });
 
 generationRouter.get("/tasks/:id", async (req, res) => {

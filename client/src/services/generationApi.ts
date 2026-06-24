@@ -15,5 +15,10 @@ export const generationApi = {
     api.post<{ status: "success" | "processing" | "error"; outputAssetId?: string; outputUrl?: string; payloadSummary?: Record<string, unknown>; errorCode?: string; errorMessage?: string; debugMessage?: string }>(
       "/api/generate/image",
       data
+    ),
+  latestTask: (nodeId: string, since?: number) =>
+    api.get<{ id: string; status: string; progress?: number; result?: unknown; errorMessage?: string; createdAt?: number; updatedAt?: number }>(
+      "/api/generate/tasks/latest",
+      { params: { nodeId, since: since ? String(since) : undefined } }
     )
 };

@@ -12,11 +12,7 @@ interface GenerationTaskRow {
   updated_at: number;
 }
 
-export async function getGenerationTask(id: string) {
-  const db = await getDb();
-  const row = await db.get<GenerationTaskRow>("SELECT * FROM generation_tasks WHERE id = ? AND workspace_id = ?", id, requireRequestContext().workspace.id);
-  if (!row) return undefined;
-
+function toGenerationTask(row: GenerationTaskRow) {
   return {
     id: row.id,
     status: row.status,
@@ -26,6 +22,32 @@ export async function getGenerationTask(id: string) {
     createdAt: row.created_at,
     updatedAt: row.updated_at
   };
+}
+
+export async function getGenerationTask(id: string) {
+  const db = await getDb();
+  const row = await db.get<GenerationTaskRow>("SELECT * FROM generation_tasks WHERE id = ? AND workspace_id = ?", id, requireRequestContext().workspace.id);
+  if (!row) return undefined;
+
+  return toGenerationTask(row);
+}
+
+export async function getLatestGenerationTaskForNode(nodeId: string, since?: number) {
+  const db = await getDb();
+  const { workspace } = requireRequestContext();
+  const createdAfter = Number.isFinite(Number(since)) ? Number(since) : now() - 60 * 60 * 1000;
+  const row = await db.get<GenerationTaskRow>(
+    `SELECT * FROM generation_tasks
+     WHERE workspace_id = ?
+       AND created_at >= ?
+       AND result_json LIKE ?
+     ORDER BY updated_at DESC
+     LIMIT 1`,
+    workspace.id,
+    createdAfter,
+    `%${nodeId.replace(/[%_]/g, "")}%`
+  );
+  return row ? toGenerationTask(row) : undefined;
 }
 
 export async function saveGenerationTask(input: {

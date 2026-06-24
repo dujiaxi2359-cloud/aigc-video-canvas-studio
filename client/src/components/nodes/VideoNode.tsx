@@ -69,6 +69,31 @@ function modelIdentity(model?: ModelConfig) {
   return `${model.providerId} ${model.provider} ${model.modelName} ${model.displayName}`.toLowerCase();
 }
 
+function taskResultVideoUrl(value: unknown): string | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const record = value as Record<string, unknown>;
+  const candidates = [
+    record.outputUrl,
+    record.output_url,
+    record.videoUrl,
+    record.video_url,
+    record.url,
+    (record.metadata as Record<string, unknown> | undefined)?.url,
+    (record.video as Record<string, unknown> | undefined)?.url,
+    (record.output as Record<string, unknown> | undefined)?.url,
+    (record.data as Record<string, unknown> | undefined)?.url,
+    (record.data as Record<string, unknown> | undefined)?.video_url
+  ];
+  for (const candidate of candidates) {
+    if (typeof candidate === "string" && /^https?:\/\//i.test(candidate)) return candidate;
+  }
+  for (const nested of [record.result, record.response, record.data, record.output]) {
+    const found = taskResultVideoUrl(nested);
+    if (found) return found;
+  }
+  return undefined;
+}
+
 function isSeedanceModel(model?: ModelConfig) {
   return /seedance|doubao/.test(modelIdentity(model));
 }
@@ -791,6 +816,56 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
           setLocalError(message);
           recoveringRef.current = false;
           return;
+        }
+        const latestTask = await generationApi.latestTask(props.id, startedAt - 5000).catch(() => undefined);
+        if (latestTask && !currentData.outputUrl) {
+          const taskStatus = String(latestTask.status || "").toLowerCase();
+          const taskUrl = taskResultVideoUrl(latestTask.result);
+          if (["success", "completed", "succeeded", "done"].includes(taskStatus) && taskUrl) {
+            update(props.id, {
+              status: "success",
+              outputUrl: taskUrl,
+              outputAssetId: currentData.outputAssetId,
+              errorCode: undefined,
+              errorMessage: undefined,
+              debugMessage: undefined,
+              generationStartedAt: undefined,
+              clientRequestId: undefined
+            });
+            setLocalError("");
+            recoveringRef.current = false;
+            return;
+          }
+          if (["failed", "failure", "error", "timeout", "cancelled", "canceled"].includes(taskStatus)) {
+            const message = latestTask.errorMessage || "上游视频任务失败。";
+            update(props.id, {
+              status: "error",
+              outputAssetId: currentData.outputAssetId,
+              outputUrl: currentData.outputUrl,
+              errorMessage: message,
+              debugMessage: `上游任务 ${latestTask.id} 状态：${latestTask.status}`,
+              generationStartedAt: undefined,
+              clientRequestId: undefined
+            });
+            setLocalError(message);
+            recoveringRef.current = false;
+            return;
+          }
+          if (Date.now() - startedAt > videoResultTimeoutMs) {
+            update(props.id, {
+              status: "error",
+              outputAssetId: currentData.outputAssetId,
+              outputUrl: currentData.outputUrl,
+              errorCode: "UPSTREAM_RESULT_NOT_RETURNED",
+              errorMessage: videoResultTimeoutMessage,
+              debugMessage: `上游任务 ${latestTask.id} 最后状态：${latestTask.status}，进度：${latestTask.progress ?? 0}。`,
+              generationStartedAt: undefined,
+              clientRequestId: undefined
+            });
+            setLocalError(videoResultTimeoutMessage);
+            recoveringRef.current = false;
+            return;
+          }
         }
         if (Date.now() - startedAt > videoResultTimeoutMs && !currentData.outputUrl) {
           update(props.id, {
