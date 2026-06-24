@@ -596,7 +596,8 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
   }, [selectedVideoMode, supportedVideoCategories, videoCategory]);
   const outputUrl = absoluteUploadUrl(props.data.outputUrl);
   const outputIsVideo = Boolean(props.data.outputUrl);
-  const frameStatus = props.data.status === "success" && !outputIsVideo ? "idle" : props.data.status;
+  const effectiveStatus = outputIsVideo ? "success" : props.data.status;
+  const frameStatus = effectiveStatus === "success" && !outputIsVideo ? "idle" : effectiveStatus;
   const displayRatio = displayAspectRatio(props.data.aspectRatio, selectedAspectRatio);
   const selectedChannelHost = channelHost(selectedModel?.apiBaseUrl);
   const actualOutputInfo = outputInfo(props.data.payloadSummary, props.data.resolution);
@@ -637,6 +638,21 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
       const currentNode = useCanvasStore.getState().nodes.find((node) => node.id === props.id);
       const currentData = currentNode?.data as VideoNodeData | undefined;
       if (currentData?.status !== "generating" || currentData.generationStartedAt !== startedAt) break;
+      if (currentData.outputUrl) {
+        update(props.id, {
+          status: "success",
+          outputAssetId: currentData.outputAssetId,
+          outputUrl: currentData.outputUrl,
+          errorCode: undefined,
+          errorMessage: undefined,
+          debugMessage: undefined,
+          generationStartedAt: undefined,
+          clientRequestId: undefined
+        });
+        setLocalError("");
+        recoveringRef.current = false;
+        return;
+      }
       try {
         const histories = await historyApi.list();
         const candidates = histories.filter((item) =>
@@ -648,7 +664,7 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
           update(props.id, {
             status: "success",
             outputUrl: latest.outputUrl,
-            outputAssetId: currentData.outputAssetId,
+            outputAssetId: latest.outputAssetId ?? currentData.outputAssetId,
             aspectRatio: selectedAspectRatio ?? props.data.aspectRatio,
             resolution: selectedResolution ?? props.data.resolution,
             duration: selectedDuration ?? props.data.duration,
@@ -671,7 +687,7 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
           });
           continue;
         }
-        if (latest?.status === "error") {
+        if (latest?.status === "error" && !currentData.outputUrl) {
           const message = latest.errorMessage || "上游任务生成失败。";
           update(props.id, {
             status: "error",
@@ -717,6 +733,19 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
     if (props.data.status !== "generating" || !props.data.generationStartedAt) return;
     void recoverVideoFromHistory(props.data.generationStartedAt);
   }, [props.data.generationStartedAt, props.data.status]);
+
+  useEffect(() => {
+    if (!props.data.outputUrl || props.data.status === "success") return;
+    update(props.id, {
+      status: "success",
+      errorCode: undefined,
+      errorMessage: undefined,
+      debugMessage: undefined,
+      generationStartedAt: undefined,
+      clientRequestId: undefined
+    });
+    setLocalError("");
+  }, [props.data.outputUrl, props.data.status, props.id, update]);
 
   function retryWithPrompt(prompt: string) {
     setLocalPrompt(prompt);
@@ -1006,7 +1035,7 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
       className="creation-media-preview"
       showInlineActions={false}
     >
-      {props.data.status === "generating" ? <div className="creation-preview-empty"><Loader2 className="animate-spin" size={25} /><span>正在生成视频</span></div> : props.data.status === "error" ? <div className="creation-preview-empty is-error"><AlertCircle size={25} /><span>生成失败</span></div> : <div className="creation-preview-empty"><Play size={24} fill="currentColor" /><span>视频预览</span></div>}
+      {effectiveStatus === "generating" ? <div className="creation-preview-empty"><Loader2 className="animate-spin" size={25} /><span>正在生成视频</span></div> : effectiveStatus === "error" ? <div className="creation-preview-empty is-error"><AlertCircle size={25} /><span>生成失败</span></div> : <div className="creation-preview-empty"><Play size={24} fill="currentColor" /><span>视频预览</span></div>}
     </MediaPreview>
   );
 
@@ -1089,7 +1118,7 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
         <div className="creation-dock-actions">
           <button type="button" title="语音输入" className={listening ? "is-active" : ""} onClick={() => setListening((value) => !value)}><Mic size={14} /></button>
           <div className="creation-video-generate-cluster">
-            <button type="button" title={props.data.status === "idle" ? "生成" : generateButtonLabel(props.data.status)} aria-label={props.data.status === "idle" ? "生成" : generateButtonLabel(props.data.status)} className="creation-generate-button creation-video-generate-button" disabled={!selectedModel || availableVideoModes.length === 0 || props.data.status === "generating"} onClick={() => void generate()}><ArrowUp size={19} strokeWidth={2.3} /></button>
+            <button type="button" title={effectiveStatus === "idle" ? "生成" : generateButtonLabel(effectiveStatus)} aria-label={effectiveStatus === "idle" ? "生成" : generateButtonLabel(effectiveStatus)} className="creation-generate-button creation-video-generate-button" disabled={!selectedModel || availableVideoModes.length === 0 || effectiveStatus === "generating"} onClick={() => void generate()}><ArrowUp size={19} strokeWidth={2.3} /></button>
           </div>
         </div>
       </div>
