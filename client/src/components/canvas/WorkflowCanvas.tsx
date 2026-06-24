@@ -1,12 +1,13 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent as ReactDragEvent } from "react";
 import ReactFlow, { ConnectionLineType, MiniMap, Panel, useReactFlow, type ReactFlowInstance } from "reactflow";
-import { CircleHelp, Grid3X3, Magnet, Map, Scan } from "lucide-react";
+import { CircleHelp, Grid3X3, ImagePlus, Magnet, Map, Scan } from "lucide-react";
 import { ConnectionCreateMenu, type ConnectionCreateMenuState } from "./ConnectionCreateMenu";
 import { nodeTypes } from "./nodeTypes";
 import { StudioEdge } from "./StudioEdge";
 import { StudioConnectionLine } from "./StudioConnectionLine";
 import { useCanvasHotkeys } from "./useCanvasHotkeys";
 import { useCanvasStore } from "../../store/canvasStore";
+import { useAssetStore } from "../../store/assetStore";
 import type { WorkflowNodeType } from "../../types/node";
 import { DotGridBackground } from "./DotGridBackground";
 
@@ -26,6 +27,32 @@ type PendingConnection = {
 const ReactFlowWithExtras = ReactFlow as unknown as React.ComponentType<any>;
 const edgeTypes = { studioEdge: StudioEdge };
 const nodeDragHandleSelector = ".drag-handle, .node-drag-handle";
+const droppedImageMimeByExtension: Record<string, string> = {
+  avif: "image/avif",
+  bmp: "image/bmp",
+  gif: "image/gif",
+  heic: "image/heic",
+  heif: "image/heif",
+  jpeg: "image/jpeg",
+  jpg: "image/jpeg",
+  png: "image/png",
+  svg: "image/svg+xml",
+  tif: "image/tiff",
+  tiff: "image/tiff",
+  webp: "image/webp"
+};
+
+function hasSystemFiles(dataTransfer: DataTransfer) {
+  return Array.from(dataTransfer.types || []).includes("Files");
+}
+
+function normalizeDroppedImage(file: File) {
+  if (file.type.startsWith("image/")) return file;
+  const extension = file.name.split(".").pop()?.toLowerCase() || "";
+  const mimeType = droppedImageMimeByExtension[extension];
+  if (!mimeType) return null;
+  return new File([file], file.name, { type: mimeType, lastModified: file.lastModified });
+}
 
 function ZoomControls({ showGrid, showMiniMap, snapToGrid, onToggleGrid, onToggleMiniMap, onToggleSnap, onOrganize }: {
   showGrid: boolean;
@@ -114,7 +141,9 @@ function nearestTargetHandle(point: { x: number; y: number }, sourceNodeId: stri
 
 export function WorkflowCanvas({ showGrid = true, onToggleGrid = () => undefined }: { showGrid?: boolean; onToggleGrid?: () => void }) {
   const { nodes, edges, onNodesChange, onEdgesChange, connectNodes, addConnectedNode, addAssetNode, selectEdge, clearSelection, organizeCanvas } = useCanvasStore();
+  const uploadAsset = useAssetStore((state) => state.uploadAsset);
   const reactFlowWrapper = useRef<HTMLDivElement | null>(null);
+  const systemFileDragDepthRef = useRef(0);
   const connectingNodeRef = useRef<{ nodeId: string | null; handleId?: string | null }>({ nodeId: null, handleId: null });
   const didConnectRef = useRef(false);
   const ignoreNextPaneClickRef = useRef(false);
@@ -125,6 +154,8 @@ export function WorkflowCanvas({ showGrid = true, onToggleGrid = () => undefined
   const [showMiniMap, setShowMiniMap] = useState(false);
   const [snapToGrid, setSnapToGrid] = useState(false);
   const [isCanvasInteracting, setIsCanvasInteracting] = useState(false);
+  const [systemFileDragActive, setSystemFileDragActive] = useState(false);
+  const [dropImportProgress, setDropImportProgress] = useState<{ completed: number; total: number } | null>(null);
   const isCanvasInteractingRef = useRef(false);
   const interactionTimeoutRef = useRef<number | null>(null);
   const stableNodeTypes = useRef(nodeTypes).current;
@@ -173,6 +204,24 @@ export function WorkflowCanvas({ showGrid = true, onToggleGrid = () => undefined
     if (interactionTimeoutRef.current) window.clearTimeout(interactionTimeoutRef.current);
   }, []);
 
+  useEffect(() => {
+    function preventBrowserFileNavigation(event: DragEvent) {
+      if (event.dataTransfer && hasSystemFiles(event.dataTransfer)) event.preventDefault();
+    }
+    function resetSystemFileDrag(event: DragEvent) {
+      if (!event.dataTransfer || !hasSystemFiles(event.dataTransfer)) return;
+      event.preventDefault();
+      systemFileDragDepthRef.current = 0;
+      setSystemFileDragActive(false);
+    }
+    window.addEventListener("dragover", preventBrowserFileNavigation);
+    window.addEventListener("drop", resetSystemFileDrag);
+    return () => {
+      window.removeEventListener("dragover", preventBrowserFileNavigation);
+      window.removeEventListener("drop", resetSystemFileDrag);
+    };
+  }, []);
+
   const screenToFlow = useCallback(
     (position: { x: number; y: number }) => {
       const instance = reactFlow as unknown as {
@@ -188,6 +237,81 @@ export function WorkflowCanvas({ showGrid = true, onToggleGrid = () => undefined
     },
     [reactFlow]
   );
+
+  const importDroppedImages = useCallback(async (files: File[], position: { x: number; y: number }) => {
+    const images = files.map(normalizeDroppedImage).filter((file): file is File => Boolean(file));
+    const skippedCount = files.length - images.length;
+    if (!images.length) {
+      window.alert("请拖入图片文件。当前文件没有可导入的图片。");
+      return;
+    }
+
+    const failures: string[] = [];
+    setDropImportProgress({ completed: 0, total: images.length });
+    for (let index = 0; index < images.length; index += 1) {
+      const file = images[index];
+      try {
+        const asset = await uploadAsset(file, { name: file.name.replace(/\.[^.]+$/, "") || "图片素材" });
+        addAssetNode({
+          assetId: asset.id,
+          type: "image",
+          url: asset.url,
+          filePath: asset.localPath,
+          thumbnailUrl: asset.thumbnailUrl,
+          width: asset.width,
+          height: asset.height
+        }, { x: position.x + index * 36, y: position.y + index * 36 });
+      } catch {
+        failures.push(file.name);
+      } finally {
+        setDropImportProgress({ completed: index + 1, total: images.length });
+      }
+    }
+    setDropImportProgress(null);
+
+    if (failures.length || skippedCount) {
+      const messages = [];
+      if (failures.length) messages.push(`${failures.length} 张图片上传失败：${failures.join("、")}`);
+      if (skippedCount) messages.push(`${skippedCount} 个非图片文件已跳过。`);
+      window.alert(messages.join("\n"));
+    }
+  }, [addAssetNode, uploadAsset]);
+
+  const handleCanvasDragEnter = useCallback((event: ReactDragEvent<HTMLDivElement>) => {
+    if (!hasSystemFiles(event.dataTransfer)) return;
+    event.preventDefault();
+    systemFileDragDepthRef.current += 1;
+    setSystemFileDragActive(true);
+  }, []);
+
+  const handleCanvasDragLeave = useCallback((event: ReactDragEvent<HTMLDivElement>) => {
+    if (systemFileDragDepthRef.current === 0) return;
+    systemFileDragDepthRef.current = Math.max(0, systemFileDragDepthRef.current - 1);
+    if (systemFileDragDepthRef.current === 0) setSystemFileDragActive(false);
+  }, []);
+
+  const handleCanvasDrop = useCallback((event: ReactDragEvent<HTMLDivElement>) => {
+    const internalAsset = event.dataTransfer.getData("application/aigc-asset");
+    systemFileDragDepthRef.current = 0;
+    setSystemFileDragActive(false);
+
+    if (internalAsset) {
+      event.preventDefault();
+      try {
+        const asset = JSON.parse(internalAsset) as { assetId: string; type: string; url?: string; filePath?: string; thumbnailUrl?: string; width?: number; height?: number; duration?: number };
+        addAssetNode(asset, screenToFlow({ x: event.clientX, y: event.clientY }));
+      } catch {
+        // Ignore malformed internal drag payloads.
+      }
+      return;
+    }
+
+    if (!hasSystemFiles(event.dataTransfer)) return;
+    event.preventDefault();
+    const files = Array.from(event.dataTransfer.files || []);
+    const position = screenToFlow({ x: event.clientX, y: event.clientY });
+    void importDroppedImages(files, position);
+  }, [addAssetNode, importDroppedImages, screenToFlow]);
 
   const openAddNodeMenuAt = useCallback(
     (point: { x: number; y: number }) => {
@@ -342,21 +466,25 @@ export function WorkflowCanvas({ showGrid = true, onToggleGrid = () => undefined
         if (!canOpenPaneAddMenu(target)) return;
         openAddNodeMenuAt({ x: event.clientX, y: event.clientY });
       }}
+      onDragEnter={handleCanvasDragEnter}
+      onDragLeave={handleCanvasDragLeave}
       onDragOver={(event) => {
-        if (event.dataTransfer.types.includes("application/aigc-asset")) event.preventDefault();
-      }}
-      onDrop={(event) => {
-        const raw = event.dataTransfer.getData("application/aigc-asset");
-        if (!raw) return;
-        event.preventDefault();
-        try {
-          const asset = JSON.parse(raw) as { assetId: string; type: string; url?: string; filePath?: string; thumbnailUrl?: string; width?: number; height?: number; duration?: number };
-          addAssetNode(asset, screenToFlow({ x: event.clientX, y: event.clientY }));
-        } catch {
-          // Ignore malformed drag payloads from outside the app.
+        if (event.dataTransfer.types.includes("application/aigc-asset") || hasSystemFiles(event.dataTransfer)) {
+          event.preventDefault();
+          event.dataTransfer.dropEffect = "copy";
         }
       }}
+      onDrop={handleCanvasDrop}
     >
+      {(systemFileDragActive || dropImportProgress) && (
+        <div className={`canvas-file-drop-overlay ${dropImportProgress ? "is-importing" : ""}`} aria-live="polite">
+          <div className="canvas-file-drop-message">
+            <span className="canvas-file-drop-icon"><ImagePlus size={22} /></span>
+            <strong>{dropImportProgress ? `正在导入图片 ${dropImportProgress.completed}/${dropImportProgress.total}` : "松开以添加图片素材"}</strong>
+            <small>{dropImportProgress ? "上传完成后将自动创建图片素材节点" : "支持从 Finder 或外置文件夹拖入，可一次添加多张"}</small>
+          </div>
+        </div>
+      )}
       {showGrid && !isCanvasInteracting && <DotGridBackground />}
       <ReactFlowWithExtras
         className="studio-flow"
