@@ -9,6 +9,7 @@ const grokBase = "https://api.x.ai/v1";
 const seedanceBase = "https://ark.cn-beijing.volces.com/api/v3";
 const minimaxBase = "https://api.minimaxi.com/v1";
 const soraRelayBase = "https://llm.guohe-sh.com/api/openai/v1";
+const openAiCompatibleVideoBase = "https://duoyuanx.com";
 
 function model(input: Omit<ModelCatalogItem, "requiresApiKey">): ModelCatalogItem {
   return { ...input, requiresApiKey: true };
@@ -65,7 +66,8 @@ function video(
   name: string,
   displayName: string,
   modelType: "text-to-video" | "image-to-video" | "video-to-video",
-  capabilities: ModelCapabilities
+  capabilities: ModelCapabilities,
+  options?: { providerLabel?: string; defaultApiBaseUrl?: string }
 ) {
   const provider = {
     google: "谷歌 / Gemini",
@@ -81,12 +83,12 @@ function video(
   return model({
     id,
     providerId,
-    provider,
+    provider: options?.providerLabel ?? provider,
     category: "video",
     modelType,
     name,
     displayName,
-    defaultApiBaseUrl: base,
+    defaultApiBaseUrl: options?.defaultApiBaseUrl ?? base,
     requiresApiBaseUrl: false,
     capabilities
   });
@@ -272,6 +274,58 @@ const rawModelCatalog: ModelCatalogItem[] = [
     supportsVideoInput: true,
     supportsAudio: true
   }),
+  video("openai-compatible-omni-fast-v2v", "openai-video", "omni-fast-v2v", "omni-fast-v2v", "video-to-video", {
+    inputModes: ["video-to-video"],
+    duration: { type: "fixed", value: 10 },
+    supportedDurations: [10],
+    aspectRatios: ["16:9", "9:16"],
+    supportedAspectRatios: ["16:9", "9:16"],
+    resolutions: ["720p", "1080p", "4k"],
+    supportedResolutions: ["720p", "1080p", "4k"],
+    provider: "veo",
+    channel: "proxy",
+    apiFamily: "omni_fast_v2v",
+    createEndpoint: "/v1/videos",
+    endpoint: "/v1/videos",
+    pollEndpoint: "/v1/videos/{taskId}",
+    authType: "bearer",
+    requestFormat: "json",
+    taskMode: "async",
+    supportedInputs: ["video"],
+    imageTransport: "unsupported",
+    videoTransport: "url_or_base64_json",
+    videoField: "video",
+    supportsImageInput: false,
+    supportsReferenceImage: false,
+    supportsFirstLastFrame: false,
+    supportsMultiImageInput: false,
+    supportsVideoInput: true,
+    maxReferenceImages: 0,
+    maxReferenceVideos: 1,
+    modelCapability: {
+      model: "omni-fast-v2v",
+      supportsTextToVideo: false,
+      supportsImageToVideo: false,
+      supportsReferenceToVideo: false,
+      supportsFirstLastFrame: false,
+      supportsVideoToVideo: true
+    },
+    channelCapability: {
+      provider: "veo",
+      channel: "proxy",
+      apiFamily: "omni_fast_v2v",
+      createEndpoint: "/v1/videos",
+      endpoint: "/v1/videos",
+      pollEndpoint: "/v1/videos/{taskId}",
+      authType: "bearer",
+      requestFormat: "json",
+      taskMode: "async",
+      supportedInputs: ["video"],
+      imageTransport: "unsupported",
+      videoTransport: "url_or_base64_json",
+      videoField: "video"
+    }
+  }, { providerLabel: "OpenAI 兼容视频中转", defaultApiBaseUrl: openAiCompatibleVideoBase }),
   video("openai-sora-2", "openai-video", "sora-2", "Sora 2", "text-to-video", {
     inputModes: ["text-to-video"],
     duration: { type: "enum", values: [4, 8, 12] },

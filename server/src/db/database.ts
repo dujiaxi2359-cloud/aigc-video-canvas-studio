@@ -5,6 +5,7 @@ import { inferImageModelType, inferImageProvider, normalizeImageCapabilities } f
 import { normalizeVideoCapabilities } from "../services/videoCapabilityNormalization.js";
 import type { ModelCapabilities } from "../types/model.js";
 import { canonicalDuoyuanGrokModelName } from "../utils/grokRelayModels.js";
+import { createId } from "../utils/id.js";
 
 type SqliteValue = string | number | bigint | null | Buffer;
 
@@ -300,6 +301,120 @@ async function migrateAi666VideoProtocols(database: AppDatabase) {
   }
 }
 
+async function ensureOmniFastV2vConfigs(database: AppDatabase) {
+  const rows = await database.all<Array<{
+    id: string;
+    workspace_id: string | null;
+    created_by_user_id: string | null;
+    provider_id: string | null;
+    provider: string;
+    category: string | null;
+    api_base_url: string | null;
+    requires_api_base_url: number | null;
+    encrypted_api_key: string | null;
+    model_name: string;
+    capabilities_json: string;
+    created_at: number | null;
+  }>>(
+    `SELECT id, workspace_id, created_by_user_id, provider_id, provider, category, api_base_url, requires_api_base_url, encrypted_api_key, model_name, capabilities_json, created_at
+     FROM model_configs
+     WHERE enabled = 1
+       AND lower(model_name) LIKE '%omni%fast%'
+       AND lower(model_name) NOT LIKE '%v2v%'`
+  );
+  const now = Date.now();
+  for (const row of rows) {
+    const name = row.model_name.toLowerCase();
+    if (/omni[-_]?flash[-_]?10s/.test(name)) continue;
+    if (!/omni[-_]?fast/.test(name)) continue;
+
+    const sibling = await database.get<{ id: string; capabilities_json: string }>(
+      `SELECT id, capabilities_json
+       FROM model_configs
+       WHERE workspace_id IS ?
+         AND lower(COALESCE(api_base_url, '')) = lower(?)
+         AND lower(model_name) = 'omni-fast-v2v'
+       ORDER BY updated_at DESC
+       LIMIT 1`,
+      row.workspace_id,
+      row.api_base_url ?? ""
+    );
+    const baseCapabilities = JSON.parse(row.capabilities_json) as ModelCapabilities;
+    const capabilities = normalizeVideoCapabilities({
+      ...baseCapabilities,
+      provider: "veo",
+      channel: "proxy",
+      apiFamily: "omni_fast_v2v",
+      createEndpoint: "/v1/videos",
+      endpoint: "/v1/videos",
+      pollEndpoint: "/v1/videos/{taskId}",
+      authType: "bearer",
+      requestFormat: "json",
+      taskMode: "async",
+      inputModes: ["video-to-video"],
+      supportedInputs: ["video"],
+      imageTransport: "unsupported",
+      videoTransport: "url_or_base64_json",
+      videoField: "video",
+      modelCapability: {
+        ...(baseCapabilities.modelCapability ?? {}),
+        model: "omni-fast-v2v",
+        supportsTextToVideo: false,
+        supportsImageToVideo: false,
+        supportsReferenceToVideo: false,
+        supportsFirstLastFrame: false,
+        supportsVideoToVideo: true
+      },
+      channelCapability: {
+        ...(baseCapabilities.channelCapability ?? {}),
+        provider: "veo",
+        channel: "proxy",
+        apiFamily: "omni_fast_v2v",
+        createEndpoint: "/v1/videos",
+        endpoint: "/v1/videos",
+        pollEndpoint: "/v1/videos/{taskId}",
+        authType: "bearer",
+        requestFormat: "json",
+        taskMode: "async",
+        supportedInputs: ["video"],
+        imageTransport: "unsupported",
+        videoTransport: "url_or_base64_json",
+        videoField: "video"
+      }
+    }, row.provider_id ?? undefined, "omni-fast-v2v");
+
+    if (sibling) {
+      await database.run(
+        `UPDATE model_configs
+         SET provider = ?, category = 'video', display_name = 'omni-fast-v2v', model_name = 'omni-fast-v2v', model_type = 'video-to-video', capabilities_json = ?, updated_at = ?
+         WHERE id = ?`,
+        row.provider || "OpenAI 兼容视频中转",
+        JSON.stringify(capabilities),
+        now,
+        sibling.id
+      );
+      continue;
+    }
+
+    await database.run(
+      `INSERT INTO model_configs
+       (id, workspace_id, created_by_user_id, provider_id, provider, category, display_name, api_base_url, requires_api_base_url, encrypted_api_key, model_name, model_type, enabled, capabilities_json, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, 'video', 'omni-fast-v2v', ?, ?, ?, 'omni-fast-v2v', 'video-to-video', 1, ?, ?, ?)`,
+      createId("model"),
+      row.workspace_id,
+      row.created_by_user_id,
+      row.provider_id,
+      row.provider || "OpenAI 兼容视频中转",
+      row.api_base_url ?? "",
+      row.requires_api_base_url ?? 0,
+      row.encrypted_api_key,
+      JSON.stringify(capabilities),
+      row.created_at ?? now,
+      now
+    );
+  }
+}
+
 async function migrateVolcengineImageProtocols(database: AppDatabase) {
   const rows = await database.all<Array<{ id: string; provider: string; provider_id: string | null; category: string | null; model_type: string; model_name: string; capabilities_json: string }>>(
     "SELECT id, provider, provider_id, category, model_type, model_name, capabilities_json FROM model_configs WHERE lower(model_name) LIKE '%seedream%' OR lower(model_name) LIKE '%doubao-seedream%'"
@@ -424,6 +539,7 @@ export async function getDb() {
     await db.exec("ALTER TABLE model_configs ADD COLUMN created_by_user_id TEXT");
   }
   await migrateAi666VideoProtocols(db);
+  await ensureOmniFastV2vConfigs(db);
   await migrateVolcengineImageProtocols(db);
   await migrateImageModelCapabilities(db);
   const database = db;

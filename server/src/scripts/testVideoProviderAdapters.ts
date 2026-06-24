@@ -1470,6 +1470,37 @@ assert(modelCatalog.some((item) => item.name === "grok-video-3-max"), "Relay Gro
 assert(modelCatalog.some((item) => item.name === "grok-1.5-video-6s"), "Relay Grok 1.5 Video 6s model should be available");
 assert(modelCatalog.some((item) => item.name === "grok-1.5-video-10s"), "Relay Grok 1.5 Video 10s model should be available");
 assert(modelCatalog.some((item) => item.name === "grok-1.5-video-15s"), "Relay Grok 1.5 Video 15s model should be available");
+assert(modelCatalog.some((item) => item.name === "omni-fast-v2v" && item.modelType === "video-to-video"), "omni-fast-v2v relay model should be available as a video-to-video catalog entry");
+
+const omniFastV2vConfig = resolveVideoRequestConfig({
+  providerId: "openai-video",
+  modelName: "omni-fast-v2v",
+  apiBaseUrl: "https://duoyuanx.com",
+  apiKey: "sk-test-key",
+  prompt: "test",
+  projectId: "project",
+  nodeId: "node",
+  modelConfigId: "model",
+  inputMode: "video-to-video",
+  videoAssetIds: ["asset"],
+  duration: 10,
+  aspectRatio: "9:16",
+  resolution: "720p",
+  generateCount: 1
+}, {
+  inputModes: ["video-to-video"],
+  supportedInputs: ["video"],
+  apiFamily: "omni_fast_v2v",
+  imageTransport: "unsupported",
+  videoTransport: "url_or_base64_json",
+  duration: { type: "fixed", value: 10 },
+  aspectRatios: ["16:9", "9:16"],
+  resolutions: ["720p", "1080p", "4k"]
+});
+assert(omniFastV2vConfig.apiFamily === "omni_fast_v2v", "omni-fast-v2v should keep the documented v2v protocol family");
+assert(omniFastV2vConfig.createEndpoint === "/v1/videos", "omni-fast-v2v should submit through POST /v1/videos");
+assert(omniFastV2vConfig.supportedDurations.join(",") === "10", "omni-fast-v2v should be fixed at 10s");
+assert(omniFastV2vConfig.supportedInputs.join(",") === "video", "omni-fast-v2v should only expose video input");
 
 const grokReference = getVideoModelCapability("grok", "grok-imagine-video", "grok-imagine-video", "reference_images_to_video");
 assert(grokReference?.supportedResolutions.join(",") === "480p,720p", "Grok should expose official 480p and 720p resolutions");
