@@ -949,9 +949,11 @@ select {
 /* Performance-only containment: preserves the existing intro and home visuals. */
 .home-launch-intro,
 .home-page-ferrofluid,
+.home-page-plasma,
 .home-unicorn-hero { contain: layout paint style; }
 .home-launch-motion-stage,
-.ferrofluid-canvas { transform: translateZ(0); backface-visibility: hidden; }
+.ferrofluid-canvas,
+.home-plasma-canvas { transform: translateZ(0); backface-visibility: hidden; }
 
 @media (max-width: 1050px) {
   .video-dashboard-hero { grid-template-columns: 1fr; }
@@ -1645,6 +1647,8 @@ select {
 /* Single-canvas home surface: the intro is unmounted before this layer starts. */
 .home-page-ferrofluid,
 .ferrofluid-background,
+.home-plasma-background,
+.home-plasma-canvas,
 .ferrofluid-canvas {
   position: absolute;
   inset: 0;
@@ -1675,6 +1679,32 @@ select {
 .ferrofluid-canvas {
   object-fit: cover;
   transform: translateZ(0);
+}
+
+.home-page-plasma {
+  position: fixed;
+  z-index: 0;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 48% 38%, rgba(246, 220, 151, 0.10), transparent 38%),
+    #050506;
+  pointer-events: none;
+}
+
+.home-plasma-background {
+  pointer-events: none;
+}
+
+.home-plasma-background::after {
+  position: absolute;
+  inset: 0;
+  background: transparent;
+  content: "";
+  pointer-events: none;
+}
+
+.home-plasma-canvas {
+  opacity: 0.98;
 }
 
 .home-unicorn-hero-stage {
@@ -6825,6 +6855,10 @@ video:-webkit-full-screen,
   opacity: 0.82;
 }
 
+.is-performance-safe .home-page-plasma {
+  opacity: 0.92;
+}
+
 .is-performance-safe .ferrofluid-canvas {
   image-rendering: auto;
 }
@@ -7598,6 +7632,10 @@ video:-webkit-full-screen,
 @media (prefers-reduced-motion: reduce) {
   .home-page-ferrofluid {
     opacity: 0.7;
+  }
+
+  .home-page-plasma {
+    opacity: 0.86;
   }
 
   .home-launch-intro *,
@@ -8781,6 +8819,19 @@ video:-webkit-full-screen,
   box-shadow: 0 12px 38px rgba(82, 72, 58, 0.08);
 }
 
+:root[data-theme="light"] .studio-home-nav .brand-identity,
+:root[data-theme="light"] .studio-home-nav .brand-wordmark {
+  color: rgba(28, 27, 31, 0.9);
+}
+
+:root[data-theme="light"] .studio-home-nav .moon-logo-orbit {
+  stroke: rgba(28, 27, 31, 0.42);
+}
+
+:root[data-theme="light"] .studio-home-nav .moon-logo-crescent {
+  fill: rgba(28, 27, 31, 0.92);
+}
+
 :root[data-theme="light"] .studio-home-nav nav {
   border-color: rgba(30, 30, 30, 0.08) !important;
   background: rgba(255, 255, 255, 0.48) !important;
@@ -8883,7 +8934,7 @@ video:-webkit-full-screen,
   z-index: 0;
   overflow: hidden;
   pointer-events: none;
-  opacity: 0.82;
+  opacity: 0.96;
   mix-blend-mode: multiply;
 }
 
@@ -9088,6 +9139,14 @@ video:-webkit-full-screen,
   color: var(--moon-fg);
 }
 
+:root[data-theme="light"] .home-gateway {
+  background: #f5f1e8;
+}
+
+:root[data-theme="light"] .home-unicorn-hero {
+  background: transparent !important;
+}
+
 :root[data-theme="light"] .home-hero-prism-background {
   background: #f0ebe2;
   opacity: 0.28;
@@ -9098,6 +9157,47 @@ video:-webkit-full-screen,
   background:
     radial-gradient(circle at 50% 21%, rgba(255, 255, 255, 0.14), transparent 24%),
     linear-gradient(180deg, rgba(247, 244, 238, 0.46) 0%, rgba(247, 244, 238, 0.28) 44%, rgba(241, 235, 224, 0.58) 100%);
+}
+
+:root[data-theme="light"] .home-page-plasma {
+  background:
+    radial-gradient(circle at 45% 32%, rgba(246, 218, 145, 0.08), transparent 35%),
+    #f5f1e8;
+}
+
+:root[data-theme="light"] .home-plasma-canvas {
+  opacity: 1;
+  filter: saturate(1.18) contrast(1.06);
+  mix-blend-mode: normal;
+}
+
+:root[data-theme="light"] .home-plasma-background::after {
+  background: transparent;
+}
+
+:root[data-theme="light"] .home-unicorn-title-shield {
+  background: transparent;
+}
+
+:root[data-theme="light"] .home-unicorn-copy::before {
+  background:
+    radial-gradient(ellipse at 50% 45%, rgba(247, 244, 238, 0.74) 0%, rgba(247, 244, 238, 0.38) 38%, transparent 72%);
+}
+
+:root[data-theme="light"] .home-unicorn-eyebrow {
+  color: rgba(28, 27, 31, 0.52);
+  text-shadow: 0 1px 18px rgba(255, 255, 255, 0.58);
+}
+
+:root[data-theme="light"] .home-unicorn-brand-title,
+:root[data-theme="light"] .home-unicorn-en-title {
+  color: rgba(28, 27, 31, 0.88);
+  text-shadow: 0 12px 50px rgba(82, 72, 58, 0.16);
+}
+
+:root[data-theme="light"] .home-unicorn-cn-title {
+  color: #a9791f;
+  text-shadow: 0 12px 46px rgba(169, 121, 31, 0.16);
 }
 
 :root[data-theme="light"] .moon-logo-orbit {
@@ -9200,4 +9300,121 @@ video:-webkit-full-screen,
 :root[data-theme="light"] #admin-settings .text-violet-100,
 :root[data-theme="light"] #admin-settings .text-red-100 {
   color: rgba(28, 27, 31, 0.78) !important;
+}
+
+:root[data-theme="light"] #api-settings .bg-\[\#111115\],
+:root[data-theme="light"] #api-settings .bg-\[\#17171b\],
+:root[data-theme="light"] #api-settings .bg-black\/15,
+:root[data-theme="light"] #api-settings .bg-black\/25,
+:root[data-theme="light"] #api-settings .bg-black\/35 {
+  background-color: rgba(255, 255, 255, 0.68) !important;
+}
+
+:root[data-theme="light"] #api-settings .border-white\/\[0\.08\],
+:root[data-theme="light"] #api-settings .border-white\/\[0\.07\],
+:root[data-theme="light"] #api-settings .border-white\/\[0\.10\],
+:root[data-theme="light"] #api-settings .border-white\/\[0\.12\] {
+  border-color: rgba(30, 30, 30, 0.11) !important;
+}
+
+:root[data-theme="light"] #api-settings .text-white,
+:root[data-theme="light"] #api-settings .text-white\/82,
+:root[data-theme="light"] #api-settings .text-white\/75,
+:root[data-theme="light"] #api-settings .text-white\/70,
+:root[data-theme="light"] #api-settings .text-white\/65 {
+  color: rgba(28, 27, 31, 0.9) !important;
+}
+
+:root[data-theme="light"] #api-settings .text-white\/55,
+:root[data-theme="light"] #api-settings .text-white\/50,
+:root[data-theme="light"] #api-settings .text-white\/48,
+:root[data-theme="light"] #api-settings .text-white\/45,
+:root[data-theme="light"] #api-settings .text-white\/42,
+:root[data-theme="light"] #api-settings .text-white\/38,
+:root[data-theme="light"] #api-settings .text-white\/35,
+:root[data-theme="light"] #api-settings .text-white\/30,
+:root[data-theme="light"] #api-settings .text-white\/25 {
+  color: rgba(28, 27, 31, 0.66) !important;
+}
+
+:root[data-theme="light"] #api-settings input,
+:root[data-theme="light"] #api-settings textarea,
+:root[data-theme="light"] #api-settings select {
+  border-color: rgba(30, 30, 30, 0.11) !important;
+  background-color: rgba(255, 255, 255, 0.76) !important;
+  color: rgba(28, 27, 31, 0.9) !important;
+}
+
+:root[data-theme="light"] #api-settings input::placeholder,
+:root[data-theme="light"] #api-settings textarea::placeholder {
+  color: rgba(28, 27, 31, 0.38) !important;
+}
+
+:root[data-theme="light"] #api-settings button.bg-transparent {
+  color: rgba(28, 27, 31, 0.72) !important;
+}
+
+:root[data-theme="light"] #api-settings .bg-white\/\[0\.10\],
+:root[data-theme="light"] #api-settings .bg-white\/\[0\.06\],
+:root[data-theme="light"] #api-settings .bg-white\/\[0\.05\],
+:root[data-theme="light"] #api-settings .bg-white\/\[0\.04\],
+:root[data-theme="light"] #api-settings .bg-white\/\[0\.03\],
+:root[data-theme="light"] #api-settings .bg-white\/\[0\.025\] {
+  background-color: rgba(28, 27, 31, 0.055) !important;
+}
+
+:root[data-theme="light"] #api-settings .bg-white.text-black {
+  background-color: #1f1d26 !important;
+  color: #fff !important;
+}
+
+:root[data-theme="light"] #admin-settings .text-red-100,
+:root[data-theme="light"] #admin-settings .text-red-100\/85,
+:root[data-theme="light"] #admin-settings .text-red-200,
+:root[data-theme="light"] #admin-settings .text-red-300 {
+  color: #9f1239 !important;
+}
+
+:root[data-theme="light"] #admin-settings .bg-red-300\/\[0\.035\],
+:root[data-theme="light"] #admin-settings .bg-red-300\/\[0\.08\],
+:root[data-theme="light"] #admin-settings .bg-red-300\/\[0\.10\],
+:root[data-theme="light"] #admin-settings .bg-red-400\/10 {
+  background-color: rgba(255, 241, 242, 0.9) !important;
+}
+
+:root[data-theme="light"] #admin-settings .border-red-200\/\[0\.08\],
+:root[data-theme="light"] #admin-settings .border-red-200\/15,
+:root[data-theme="light"] #admin-settings .border-red-300\/15 {
+  border-color: rgba(159, 18, 57, 0.18) !important;
+}
+
+:root[data-theme="light"] .settings-command-bar .text-white,
+:root[data-theme="light"] .settings-command-bar .text-white\/78,
+:root[data-theme="light"] .settings-command-bar .text-white\/65,
+:root[data-theme="light"] .settings-command-bar .text-white\/55,
+:root[data-theme="light"] .settings-command-bar .text-white\/45,
+:root[data-theme="light"] .settings-command-bar .text-white\/35 {
+  color: rgba(28, 27, 31, 0.72) !important;
+}
+
+:root[data-theme="light"] .settings-command-bar a:hover,
+:root[data-theme="light"] .settings-command-bar button:hover {
+  color: rgba(28, 27, 31, 0.92) !important;
+}
+
+:root[data-theme="light"] #api-settings .text-amber-100,
+:root[data-theme="light"] #api-settings .text-amber-100\/70,
+:root[data-theme="light"] #api-settings .text-amber-200,
+:root[data-theme="light"] #api-settings .text-yellow-100,
+:root[data-theme="light"] #api-settings .text-yellow-200 {
+  color: #8a5a00 !important;
+}
+
+:root[data-theme="light"] #api-settings button:disabled,
+:root[data-theme="light"] #api-settings input:disabled {
+  opacity: 0.72 !important;
+}
+
+:root[data-theme="light"] #api-settings button:disabled {
+  color: rgba(28, 27, 31, 0.46) !important;
 }

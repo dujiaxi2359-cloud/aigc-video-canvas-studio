@@ -4,8 +4,8 @@ import { motion } from "framer-motion";
 import gsap from "gsap";
 import type { Page } from "../App";
 import { HomeLaunchIntro } from "../components/home/HomeLaunchIntro";
+import { HomePlasmaBackground } from "../components/home/HomePlasmaBackground";
 import { HomeTopNav } from "../components/home/HomeTopNav";
-import { FerrofluidBackground } from "../components/home/FerrofluidBackground";
 import { useI18nStore } from "../i18n";
 
 const ICP_RECORD = "粤ICP备2026074382号";
@@ -72,7 +72,7 @@ export function BrandGatewayPage({ onNavigate }: { onNavigate: (page: Page, proj
       onMouseMove={updateSpotlight}
     >
       {!launchComplete ? <HomeLaunchIntro onFinish={() => setLaunchComplete(true)} /> : null}
-      {launchComplete ? <FerrofluidBackground className="home-page-ferrofluid" /> : null}
+      {launchComplete ? <HomePlasmaBackground className="home-page-plasma" /> : null}
       <HomeTopNav page="home" onNavigate={onNavigate} />
 
       <main className="home-flagship-content">

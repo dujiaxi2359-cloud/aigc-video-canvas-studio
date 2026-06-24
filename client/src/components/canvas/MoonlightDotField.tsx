@@ -21,13 +21,13 @@ type Props = {
 };
 
 export const MoonlightDotField = memo(function MoonlightDotField({
-  dotRadius = 1.45,
-  dotSpacing = 15,
+  dotRadius = 1.95,
+  dotSpacing = 14,
   cursorRadius = 480,
   bulgeStrength = 54,
   glowRadius = 170,
-  gradientFrom = "rgba(139, 92, 246, 0.28)",
-  gradientTo = "rgba(96, 88, 76, 0.20)",
+  gradientFrom = "rgba(139, 92, 246, 0.38)",
+  gradientTo = "rgba(78, 70, 58, 0.36)",
   glowColor = "rgba(255, 255, 255, 0.88)"
 }: Props) {
   const wrapperRef = useRef<HTMLDivElement>(null);
