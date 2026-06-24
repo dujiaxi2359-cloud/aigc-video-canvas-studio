@@ -14,15 +14,16 @@ export function isDuoyuanGrokRelay(apiBaseUrl: string) {
 export function canonicalDuoyuanGrokModelName(modelName: string, apiBaseUrl: string) {
   if (!isDuoyuanGrokRelay(apiBaseUrl)) return modelName;
   const normalized = modelName.trim().toLowerCase().replace(/[_\s.]+/g, "-");
-  if (normalized === "grok-video-3" || normalized === "grok-video-3-pro" || normalized === "grok-video-3-max") return normalized;
-  if (/^grok-(?:1-5-)?video-(?:3-)?15s$/.test(normalized)) return "grok-video-3-max";
-  if (/^grok-(?:1-5-)?video-(?:3-)?10s$/.test(normalized)) return "grok-video-3-pro";
-  if (/^grok-(?:1-5-)?video-(?:3-)?6s$/.test(normalized)) return "grok-video-3";
+  if (normalized === "grok-video-3-max") return "grok-video-3-15s";
+  if (normalized === "grok-video-3-pro") return "grok-video-3-10s";
+  if (normalized === "grok-video-3" || /^grok-video-3-(?:6s|10s|15s)$/.test(normalized)) return normalized;
+  if (/^grok-1-5-video-(?:6s|10s|15s)$/.test(normalized)) return normalized.replace("1-5", "1.5");
   return modelName;
 }
 
 export function documentedGrokDuration(modelName: string, requestedDuration: number) {
-  if (modelName === "grok-video-3-pro") return 10;
-  if (modelName === "grok-video-3-max") return 15;
+  if (/(?:^|-)6s$/.test(modelName)) return 6;
+  if (/(?:^|-)10s$/.test(modelName)) return 10;
+  if (/(?:^|-)15s$/.test(modelName)) return 15;
   return Math.min(15, Math.max(1, Math.round(requestedDuration || 10)));
 }

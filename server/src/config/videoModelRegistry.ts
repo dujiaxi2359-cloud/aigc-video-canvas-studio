@@ -163,8 +163,8 @@ function grokRelayParameters(registryId: string): VideoBaseParameters {
   return {
     aspectRatios: ["16:9", "9:16", "2:3", "3:2", "1:1"],
     resolutions: ["720P", "1080P"],
-    ...(registryId === "grok-video-3-pro" ? { durations: [10] }
-      : registryId === "grok-video-3-max" ? { durations: [15] }
+    ...(registryId === "grok-video-3-10s" ? { durations: [10] }
+      : registryId === "grok-video-3-15s" ? { durations: [15] }
         : { durationRange: [1, 15] as [number, number] }),
     outputFormats: ["mp4"],
     maxPromptLength: "unknown"
@@ -458,7 +458,7 @@ export const videoModelRegistry = [
     },
     ui: { tags: ["文生视频", "图生视频", "480p/720p", "1-15s", "原生音频"], visible: true }
   }),
-  ...["grok-video-3", "grok-video-3-pro", "grok-video-3-max", "grok-1.5-video"].map((registryId) => entry({
+  ...["grok-video-3", "grok-video-3-10s", "grok-video-3-15s", "grok-1.5-video"].map((registryId) => entry({
     registryId,
     displayName: registryId === "grok-1.5-video" ? "Grok 1.5 Video" : registryId.split("-").map((part) => part === "grok" ? "Grok" : part === "video" ? "Video" : part.toUpperCase()).join(" "),
     provider: "xai",
@@ -473,7 +473,7 @@ export const videoModelRegistry = [
     outputSupport: { video: true, audio: true },
     baseParameters: grokRelayParameters(registryId),
     interfaces: { relay: openAiRelay(registryId, "xaiVideoRelayAdapter", "xaiVideoRelayResponseParser") },
-    ui: { tags: ["中转模型", "9:16", "720P/1080P", registryId === "grok-video-3-pro" ? "10s" : registryId === "grok-video-3-max" ? "15s" : "1-15s"], experimental: true, visible: true }
+    ui: { tags: ["中转模型", "9:16", "720P/1080P", registryId === "grok-video-3-10s" ? "10s" : registryId === "grok-video-3-15s" ? "15s" : "1-15s"], experimental: true, visible: true }
   })),
   ...[
     ["kling-3.0-omni", "Kling 3.0 Omni"],

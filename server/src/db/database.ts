@@ -169,8 +169,9 @@ async function migrateAi666VideoProtocols(database: AppDatabase) {
       });
     }
 
-    const grokKnownModel = /grok[-_ .]?video[-_ .]?3[-_ .]?max/.test(name) ? { displayName: "Grok Video 3 Max", model: "grok-video-3-max", duration: { type: "enum", values: [15] }, supportedDurations: [15] }
-      : /grok[-_ .]?video[-_ .]?3[-_ .]?pro/.test(name) ? { displayName: "Grok Video 3 Pro", model: "grok-video-3-pro", duration: { type: "enum", values: [10] }, supportedDurations: [10] }
+    const grokKnownModel = /grok[-_ .]?video[-_ .]?3[-_ .]?(?:max|15s)/.test(name) ? { displayName: "Grok Video 3 15s", model: "grok-video-3-15s", duration: { type: "enum", values: [15] }, supportedDurations: [15] }
+      : /grok[-_ .]?video[-_ .]?3[-_ .]?(?:pro|10s)/.test(name) ? { displayName: "Grok Video 3 10s", model: "grok-video-3-10s", duration: { type: "enum", values: [10] }, supportedDurations: [10] }
+        : /grok[-_ .]?video[-_ .]?3[-_ .]?6s/.test(name) ? { displayName: "Grok Video 3 6s", model: "grok-video-3-6s", duration: { type: "enum", values: [6] }, supportedDurations: [6] }
         : /grok[-_ .]?video[-_ .]?3/.test(name) ? { displayName: "Grok Video 3", model: "grok-video-3", duration: { type: "range", min: 1, max: 15, step: 1 }, supportedDurations: Array.from({ length: 15 }, (_, index) => index + 1) }
           : undefined;
     const grokNeedsCapabilityUpgrade = grokKnownModel && (grokModelCanonicalized ||
@@ -212,13 +213,14 @@ async function migrateAi666VideoProtocols(database: AppDatabase) {
     const grokDisplayName = /grok[-_ .]?imagine[-_ .]?video[-_ .]?1[-_ .]?5/.test(name) ? "Grok Imagine Video 1.5 Preview"
       : /grok[-_ .]?imagine[-_ .]?1[-_ .]?0[-_ .]?video/.test(name) ? "Grok Imagine Video 1.0"
         : /grok[-_ .]?imagine[-_ .]?video/.test(name) ? "Grok Imagine Video"
-          : /grok[-_ .]?video[-_ .]?3[-_ .]?max/.test(name) ? "Grok Video 3 Max"
-            : /grok[-_ .]?video[-_ .]?3[-_ .]?pro/.test(name) ? "Grok Video 3 Pro"
-              : /grok[-_ .]?video[-_ .]?3/.test(name) ? "Grok Video 3"
-                : /grok[-_ .]?1[-_ .]?5[-_ .]?video[-_ .]?15s/.test(name) ? "Grok 1.5 Video 15s"
-                  : /grok[-_ .]?1[-_ .]?5[-_ .]?video[-_ .]?10s/.test(name) ? "Grok 1.5 Video 10s"
-                    : /grok[-_ .]?1[-_ .]?5[-_ .]?video[-_ .]?6s/.test(name) ? "Grok 1.5 Video 6s"
-                      : "";
+          : /grok[-_ .]?video[-_ .]?3[-_ .]?(?:max|15s)/.test(name) ? "Grok Video 3 15s"
+            : /grok[-_ .]?video[-_ .]?3[-_ .]?(?:pro|10s)/.test(name) ? "Grok Video 3 10s"
+              : /grok[-_ .]?video[-_ .]?3[-_ .]?6s/.test(name) ? "Grok Video 3 6s"
+                : /grok[-_ .]?video[-_ .]?3/.test(name) ? "Grok Video 3"
+                  : /grok[-_ .]?1[-_ .]?5[-_ .]?video[-_ .]?15s/.test(name) ? "Grok 1.5 Video 15s"
+                    : /grok[-_ .]?1[-_ .]?5[-_ .]?video[-_ .]?10s/.test(name) ? "Grok 1.5 Video 10s"
+                      : /grok[-_ .]?1[-_ .]?5[-_ .]?video[-_ .]?6s/.test(name) ? "Grok 1.5 Video 6s"
+                        : "";
     if (grokDisplayName) assignDisplayName(grokDisplayName);
 
     if (grokDisplayName) {

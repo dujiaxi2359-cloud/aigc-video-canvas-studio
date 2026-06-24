@@ -135,12 +135,13 @@ assert(!isOfficialGrokEndpoint("https://relay.example/v1/videos"), "Relay endpoi
 assert(isAi666GrokRelay("https://ai.ai666.net/v1"), "ai666 must use the documented Grok relay protocol");
 assert(grokCreateEndpoint("https://ai.ai666.net/v1") === "https://ai.ai666.net/v1/videos", "ai666 Grok relay should create through POST /v1/videos");
 assert(grokPollEndpoint("https://ai.ai666.net/v1", "video_1") === "https://ai.ai666.net/v1/videos/video_1", "ai666 Grok relay should poll GET /v1/videos/{task_id}");
-assert(grokRequestModelName("grok-1.5-video-6s", "https://ai.ai666.net/v1") === "grok-video-3", "ai666 legacy 6s Grok config should map to current base model");
-assert(grokRequestModelName("grok-1.5-video-10s", "https://ai.ai666.net/v1") === "grok-video-3-pro", "ai666 legacy 10s Grok config should map to current pro model");
-assert(grokRequestModelName("grok-1.5-video-15s", "https://ai.ai666.net/v1") === "grok-video-3-max", "ai666 legacy 15s Grok config should map to current max model");
-assert(grokRequestModelName("grok-1.5-video-6s", "https://ai.cy88.ai/v1") === "grok-video-3", "cy88 legacy 6s Grok config should map to the documented base model");
-assert(grokRequestModelName("grok-video-3-10s", "https://ai.cy88.ai/v1") === "grok-video-3-pro", "cy88 legacy 10s Grok config should map to the documented pro model");
-assert(grokRequestModelName("grok-video-3-15s", "https://ai.cy88.ai/v1") === "grok-video-3-max", "cy88 legacy 15s Grok config should map to the documented max model");
+assert(grokRequestModelName("grok-1.5-video-6s", "https://ai.ai666.net/v1") === "grok-1.5-video-6s", "ai666 Grok 1.5 6s should keep the relay-documented model name");
+assert(grokRequestModelName("grok-1.5-video-10s", "https://ai.ai666.net/v1") === "grok-1.5-video-10s", "ai666 Grok 1.5 10s should keep the relay-documented model name");
+assert(grokRequestModelName("grok-1.5-video-15s", "https://ai.ai666.net/v1") === "grok-1.5-video-15s", "ai666 Grok 1.5 15s should keep the relay-documented model name");
+assert(grokRequestModelName("grok-video-3-pro", "https://ai.cy88.ai/v1") === "grok-video-3-10s", "cy88 old Pro label should migrate to the relay-documented 10s model");
+assert(grokRequestModelName("grok-video-3-max", "https://ai.cy88.ai/v1") === "grok-video-3-15s", "cy88 old Max label should migrate to the relay-documented 15s model");
+assert(grokRequestModelName("grok-video-3-10s", "https://ai.cy88.ai/v1") === "grok-video-3-10s", "cy88 10s Grok config should keep the relay-documented model name");
+assert(grokRequestModelName("grok-video-3-15s", "https://ai.cy88.ai/v1") === "grok-video-3-15s", "cy88 15s Grok config should keep the relay-documented model name");
 const cy88GrokForm = buildGrokRelayMultipart({
   apiBaseUrl: "https://ai.cy88.ai/v1",
   modelName: grokRequestModelName("grok-video-3-15s", "https://ai.cy88.ai/v1"),
@@ -153,8 +154,8 @@ const cy88GrokForm = buildGrokRelayMultipart({
     { blob: new Blob(["product"], { type: "image/png" }), filename: "product.png" }
   ]
 });
-assert(cy88GrokForm.get("model") === "grok-video-3-max", "cy88 legacy 15s model must submit the documented max model name");
-assert(cy88GrokForm.get("seconds") === "15", "grok-video-3-max must always submit 15 seconds");
+assert(cy88GrokForm.get("model") === "grok-video-3-15s", "cy88 15s model must submit the relay-documented model name");
+assert(cy88GrokForm.get("seconds") === "15", "grok-video-3-15s must always submit 15 seconds");
 assert(cy88GrokForm.get("size") === "1080P", "Duoyuan Grok size must use the documented 720P/1080P value");
 assert(cy88GrokForm.get("aspect_ratio") === "9:16", "Duoyuan Grok must preserve the documented aspect_ratio field");
 assert(cy88GrokForm.getAll("input_reference").length === 2, "Duoyuan Grok must repeat input_reference for multiple images");
@@ -1501,8 +1502,8 @@ assert(!modelCatalog.some((item) => item.name === "grok-imagine-fast"), "Unpubli
 assert(modelCatalog.some((item) => item.name === "grok-imagine-video"), "Official Grok Imagine Video model should be retained");
 assert(modelCatalog.some((item) => item.name === "grok-imagine-video-1.5-preview"), "Official Grok Imagine Video 1.5 Preview model should be retained");
 assert(modelCatalog.some((item) => item.name === "grok-video-3"), "Relay Grok Video 3 model should be available");
-assert(modelCatalog.some((item) => item.name === "grok-video-3-pro"), "Relay Grok Video 3 Pro model should be available");
-assert(modelCatalog.some((item) => item.name === "grok-video-3-max"), "Relay Grok Video 3 Max model should be available");
+assert(modelCatalog.some((item) => item.name === "grok-video-3-10s"), "Relay Grok Video 3 10s model should be available");
+assert(modelCatalog.some((item) => item.name === "grok-video-3-15s"), "Relay Grok Video 3 15s model should be available");
 assert(modelCatalog.some((item) => item.name === "grok-1.5-video-6s"), "Relay Grok 1.5 Video 6s model should be available");
 assert(modelCatalog.some((item) => item.name === "grok-1.5-video-10s"), "Relay Grok 1.5 Video 10s model should be available");
 assert(modelCatalog.some((item) => item.name === "grok-1.5-video-15s"), "Relay Grok 1.5 Video 15s model should be available");
@@ -1551,10 +1552,10 @@ assert(grokRelay?.supportedAspectRatios.join(",") === "16:9,9:16,2:3,3:2,1:1", "
 assert(grokRelay?.supportedResolutions.join(",") === "720P,1080P", "Relay Grok Video 3 should expose ai666 documented resolutions");
 assert(grokRelay?.supportedDurations[0] === 1, "Relay Grok Video 3 should start at 1s duration");
 assert(grokRelay?.supportedDurations.at(-1) === 15, "Relay Grok Video 3 should end at 15s duration");
-const grokRelayPro = getVideoModelCapability("grok", "grok-video-3-pro", "grok-video-3-pro", "reference_images_to_video");
-assert(grokRelayPro?.supportedDurations.join(",") === "10", "Relay Grok Video 3 Pro should be fixed at 10s");
-const grokRelayMax = getVideoModelCapability("grok", "grok-video-3-max", "grok-video-3-max", "reference_images_to_video");
-assert(grokRelayMax?.supportedDurations.join(",") === "15", "Relay Grok Video 3 Max should be fixed at 15s");
+const grokRelay10s = getVideoModelCapability("grok", "grok-video-3-10s", "grok-video-3-10s", "reference_images_to_video");
+assert(grokRelay10s?.supportedDurations.join(",") === "10", "Relay Grok Video 3 10s should be fixed at 10s");
+const grokRelay15sFixed = getVideoModelCapability("grok", "grok-video-3-15s", "grok-video-3-15s", "reference_images_to_video");
+assert(grokRelay15sFixed?.supportedDurations.join(",") === "15", "Relay Grok Video 3 15s should be fixed at 15s");
 const grokRelay15s = getVideoModelCapability("grok", "grok-1-5-video-15s", "grok-1.5-video-15s", "reference_images_to_video");
 assert(grokRelay15s?.supportedDurations.join(",") === "15", "Relay Grok 1.5 Video 15s should be fixed at 15s");
 
