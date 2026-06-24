@@ -415,6 +415,73 @@ async function ensureOmniFastV2vConfigs(database: AppDatabase) {
   }
 }
 
+async function repairOmniFastV2vConfigs(database: AppDatabase) {
+  const rows = await database.all<Array<{
+    id: string;
+    provider_id: string | null;
+    provider: string;
+    capabilities_json: string;
+  }>>(
+    `SELECT id, provider_id, provider, capabilities_json
+     FROM model_configs
+     WHERE lower(model_name) = 'omni-fast-v2v'`
+  );
+  const now = Date.now();
+  for (const row of rows) {
+    const existingCapabilities = JSON.parse(row.capabilities_json) as ModelCapabilities;
+    const capabilities = normalizeVideoCapabilities({
+      ...existingCapabilities,
+      provider: "veo",
+      channel: "proxy",
+      apiFamily: "omni_fast_v2v",
+      createEndpoint: "/v1/videos",
+      endpoint: "/v1/videos",
+      pollEndpoint: "/v1/videos/{taskId}",
+      authType: "bearer",
+      requestFormat: "json",
+      taskMode: "async",
+      inputModes: ["video-to-video"],
+      supportedInputs: ["video"],
+      imageTransport: "unsupported",
+      videoTransport: "url_or_base64_json",
+      videoField: "video",
+      modelCapability: {
+        ...(existingCapabilities.modelCapability ?? {}),
+        model: "omni-fast-v2v",
+        supportsTextToVideo: false,
+        supportsImageToVideo: false,
+        supportsReferenceToVideo: false,
+        supportsFirstLastFrame: false,
+        supportsVideoToVideo: true
+      },
+      channelCapability: {
+        ...(existingCapabilities.channelCapability ?? {}),
+        provider: "veo",
+        channel: "proxy",
+        apiFamily: "omni_fast_v2v",
+        createEndpoint: "/v1/videos",
+        endpoint: "/v1/videos",
+        pollEndpoint: "/v1/videos/{taskId}",
+        authType: "bearer",
+        requestFormat: "json",
+        taskMode: "async",
+        supportedInputs: ["video"],
+        imageTransport: "unsupported",
+        videoTransport: "url_or_base64_json",
+        videoField: "video"
+      }
+    }, row.provider_id ?? undefined, "omni-fast-v2v");
+    await database.run(
+      `UPDATE model_configs
+       SET category = 'video', display_name = 'omni-fast-v2v', model_name = 'omni-fast-v2v', model_type = 'video-to-video', capabilities_json = ?, updated_at = ?
+       WHERE id = ?`,
+      JSON.stringify(capabilities),
+      now,
+      row.id
+    );
+  }
+}
+
 async function migrateVolcengineImageProtocols(database: AppDatabase) {
   const rows = await database.all<Array<{ id: string; provider: string; provider_id: string | null; category: string | null; model_type: string; model_name: string; capabilities_json: string }>>(
     "SELECT id, provider, provider_id, category, model_type, model_name, capabilities_json FROM model_configs WHERE lower(model_name) LIKE '%seedream%' OR lower(model_name) LIKE '%doubao-seedream%'"
@@ -540,6 +607,7 @@ export async function getDb() {
   }
   await migrateAi666VideoProtocols(db);
   await ensureOmniFastV2vConfigs(db);
+  await repairOmniFastV2vConfigs(db);
   await migrateVolcengineImageProtocols(db);
   await migrateImageModelCapabilities(db);
   const database = db;
