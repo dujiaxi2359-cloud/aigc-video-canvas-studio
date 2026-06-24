@@ -11,6 +11,30 @@ type ProjectNode = {
   [key: string]: unknown;
 };
 
+function completeGeneratedOutput(node: ProjectNode, data: Record<string, unknown>) {
+  if (typeof data.outputUrl !== "string" || !data.outputUrl) return data;
+  if (!["video", "imageGenerate", "compose"].includes(node.type ?? "")) return data;
+  if (data.status === "success") return data;
+  return {
+    ...data,
+    status: "success",
+    errorCode: undefined,
+    errorMessage: undefined,
+    debugMessage: undefined,
+    generationStartedAt: undefined,
+    clientRequestId: undefined
+  };
+}
+
+function normalizeGeneratedOutputNodes(nodes: unknown[]) {
+  return nodes.map((item) => {
+    if (!item || typeof item !== "object") return item;
+    const node = item as ProjectNode;
+    const data = node.data;
+    return data ? { ...node, data: completeGeneratedOutput(node, data) } : node;
+  });
+}
+
 async function hydrateProjectNodes(nodes: ProjectNode[]) {
   const assetIds = new Set<string>();
   for (const node of nodes) {
@@ -20,7 +44,12 @@ async function hydrateProjectNodes(nodes: ProjectNode[]) {
       if (typeof value === "string" && value) assetIds.add(value);
     }
   }
-  if (!assetIds.size) return nodes;
+  if (!assetIds.size) {
+    return nodes.map((node) => {
+      const data = node.data;
+      return data ? { ...node, data: completeGeneratedOutput(node, data) } : node;
+    });
+  }
 
   const assetEntries = await Promise.all([...assetIds].map(async (id) => [id, await getAsset(id).catch(() => undefined)] as const));
   const assets = new Map(assetEntries.filter((entry) => entry[1]));
@@ -46,7 +75,7 @@ async function hydrateProjectNodes(nodes: ProjectNode[]) {
       if (!nextData.outputUrl && asset.url) nextData.outputUrl = asset.url;
       if (!nextData.duration && asset.duration) nextData.duration = asset.duration;
     }
-    return { ...node, data: nextData };
+    return { ...node, data: completeGeneratedOutput(node, nextData) };
   });
 }
 
@@ -101,7 +130,7 @@ export async function saveProject(id: string, input: { name?: string; nodes: unk
   await db.run(
     "UPDATE projects SET name = ?, nodes_json = ?, edges_json = ?, updated_at = ? WHERE id = ? AND workspace_id = ?",
     input.name ?? existing.name,
-    JSON.stringify(input.nodes ?? []),
+    JSON.stringify(normalizeGeneratedOutputNodes(input.nodes ?? [])),
     JSON.stringify(input.edges ?? []),
     now(),
     id,
