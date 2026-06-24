@@ -35,9 +35,9 @@ export function NodeDownloadButton({ url, assetId, title, kind, tooltip, label }
     if (!url && !assetId) return;
     setStatus("downloading");
     try {
-      if (assetId) downloadAssetById(assetId);
+      const filename = `${prefixByKind[kind]}_${sanitizeFilename(title || "node")}_${timestamp()}${url ? extensionFromUrl(url, fallbackExtByKind[kind]) : fallbackExtByKind[kind]}`;
+      if (assetId) await downloadAssetById(assetId, filename);
       else if (url) {
-        const filename = `${prefixByKind[kind]}_${sanitizeFilename(title || "node")}_${timestamp()}${extensionFromUrl(url, fallbackExtByKind[kind])}`;
         await downloadAsset(url, filename);
       }
       setStatus("done");

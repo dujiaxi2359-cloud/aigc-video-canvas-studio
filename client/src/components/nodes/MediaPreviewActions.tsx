@@ -67,7 +67,8 @@ export function MediaPreviewActions({ kind, url, assetId, title, nodeId, onSaved
     setDownloading(true);
     try {
       if (assetId) {
-        downloadAssetById(assetId);
+        const filename = `${defaults.prefix}_${sanitizeFilename(title || "node")}_${timestamp()}${defaults.extension}`;
+        await downloadAssetById(assetId, filename);
       } else if (url) {
         const filename = `${defaults.prefix}_${sanitizeFilename(title || "node")}_${timestamp()}${extensionFromUrl(url, defaults.extension)}`;
         await downloadAsset(url, filename);

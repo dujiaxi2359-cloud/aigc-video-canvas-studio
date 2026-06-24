@@ -15,6 +15,7 @@ import type { Asset } from "../../types/asset";
 import type { GenerationHistory } from "../../types/history";
 import type { WorkflowNodeType } from "../../types/node";
 import { absoluteUploadUrl } from "../../utils/file";
+import { downloadAssetById } from "../../services/downloadApi";
 import { MediaLightbox } from "../media/MediaLightbox";
 import { AssetFolderTree } from "../assets/AssetFolderTree";
 import { MoonLogo } from "../common/BrandIdentity";
@@ -45,6 +46,14 @@ function historyKind(item: GenerationHistory) {
   if (item.generationType === "image" || item.generationType === "video") return item.generationType;
   const value = `${item.inputMode || ""} ${item.outputUrl || ""}`.toLowerCase();
   return /\.(png|jpe?g|webp)(\?|$)/.test(value) || value.includes("image") ? "image" : "video";
+}
+
+async function downloadLibraryAsset(asset: Asset) {
+  try {
+    await downloadAssetById(asset.id, asset.name || "aigc_asset");
+  } catch (error) {
+    window.dispatchEvent(new CustomEvent("studio:toast", { detail: error instanceof Error ? error.message : "下载失败。" }));
+  }
 }
 
 export function CanvasTopBar({ onNavigate, onShare }: { onNavigate: (page: Page, projectId?: string) => void; onShare: () => void }) {
@@ -255,7 +264,7 @@ function AssetDrawer({ onClose }: { onClose: () => void }) {
                     <span className="drawer-resource-actions">
                       {(asset.type === "image" || asset.type === "video") && <button type="button" title="预览" onClick={() => setPreview(asset)}><Eye size={12} /></button>}
                       <button type="button" title={t("canvas.addToCanvas")} onClick={() => addAssetNode({ assetId: asset.id, type: asset.type, url: asset.url, filePath: asset.localPath, thumbnailUrl: asset.thumbnailUrl, width: asset.width, height: asset.height, duration: asset.duration })}><Plus size={12} /></button>
-                      <button type="button" title="下载" onClick={() => { const link = document.createElement("a"); link.href = absoluteUploadUrl(asset.downloadUrl || asset.url) || ""; link.download = asset.name; link.click(); }}><Download size={12} /></button>
+                      <button type="button" title="下载" onClick={() => void downloadLibraryAsset(asset)}><Download size={12} /></button>
                       <button type="button" title="删除" onClick={() => void deleteAsset(asset.id)}><Trash2 size={12} /></button>
                     </span>
                     <span className="drawer-resource-name">{asset.name}</span>
