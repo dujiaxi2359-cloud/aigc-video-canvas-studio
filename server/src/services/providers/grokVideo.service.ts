@@ -168,6 +168,12 @@ function status(payload: Record<string, unknown>) {
   return typeof value === "string" ? value.toLowerCase() : "";
 }
 
+function taskProgress(payload: Record<string, unknown>) {
+  const data = record(payload.data);
+  const value = Number(payload.progress ?? data.progress ?? 0);
+  return Number.isFinite(value) ? Math.max(0, Math.min(100, value)) : 0;
+}
+
 function errorMessage(payload: Record<string, unknown>) {
   const error = record(payload.error);
   const message = String(error.message ?? payload.message ?? payload.error ?? "未知错误");
@@ -293,11 +299,23 @@ async function pollGrokTask(input: {
   let lastPayload: Record<string, unknown> | undefined;
   let lastStatus = 0;
   let sawTaskNotExist = false;
+  let lastNetworkError: unknown;
 
   for (const endpoint of endpoints) {
-    const response = await fetch(endpoint, {
-      headers: { Authorization: `Bearer ${input.apiKey}` }
-    });
+    let response: Response;
+    try {
+      response = await fetch(endpoint, {
+        headers: { Authorization: `Bearer ${input.apiKey}` }
+      });
+    } catch (error) {
+      lastNetworkError = error;
+      console.warn("[Grok Video] poll transport interrupted; trying fallback endpoint", {
+        requestId: input.requestId,
+        endpoint,
+        message: rawErrorMessage(error)
+      });
+      continue;
+    }
     const task = await responseJson(response);
     lastPayload = task;
     lastStatus = response.status;
@@ -321,6 +339,8 @@ async function pollGrokTask(input: {
   if (sawTaskNotExist && Date.now() - input.createdAt < 90 * 1000) {
     return { task: lastPayload ?? { status: "submitted", message: "task_not_exist" }, endpoint: input.preferredEndpoint, transientTaskMiss: true };
   }
+
+  if (lastNetworkError && !lastPayload) throw lastNetworkError;
 
   throw new ProviderError(
     "PROVIDER_ERROR",
@@ -413,13 +433,15 @@ export async function generateVideoWithGrok(params: VideoProviderParams): Promis
     await saveGenerationTask({
       id,
       status: status(task) || "submitted",
-      result: { provider: "grok", endpoint, pollEndpoint, pollEndpointCandidates: grokPollEndpointCandidates(params.apiBaseUrl, id), nodeId: params.nodeId, modelName: params.modelName, response: task }
+      progress: taskProgress(task),
+      result: { provider: "grok", endpoint, pollEndpoint, pollEndpointCandidates: grokPollEndpointCandidates(params.apiBaseUrl, id), nodeId: params.nodeId, modelConfigId: params.modelConfigId, projectId: params.projectId, modelName: params.modelName, response: task }
     });
 
     const startedAt = Date.now();
+    let pollInterruptions = 0;
     while (!["completed", "succeeded", "success", "done"].includes(status(task))) {
       if (["failed", "error", "cancelled", "canceled"].includes(status(task))) {
-        await saveGenerationTask({ id, status: "failed", result: task, errorMessage: errorMessage(task) });
+        await saveGenerationTask({ id, status: "failed", progress: taskProgress(task), result: task, errorMessage: errorMessage(task) });
         throw new ProviderError("VEO_OPERATION_FAILED", `Grok 视频任务失败：${errorMessage(task)}`, JSON.stringify(task));
       }
       if (Date.now() - startedAt > 20 * 60 * 1000) {
@@ -427,20 +449,34 @@ export async function generateVideoWithGrok(params: VideoProviderParams): Promis
         throw new ProviderError("VEO_OPERATION_TIMEOUT", "Grok 视频任务超过 20 分钟仍未完成。");
       }
       await sleep(5000);
-      const polled = await pollGrokTask({
-        apiBaseUrl: params.apiBaseUrl,
-        apiKey: params.apiKey,
-        requestId: id,
-        preferredEndpoint: pollEndpoint,
-        createdAt: startedAt
-      });
-      task = polled.task;
-      pollEndpoint = polled.endpoint;
-      await saveGenerationTask({ id, status: status(task) || "processing", result: task });
+      try {
+        const polled = await pollGrokTask({
+          apiBaseUrl: params.apiBaseUrl,
+          apiKey: params.apiKey,
+          requestId: id,
+          preferredEndpoint: pollEndpoint,
+          createdAt: startedAt
+        });
+        task = polled.task;
+        pollEndpoint = polled.endpoint;
+        pollInterruptions = 0;
+        await saveGenerationTask({ id, status: status(task) || "processing", progress: taskProgress(task), result: { ...task, pollEndpoint } });
+      } catch (pollError) {
+        const detail = rawErrorMessage(pollError);
+        if (!/fetch failed|network|econn|dns|timeout|socket|other side closed/i.test(detail)) throw pollError;
+        pollInterruptions += 1;
+        await saveGenerationTask({
+          id,
+          status: "in_progress",
+          progress: taskProgress(task),
+          result: { ...task, pollEndpoint, pendingAfterPollInterruption: true, pollInterruptions, pollWarning: "上游任务查询连接暂时中断，系统正在继续恢复。" }
+        });
+        await sleep(Math.min(15_000, 3_000 + pollInterruptions * 2_000));
+      }
     }
 
     const remoteUrl = videoUrl(task);
-    await saveGenerationTask({ id, status: "success", progress: 100, result: task });
+    await saveGenerationTask({ id, status: "success", progress: 100, result: { ...task, pollEndpoint } });
     const saved = await downloadGrokResult({
       remoteUrl,
       pollEndpoint,
@@ -458,7 +494,7 @@ export async function generateVideoWithGrok(params: VideoProviderParams): Promis
     if (error instanceof ProviderError) throw error;
     const message = rawErrorMessage(error);
     if (/fetch failed|network|econn|dns|timeout/i.test(message)) {
-      throw new ProviderError("NETWORK_ERROR", "Grok 视频接口网络请求失败，请检查 Base URL、代理和 xAI 服务状态。", message);
+      throw new ProviderError("NETWORK_ERROR", "未能取得 Grok 上游任务回执，请稍后重试或切换线路。", message);
     }
     throw new ProviderError("PROVIDER_ERROR", "Grok 视频接口调用失败。", message);
   }

@@ -13,7 +13,6 @@ import {
   Package,
   Scissors,
   Sparkles,
-  SunMedium,
   Trash2,
   UserRound,
   View,
@@ -41,36 +40,36 @@ function ratioFromDimensions(width?: number, height?: number) {
   return `${Math.round(width / divisor)}:${Math.round(height / divisor)}`;
 }
 
-const imageGridActions = [
+const imageSequenceActions = [
   {
-    label: "多机位九宫格",
+    label: "镜头组照",
     icon: LayoutGrid,
-    prompt: "基于参考图片生成多机位九宫格：保持主体、服装、产品和场景一致，输出 9 个不同机位视角，构图清晰，适合做视觉分镜参考。"
+    prompt: "基于参考图片制作一张多机位镜头组照：保持主体身份、服装、产品和场景连续一致，编排远景、中景、近景与细节镜头，形成可直接用于视频规划的视觉镜头表。"
   },
   {
-    label: "剧情推演四宫格",
+    label: "连续动作板",
     icon: Grid3X3,
-    prompt: "基于参考图片生成剧情推演四宫格：同一主体和场景连续发生动作变化，四格之间逻辑连贯，适合短视频分镜。"
+    prompt: "基于参考图片制作连续动作板：在同一主体与场景中推进起势、动作、转折和落点，镜头衔接清楚，人物与商品细节全程稳定。"
   },
   {
-    label: "角色脸部三视图",
+    label: "面部角度表",
     icon: View,
-    prompt: "基于参考图片生成角色脸部三视图：正面、侧面、三分之二侧面，保持五官、妆容、发型和身份一致，干净背景。"
+    prompt: "基于参考图片制作面部角度表：包含正面、侧面与三分之二侧面，严格保持五官、妆容、发型和人物身份一致，背景简洁。"
   },
   {
-    label: "角色设定图",
+    label: "角色视觉档案",
     icon: UserRound,
-    prompt: "基于参考图片生成角色设定图：全身、半身、表情和服装细节保持一致，适合作为后续图生视频和多图参考。"
+    prompt: "基于参考图片建立角色视觉档案：整理全身、半身、表情与服装细节，锁定身份特征，供后续图生视频和多图参考持续使用。"
   },
   {
-    label: "场景设定图",
+    label: "场景视觉档案",
     icon: Sparkles,
-    prompt: "基于参考图片提炼并生成场景设定图：保持空间结构、光线方向、材质和氛围一致，画面干净可复用。"
+    prompt: "基于参考图片建立场景视觉档案：提炼空间结构、光线方向、关键材质与氛围规则，形成可复用的场景依据。"
   },
   {
-    label: "产品设定图",
+    label: "商品视觉档案",
     icon: Package,
-    prompt: "基于参考图片生成产品设定图：严格保持产品外观、比例、结构、材质和标识，不改变商品识别度。"
+    prompt: "基于参考图片建立商品视觉档案：整理外观、比例、结构、材质、标识与关键细节，确保后续镜头不改变商品识别度。"
   }
 ];
 
@@ -81,7 +80,7 @@ export function ImageNode(props: NodeProps<ImageNodeData>) {
   const upload = useAssetStore((state) => state.uploadAsset);
   const [editorOpen, setEditorOpen] = useState(false);
   const [gridMenuOpen, setGridMenuOpen] = useState(false);
-  const [activePanel, setActivePanel] = useState<"lighting" | "angle" | null>(null);
+  const [activePanel, setActivePanel] = useState<"angle" | null>(null);
   const previewUrl = props.data.thumbnailUrl || props.data.url;
   const ratio = useMemo(() => ratioFromDimensions(props.data.width, props.data.height) || props.data.aspectRatio || "9:16", [props.data.aspectRatio, props.data.height, props.data.width]);
 
@@ -130,24 +129,10 @@ export function ImageNode(props: NodeProps<ImageNodeData>) {
     link.click();
   }
 
-  function togglePanel(panel: "lighting" | "angle") {
+  function togglePanel(panel: "angle") {
     setGridMenuOpen(false);
     setActivePanel((value) => value === panel ? null : panel);
   }
-
-  const lightingPanel = activePanel === "lighting" ? (
-    <div className="image-asset-command-panel is-lighting">
-      <button type="button" className="image-asset-panel-close" title="关闭" onClick={() => setActivePanel(null)}><X size={14} /></button>
-      <div className="image-asset-panel-eyebrow"><SunMedium size={14} /> 图片生成工具</div>
-      <div className="image-asset-panel-title">打光效果</div>
-      <div className="image-asset-panel-copy">选择光线方案，创建已连接的图生图节点；主体、商品结构和构图保持不变。</div>
-      <div className="image-asset-panel-grid">
-        {["左侧光", "顶部光", "右侧光", "前方光", "轮廓光", "柔光棚拍"].map((label) => (
-          <button key={label} type="button" onClick={() => { setActivePanel(null); createImageFollowUp(`基于参考图片做${label}打光优化：保持主体、构图和比例不变，只调整光线方向、亮度层次、质感和商业精修观感。`, `${label}打光`); }}>{label}</button>
-        ))}
-      </div>
-    </div>
-  ) : null;
 
   const anglePanel = activePanel === "angle" ? (
     <div className="image-asset-command-panel is-angle">
@@ -172,19 +157,19 @@ export function ImageNode(props: NodeProps<ImageNodeData>) {
         <button type="button" className="image-asset-tool" title="多角度视频参考" aria-label="多角度视频参考" data-tooltip="打开多角度编辑器" onClick={() => togglePanel("angle")}>
           <Orbit size={15} /><span>多角度</span>
         </button>
-        <button type="button" className="image-asset-tool" title="打光优化" aria-label="打光优化" data-tooltip="打开打光参数面板" onClick={() => togglePanel("lighting")}>
-          <SunMedium size={15} /><span>打光</span>
+        <button type="button" className="image-asset-tool" title="局部重绘" aria-label="局部重绘" data-tooltip="涂抹要修改的区域" onClick={() => { setActivePanel(null); setGridMenuOpen(false); setEditorOpen(true); }}>
+          <Brush size={15} /><span>局部重绘</span>
         </button>
         <div className={`image-asset-tool-menu ${gridMenuOpen ? "is-open" : ""}`}>
-          <button type="button" className="image-asset-tool" title="九宫格与设定图" aria-label="九宫格与设定图" data-tooltip="生成设定图和分镜图" onClick={() => { setActivePanel(null); setGridMenuOpen((value) => !value); }}>
-            <Grid3X3 size={15} /><span>九宫格</span><ChevronDown size={13} />
+          <button type="button" className="image-asset-tool" title="分镜组图与视觉档案" aria-label="分镜组图与视觉档案" data-tooltip="整理镜头与视觉一致性" onClick={() => { setActivePanel(null); setGridMenuOpen((value) => !value); }}>
+            <LayoutGrid size={15} /><span>分镜组图</span><ChevronDown size={13} />
           </button>
           {gridMenuOpen && (
             <div className="image-asset-tool-popover">
-              {imageGridActions.map((item) => {
+              {imageSequenceActions.map((item) => {
                 const Icon = item.icon;
                 return (
-                  <button key={item.label} type="button" onClick={() => { setGridMenuOpen(false); createImageFollowUp(item.prompt, item.label, item.label.includes("四宫格") ? "1:1" : ratio); }}>
+                  <button key={item.label} type="button" onClick={() => { setGridMenuOpen(false); createImageFollowUp(item.prompt, item.label, item.label === "连续动作板" ? "1:1" : ratio); }}>
                     <Icon size={15} /><span>{item.label}</span>
                   </button>
                 );
@@ -200,12 +185,10 @@ export function ImageNode(props: NodeProps<ImageNodeData>) {
         </button>
       </div>
       <div className="image-asset-tool-group is-icons">
-        <button type="button" className="image-asset-icon-tool" title="编辑涂抹" aria-label="编辑涂抹" data-tooltip="编辑涂抹" onClick={() => setEditorOpen(true)}><Brush size={15} /></button>
         <button type="button" className="image-asset-icon-tool" title="下载" aria-label="下载" data-tooltip="下载素材" onClick={downloadCurrent}><Download size={15} /></button>
         <button type="button" className="image-asset-icon-tool" title="放大预览" aria-label="放大预览" data-tooltip="放大预览" onClick={() => window.open(previewUrl, "_blank", "noopener,noreferrer")}><Maximize2 size={15} /></button>
         <button type="button" className="image-asset-icon-tool is-danger" title="删除节点" aria-label="删除节点" data-tooltip="删除节点" onClick={() => deleteNode(props.id)}><Trash2 size={15} /></button>
       </div>
-      {lightingPanel}
       {anglePanel}
     </div>
   ) : null;

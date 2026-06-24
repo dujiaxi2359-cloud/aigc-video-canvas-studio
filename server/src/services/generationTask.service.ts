@@ -60,6 +60,11 @@ export async function saveGenerationTask(input: {
   const db = await getDb();
   const { workspace, user } = requireRequestContext();
   const timestamp = now();
+  const existing = await db.get<GenerationTaskRow>("SELECT * FROM generation_tasks WHERE id = ? AND workspace_id = ?", input.id, workspace.id);
+  const previousResult = existing?.result_json ? JSON.parse(existing.result_json) as unknown : undefined;
+  const mergedResult = previousResult && input.result && typeof previousResult === "object" && typeof input.result === "object"
+    ? { ...previousResult as Record<string, unknown>, ...input.result as Record<string, unknown> }
+    : input.result ?? previousResult;
   await db.run(
     `INSERT INTO generation_tasks (id, workspace_id, user_id, status, progress, result_json, error_message, created_at, updated_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -73,9 +78,9 @@ export async function saveGenerationTask(input: {
     workspace.id,
     user.id,
     input.status,
-    input.progress ?? 0,
-    input.result === undefined ? undefined : JSON.stringify(input.result),
-    input.errorMessage,
+    input.progress ?? existing?.progress ?? 0,
+    mergedResult === undefined ? undefined : JSON.stringify(mergedResult),
+    input.errorMessage ?? existing?.error_message,
     timestamp,
     timestamp
   );

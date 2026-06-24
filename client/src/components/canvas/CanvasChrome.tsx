@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import {
   ArrowLeft, Blocks, Bot, ChevronDown, Clock3, Copy, Download, FileAudio, Folder, FolderPlus,
   Eye, History, Image as ImageIcon, LayoutTemplate, Link2, MessageCircle, MoreHorizontal, Plus, Search,
-  ScrollText, Settings, Share2, Star, Trash2, Upload, UserRound, UsersRound, Video, X
+  MousePointer2, ScrollText, Settings, Share2, Star, Trash2, Upload, UserRound, UsersRound, Video, X
 } from "lucide-react";
 import type { Page } from "../../App";
 import { useI18nStore } from "../../i18n";
@@ -395,17 +395,20 @@ export function CanvasDrawer({ drawer, onClose }: { drawer: DrawerName; onClose:
 }
 
 export function CanvasEmptyGuide({ onAdd, onTemplates }: { onAdd: (type: WorkflowNodeType, position?: { x: number; y: number }) => void; onTemplates: () => void }) {
-  const t = useI18nStore((state) => state.t);
-  const actions: Array<{ label: string; hint: string; type?: WorkflowNodeType; icon: ElementType; position?: { x: number; y: number }; onClick?: () => void; tone: string }> = [
-    { label: "故事脚本生成", hint: "剧本、分镜、Shot Prompt", type: "script", icon: ScrollText, position: { x: 180, y: 160 }, tone: "is-blue" },
-    { label: "角色三视图", hint: "正侧背设定参考", type: "imageGenerate", icon: UserRound, position: { x: 620, y: 150 }, tone: "is-rose" },
-    { label: "首帧图生视频", hint: "首帧、参考图转视频", type: "video", icon: ImageIcon, position: { x: 1060, y: 150 }, tone: "is-amber" },
-    { label: "音频生视频", hint: "音乐、旁白驱动画面", type: "audio", icon: FileAudio, position: { x: 1500, y: 160 }, tone: "is-teal" }
+  const actions: Array<{ label: string; type: WorkflowNodeType; icon: ElementType; position: { x: number; y: number } }> = [
+    { label: "拆解脚本", type: "script", icon: ScrollText, position: { x: 220, y: 180 } },
+    { label: "建立角色", type: "imageGenerate", icon: UserRound, position: { x: 660, y: 170 } },
+    { label: "生成首帧", type: "imageGenerate", icon: ImageIcon, position: { x: 1100, y: 170 } },
+    { label: "音画起稿", type: "audio", icon: FileAudio, position: { x: 1540, y: 180 } }
   ];
   return (
     <div className="pointer-events-none fixed inset-0 z-10 flex items-center justify-center px-8">
       <motion.div layout className="canvas-empty-guide pointer-events-auto" transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}>
-        <div className="canvas-empty-kicker">{t("canvas.emptyTitlePrefix")}{t("canvas.emptyTitleSuffix")}</div>
+        <div className="canvas-empty-heading">
+          <span className="canvas-empty-gesture"><MousePointer2 size={18} /> 双击空白处</span>
+          <strong>让一个想法在 Moon 画布里长成完整作品</strong>
+        </div>
+        <p className="canvas-empty-copy">自由落下节点，或从常用创作路径开始。</p>
         <div className="canvas-empty-actions">
           {actions.map((item) => {
             const Icon = item.icon;
@@ -413,20 +416,17 @@ export function CanvasEmptyGuide({ onAdd, onTemplates }: { onAdd: (type: Workflo
               <button
                 key={item.label}
                 type="button"
-                className={`canvas-empty-task ${item.tone}`}
-                onClick={() => item.onClick ? item.onClick() : item.type && onAdd(item.type, item.position)}
+                className="canvas-empty-task"
+                onClick={() => onAdd(item.type, item.position)}
               >
                 <span className="canvas-empty-task-icon"><Icon size={18} /></span>
-                <span className="canvas-empty-task-text">
-                  <strong>{item.label}</strong>
-                  <small>{item.hint}</small>
-                </span>
+                <span className="canvas-empty-task-text"><strong>{item.label}</strong></span>
               </button>
             );
           })}
           <button type="button" onClick={onTemplates} className="canvas-empty-task is-template">
             <span className="canvas-empty-task-icon"><LayoutTemplate size={18} /></span>
-            <span className="canvas-empty-task-text"><strong>模板工作流</strong><small>从预设结构开始</small></span>
+            <span className="canvas-empty-task-text"><strong>浏览模板</strong></span>
           </button>
         </div>
       </motion.div>
