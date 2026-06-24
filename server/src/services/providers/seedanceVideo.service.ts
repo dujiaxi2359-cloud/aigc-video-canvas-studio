@@ -182,7 +182,10 @@ function endpointMatchesProtocol(endpoint: string | undefined, apiFamily: VideoA
   const value = endpoint.toLowerCase().replace(/\/+$/g, "");
   if (apiFamily === "seedance2_native") return /\/(?:v1\/video\/generations|video\/generations)$/.test(value);
   if (apiFamily === "unified_video_create") return /\/v1\/video\/create$/.test(value);
-  if (apiFamily === "omni_fast" || apiFamily === "omni_fast_v2v" || apiFamily === "openai_videos") {
+  if (apiFamily === "omni_fast" || apiFamily === "omni_fast_v2v") {
+    return /\/(?:v1\/videos|videos)$/.test(value);
+  }
+  if (apiFamily === "openai_videos") {
     return /\/(?:v1\/videos|videos|v1\/video\/create)$/.test(value);
   }
   return !/\/v1\/videos\/generations$/.test(value);
@@ -200,7 +203,9 @@ function protocolCreateEndpointCandidates(params: SeedanceProviderParams) {
     endpoints.push(joinUrl(root, "/v1/video/generations"), joinUrl(root, "/video/generations"));
   } else if (apiFamily === "unified_video_create") {
     endpoints.push(joinUrl(root, "/v1/video/create"), joinUrl(root, "/v1/videos"));
-  } else if (apiFamily === "omni_fast" || apiFamily === "omni_fast_v2v" || apiFamily === "openai_videos") {
+  } else if (apiFamily === "omni_fast" || apiFamily === "omni_fast_v2v") {
+    endpoints.push(joinUrl(root, "/v1/videos"));
+  } else if (apiFamily === "openai_videos") {
     endpoints.push(joinUrl(root, "/v1/videos"));
     if (!isNewTokenRelay(params)) endpoints.push(joinUrl(root, "/v1/video/create"));
   } else {

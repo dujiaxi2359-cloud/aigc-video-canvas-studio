@@ -861,6 +861,27 @@ const newtokenOmniCandidates = relayCreateEndpointCandidates({
 assert(newtokenOmniCandidates[0] === "https://api.newtoken.club/v1/videos", "Omni relay candidates should prefer /v1/videos even if an old bad endpoint was saved");
 assert(!newtokenOmniCandidates.some((endpoint) => /\/v1\/videos\/generations$/i.test(endpoint)), "Omni relay candidates must not try the incompatible /v1/videos/generations path");
 assert(!newtokenOmniCandidates.some((endpoint) => /\/v1\/video\/create$/i.test(endpoint)), "NewToken Omni must not fallback to /v1/video/create because its docs pin /v1/videos");
+const genericOmniCandidates = relayCreateEndpointCandidates({
+  providerId: "google",
+  modelName: "omni-fast",
+  apiBaseUrl: "https://ai.cy88.ai/v1",
+  apiKey: "sk-test-key",
+  prompt: "omni route cleanup",
+  nodeId: "node",
+  modelConfigId: "model",
+  inputMode: "reference-to-video",
+  duration: 10,
+  aspectRatio: "9:16",
+  resolution: "720p",
+  generateCount: 1,
+  videoRequestConfig: {
+    ...newtokenOmniConfig,
+    baseUrl: "https://ai.cy88.ai/v1",
+    finalUrl: "https://ai.cy88.ai/v1/videos",
+    apiFamily: "omni_fast"
+  }
+} as never);
+assert(genericOmniCandidates.length === 1 && genericOmniCandidates[0] === "https://ai.cy88.ai/v1/videos", "Omni relays should only use the documented /v1/videos path");
 assert(configuredRelayModelName({ modelName: "veo_3_1-fast", apiBaseUrl: "https://api.newtoken.club/v1" } as never) === "veo-3-1", "NewToken Veo should use the documented veo-3-1 model id");
 const newtokenVeoBody = buildVeoProxyBody({
   endpoint: "https://api.newtoken.club/v1/videos",
