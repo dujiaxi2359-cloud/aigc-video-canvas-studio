@@ -350,6 +350,8 @@ async function ensureOmniFastV2vConfigs(database: AppDatabase) {
     const baseCapabilities = JSON.parse(row.capabilities_json) as ModelCapabilities;
     const capabilities = normalizeVideoCapabilities({
       ...baseCapabilities,
+      capabilitySource: "upstream",
+      upstreamModelId: "omni-fast-v2v",
       provider: "veo",
       channel: "proxy",
       apiFamily: "omni_fast_v2v",
@@ -439,6 +441,8 @@ async function repairOmniFastV2vConfigs(database: AppDatabase) {
     const existingCapabilities = JSON.parse(row.capabilities_json) as ModelCapabilities;
     const capabilities = normalizeVideoCapabilities({
       ...existingCapabilities,
+      capabilitySource: "upstream",
+      upstreamModelId: "omni-fast-v2v",
       provider: "veo",
       channel: "proxy",
       apiFamily: "omni_fast_v2v",
