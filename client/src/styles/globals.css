@@ -8029,6 +8029,233 @@ video:-webkit-full-screen,
   text-align: center !important;
 }
 
+/* Moon floating controls v3: precision toolbars with reduced chrome and stronger rhythm. */
+:root {
+  --moon-control-surface: rgba(19, 20, 22, 0.95);
+  --moon-control-surface-raised: rgba(22, 23, 26, 0.98);
+  --moon-control-border: rgba(255, 255, 255, 0.06);
+  --moon-control-border-strong: rgba(255, 255, 255, 0.1);
+  --moon-control-text: rgba(199, 204, 214, 0.72);
+  --moon-control-text-strong: rgba(250, 251, 252, 0.96);
+  --moon-control-muted: rgba(155, 160, 172, 0.74);
+  --moon-control-hover: rgba(255, 255, 255, 0.065);
+  --moon-control-active: rgba(22, 26, 34, 0.98);
+  --moon-control-mint: #8de8d4;
+  --moon-control-danger: #ff7a7a;
+  --moon-control-font: "SF Pro Text", "Avenir Next", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", ui-sans-serif, system-ui, sans-serif;
+}
+
+.image-asset-production-toolbar {
+  top: -54px !important;
+  height: 34px !important;
+  gap: 8px !important;
+  max-width: min(940px, calc(100vw - 32px)) !important;
+}
+
+.image-asset-tool-group {
+  height: 34px !important;
+  gap: 18px !important;
+  border-color: var(--moon-control-border) !important;
+  border-radius: 8px !important;
+  background: var(--moon-control-surface) !important;
+  padding: 0 14px !important;
+  box-shadow:
+    0 12px 24px -4px rgba(0, 0, 0, 0.6),
+    inset 0 1px 0 rgba(255, 255, 255, 0.035) !important;
+  backdrop-filter: blur(14px) saturate(1.04) !important;
+  -webkit-backdrop-filter: blur(14px) saturate(1.04) !important;
+}
+
+.image-asset-tool-group.is-icons {
+  gap: 14px !important;
+  padding: 0 12px !important;
+}
+
+.image-asset-tool,
+.image-asset-icon-tool {
+  position: relative !important;
+  height: 24px !important;
+  min-width: 0 !important;
+  gap: 6px !important;
+  border-radius: 4px !important;
+  padding: 0 !important;
+  color: var(--moon-control-muted) !important;
+  font-size: 0.8125rem !important;
+  font-weight: 500 !important;
+}
+
+.image-asset-tool {
+  padding: 0 2px !important;
+}
+
+.image-asset-icon-tool {
+  width: 22px !important;
+  height: 24px !important;
+}
+
+.image-asset-tool svg,
+.image-asset-icon-tool svg {
+  width: 13px !important;
+  height: 13px !important;
+  stroke-width: 1.75 !important;
+}
+
+.image-asset-tool:hover,
+.image-asset-icon-tool:hover,
+.image-asset-tool-menu.is-open > .image-asset-tool {
+  background: rgba(255, 255, 255, 0.045) !important;
+  color: var(--moon-control-text-strong) !important;
+  box-shadow: none !important;
+}
+
+.image-asset-tool.is-emphasis {
+  height: 24px !important;
+  gap: 6px !important;
+  border: 1px solid rgba(47, 58, 77, 0.86) !important;
+  border-radius: 4px !important;
+  background: #161a22 !important;
+  padding: 0 8px !important;
+  color: var(--moon-control-text-strong) !important;
+  box-shadow: none !important;
+}
+
+.image-asset-tool.is-emphasis span {
+  position: relative !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+}
+
+.image-asset-tool.is-emphasis span::after {
+  width: 4px;
+  height: 4px;
+  flex: 0 0 4px;
+  border-radius: 999px;
+  background: #10b981;
+  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.08);
+  content: "";
+}
+
+.image-asset-tool.is-emphasis small {
+  margin-left: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+  padding: 0 !important;
+  color: rgba(161, 166, 178, 0.72) !important;
+  font-size: 0.5rem !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.08em !important;
+}
+
+.image-asset-tool-menu {
+  position: relative !important;
+}
+
+.image-asset-tool-menu::before,
+.image-asset-tool.compact::after {
+  position: absolute;
+  top: 50%;
+  width: 1px;
+  height: 12px;
+  background: #050607;
+  border-right: 1px solid rgba(255, 255, 255, 0.05);
+  content: "";
+  transform: translateY(-50%);
+}
+
+.image-asset-tool-menu::before {
+  left: -14px;
+}
+
+.image-asset-tool.compact::after {
+  right: -14px;
+}
+
+.image-asset-icon-tool.is-danger:hover {
+  background: rgba(255, 80, 80, 0.08) !important;
+  color: var(--moon-control-danger) !important;
+}
+
+.image-asset-tool-popover {
+  top: calc(100% + 8px) !important;
+  border-radius: 8px !important;
+  background: var(--moon-control-surface-raised) !important;
+  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.52) !important;
+}
+
+.canvas-view-controls {
+  height: 36px !important;
+  gap: 10px !important;
+  border-color: var(--moon-control-border) !important;
+  border-radius: 8px !important;
+  background: var(--moon-control-surface) !important;
+  padding: 3px 10px !important;
+  box-shadow:
+    0 12px 24px -4px rgba(0, 0, 0, 0.6),
+    inset 0 1px 0 rgba(255, 255, 255, 0.035) !important;
+  backdrop-filter: blur(14px) saturate(1.04) !important;
+  -webkit-backdrop-filter: blur(14px) saturate(1.04) !important;
+}
+
+.canvas-view-controls button {
+  width: 28px !important;
+  height: 28px !important;
+  flex: 0 0 28px !important;
+  border-radius: 6px !important;
+  color: var(--moon-control-muted) !important;
+}
+
+.canvas-view-controls button svg {
+  width: 15px !important;
+  height: 15px !important;
+  stroke-width: 1.8 !important;
+}
+
+.canvas-view-controls button:hover {
+  background: rgba(255, 255, 255, 0.055) !important;
+}
+
+.canvas-view-controls button.is-active {
+  background: rgba(141, 232, 212, 0.12) !important;
+  color: var(--moon-control-mint) !important;
+  box-shadow: inset 0 0 0 1px rgba(141, 232, 212, 0.1) !important;
+}
+
+.canvas-view-controls input[type="range"] {
+  width: 112px !important;
+  height: 28px !important;
+  margin: 0 2px !important;
+}
+
+.canvas-view-controls input[type="range"]::-webkit-slider-runnable-track {
+  height: 3px !important;
+  background: rgba(255, 255, 255, 0.28) !important;
+}
+
+.canvas-view-controls input[type="range"]::-webkit-slider-thumb {
+  width: 14px !important;
+  height: 14px !important;
+  margin-top: -5.5px !important;
+  border-color: rgba(11, 12, 14, 0.82) !important;
+}
+
+.canvas-view-controls input[type="range"]::-moz-range-track {
+  height: 3px !important;
+  background: rgba(255, 255, 255, 0.28) !important;
+}
+
+.canvas-view-controls input[type="range"]::-moz-range-thumb {
+  width: 14px !important;
+  height: 14px !important;
+  border-color: rgba(11, 12, 14, 0.82) !important;
+}
+
+.canvas-view-zoom-readout {
+  min-width: 38px !important;
+  color: rgba(214, 219, 226, 0.82) !important;
+  font-size: 0.75rem !important;
+}
+
 @media (max-width: 900px) {
   .image-asset-production-toolbar {
     max-width: calc(100vw - 24px) !important;
