@@ -42,11 +42,19 @@ type State = {
   nodes: Node[];
   edges: Edge[];
   selectedNodeId?: string;
+  lastDeletion?: {
+    nodes: Node[];
+    edges: Edge[];
+    wasGeneratingVideo: boolean;
+    deletedAt: number;
+  };
   addNode: (type: WorkflowNodeType, position?: { x: number; y: number }) => void;
   addAssetNode: (asset: { assetId: string; type: string; url?: string; filePath?: string; thumbnailUrl?: string; width?: number; height?: number; aspectRatio?: string; duration?: number }, position?: { x: number; y: number }) => void;
   addConnectedNode: (sourceId: string, type: WorkflowNodeType, position?: { x: number; y: number }, data?: Record<string, unknown>) => void;
   updateNodeData: (id: string, data: Record<string, unknown>) => void;
   deleteNode: (id: string) => void;
+  restoreLastDeletion: () => void;
+  clearLastDeletion: () => void;
   duplicateNode: (id: string) => void;
   deleteEdge: (id: string) => void;
   deleteEdges: (ids: string[]) => void;
@@ -83,6 +91,23 @@ function normalizeLegacyNodeTitles(nodes: Node[]) {
     if (title && !/^(Gemini\s*(智能体|Agent)|Agent\s*智能体)$/i.test(title)) return node;
     return { ...node, data: { ...data, title: "创意工作台" } };
   });
+}
+
+function isGeneratingVideoNode(node: Node) {
+  if (node.type !== "video") return false;
+  const status = String((node.data as { status?: string } | undefined)?.status || "").toLowerCase();
+  return ["generating", "processing", "pending", "queued", "running"].includes(status);
+}
+
+function confirmNodeDeletion(nodes: Node[]) {
+  const generatingVideoCount = nodes.filter(isGeneratingVideoNode).length;
+  if (generatingVideoCount > 0) {
+    return window.confirm(
+      `${generatingVideoCount} 个视频节点仍在生成。\n\n删除节点不会取消后台任务，完成后可在「历史记录 > 视频历史」或「素材库」找回。\n\n仍要删除吗？`
+    );
+  }
+  if (nodes.length > 1) return window.confirm(`确定删除 ${nodes.length} 个节点及相关连线吗？`);
+  return true;
 }
 
 function nextPosition(nodes: Node[], position?: { x: number; y: number }) {
@@ -288,12 +313,47 @@ export const useCanvasStore = create<State>((set, get) => ({
         return changed ? { ...node, data: nextData } : node;
       })
     })),
-  deleteNode: (id) =>
-    set((state) => ({
-      nodes: state.nodes.filter((node) => node.id !== id),
-      edges: state.edges.filter((edge) => edge.source !== id && edge.target !== id),
-      selectedNodeId: state.selectedNodeId === id ? undefined : state.selectedNodeId
-    })),
+  deleteNode: (id) => {
+    const current = get();
+    const node = current.nodes.find((item) => item.id === id);
+    if (!node || !confirmNodeDeletion([node])) return;
+    set((state) => {
+      const deletedEdges = state.edges.filter((edge) => edge.source === id || edge.target === id);
+      return {
+        nodes: state.nodes.filter((item) => item.id !== id),
+        edges: state.edges.filter((edge) => edge.source !== id && edge.target !== id),
+        selectedNodeId: state.selectedNodeId === id ? undefined : state.selectedNodeId,
+        lastDeletion: {
+          nodes: [node],
+          edges: deletedEdges,
+          wasGeneratingVideo: isGeneratingVideoNode(node),
+          deletedAt: Date.now()
+        }
+      };
+    });
+  },
+  restoreLastDeletion: () =>
+    set((state) => {
+      const deletion = state.lastDeletion;
+      if (!deletion) return {};
+      const existingNodeIds = new Set(state.nodes.map((node) => node.id));
+      const restoredNodes = deletion.nodes.filter((node) => !existingNodeIds.has(node.id));
+      const availableNodeIds = new Set([...state.nodes, ...restoredNodes].map((node) => node.id));
+      const existingEdgeIds = new Set(state.edges.map((edge) => edge.id));
+      const restoredEdges = deletion.edges.filter((edge) =>
+        !existingEdgeIds.has(edge.id) && availableNodeIds.has(edge.source) && availableNodeIds.has(edge.target)
+      );
+      return {
+        nodes: [
+          ...state.nodes.map((node) => ({ ...node, selected: false })),
+          ...restoredNodes.map((node, index) => ({ ...node, selected: index === 0 }))
+        ],
+        edges: [...state.edges.map((edge) => ({ ...edge, selected: false })), ...restoredEdges.map((edge) => ({ ...edge, selected: false }))],
+        selectedNodeId: restoredNodes[0]?.id,
+        lastDeletion: undefined
+      };
+    }),
+  clearLastDeletion: () => set({ lastDeletion: undefined }),
   duplicateNode: (id) =>
     set((state) => {
       const source = state.nodes.find((node) => node.id === id);
@@ -314,17 +374,30 @@ export const useCanvasStore = create<State>((set, get) => ({
     }),
   deleteEdge: (id) => set((state) => ({ edges: state.edges.filter((edge) => edge.id !== id) })),
   deleteEdges: (ids) => set((state) => ({ edges: state.edges.filter((edge) => !ids.includes(edge.id)) })),
-  deleteSelected: () =>
+  deleteSelected: () => {
+    const current = get();
+    const selectedNodes = current.nodes.filter((node) => node.selected);
+    const selectedNodeIds = new Set(selectedNodes.map((node) => node.id));
+    const selectedEdgeIds = new Set(current.edges.filter((edge) => edge.selected).map((edge) => edge.id));
+    if (!selectedNodeIds.size && !selectedEdgeIds.size) return;
+    if (selectedNodes.length && !confirmNodeDeletion(selectedNodes)) return;
     set((state) => {
-      const selectedNodeIds = new Set(state.nodes.filter((node) => node.selected).map((node) => node.id));
-      const selectedEdgeIds = new Set(state.edges.filter((edge) => edge.selected).map((edge) => edge.id));
-      if (!selectedNodeIds.size && !selectedEdgeIds.size) return {};
+      const deletedEdges = state.edges.filter((edge) => selectedEdgeIds.has(edge.id) || selectedNodeIds.has(edge.source) || selectedNodeIds.has(edge.target));
       return {
         nodes: state.nodes.filter((node) => !selectedNodeIds.has(node.id)),
         edges: state.edges.filter((edge) => !selectedEdgeIds.has(edge.id) && !selectedNodeIds.has(edge.source) && !selectedNodeIds.has(edge.target)),
-        selectedNodeId: selectedNodeIds.has(state.selectedNodeId ?? "") ? undefined : state.selectedNodeId
+        selectedNodeId: selectedNodeIds.has(state.selectedNodeId ?? "") ? undefined : state.selectedNodeId,
+        lastDeletion: selectedNodes.length
+          ? {
+              nodes: selectedNodes,
+              edges: deletedEdges,
+              wasGeneratingVideo: selectedNodes.some(isGeneratingVideoNode),
+              deletedAt: Date.now()
+            }
+          : state.lastDeletion
       };
-    }),
+    });
+  },
   disconnectNode: (id) => set((state) => ({ edges: state.edges.filter((edge) => edge.source !== id && edge.target !== id) })),
   disconnectNodeInputs: (id) => set((state) => ({ edges: state.edges.filter((edge) => edge.target !== id) })),
   disconnectNodeOutputs: (id) => set((state) => ({ edges: state.edges.filter((edge) => edge.source !== id) })),
@@ -334,7 +407,7 @@ export const useCanvasStore = create<State>((set, get) => ({
       return { nodes: state.nodes.filter((node) => connected.has(node.id)) };
     }),
   organizeCanvas: () => set((state) => ({ nodes: organizeNodes(state.nodes, state.edges), selectedNodeId: undefined })),
-  clearCanvas: () => set({ nodes: [], edges: [], selectedNodeId: undefined }),
+  clearCanvas: () => set({ nodes: [], edges: [], selectedNodeId: undefined, lastDeletion: undefined }),
   selectAll: () => set((state) => ({ selectedNodeId: state.nodes[0]?.id, nodes: state.nodes.map((node) => ({ ...node, selected: true })), edges: state.edges.map((edge) => ({ ...edge, selected: true })) })),
   clearSelection: () => set((state) => ({ selectedNodeId: undefined, nodes: state.nodes.map((node) => ({ ...node, selected: false })), edges: state.edges.map((edge) => ({ ...edge, selected: false })) })),
   selectEdge: (id) => set((state) => ({ selectedNodeId: undefined, nodes: state.nodes.map((node) => ({ ...node, selected: false })), edges: state.edges.map((edge) => ({ ...edge, selected: edge.id === id })) })),
@@ -351,7 +424,7 @@ export const useCanvasStore = create<State>((set, get) => ({
   })),
   loadProject: (nodes, edges) => {
     const normalizedNodes = normalizeLegacyNodeTitles(nodes);
-    set({ nodes: normalizedNodes, edges, selectedNodeId: normalizedNodes.find((node) => node.selected)?.id });
+    set({ nodes: normalizedNodes, edges, selectedNodeId: normalizedNodes.find((node) => node.selected)?.id, lastDeletion: undefined });
   },
   getCanvasState: () => {
     const state = get();

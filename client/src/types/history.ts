@@ -1,5 +1,6 @@
 export type GenerationHistory = {
   id: string;
+  generationType?: "image" | "video" | "audio" | "text";
   nodeId: string;
   projectId?: string;
   modelConfigId?: string;
@@ -10,6 +11,7 @@ export type GenerationHistory = {
   aspectRatio?: string;
   resolution?: string;
   status: "success" | "processing" | "error";
+  outputAssetId?: string;
   outputUrl?: string;
   errorMessage?: string;
   createdAt: number;

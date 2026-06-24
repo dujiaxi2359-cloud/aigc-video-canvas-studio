@@ -42,6 +42,7 @@ function assetDragPayload(asset: Asset) {
 }
 
 function historyKind(item: GenerationHistory) {
+  if (item.generationType === "image" || item.generationType === "video") return item.generationType;
   const value = `${item.inputMode || ""} ${item.outputUrl || ""}`.toLowerCase();
   return /\.(png|jpe?g|webp)(\?|$)/.test(value) || value.includes("image") ? "image" : "video";
 }
@@ -281,11 +282,16 @@ function AssetDrawer({ onClose }: { onClose: () => void }) {
 function HistoryDrawer({ onClose }: { onClose: () => void }) {
   const { histories, fetchHistories, deleteHistory } = useHistoryStore();
   const addAssetNode = useCanvasStore((state) => state.addAssetNode);
-  const [tab, setTab] = useState<"image" | "video" | "audio" | "3d">("image");
+  const [tab, setTab] = useState<"image" | "video" | "audio" | "3d">(() => {
+    const saved = window.sessionStorage.getItem("moon:history-tab");
+    return saved === "video" || saved === "audio" || saved === "3d" ? saved : "image";
+  });
   const [preview, setPreview] = useState<GenerationHistory | null>(null);
 
   useEffect(() => {
-    fetchHistories().catch(() => undefined);
+    void fetchHistories().catch(() => undefined);
+    const interval = window.setInterval(() => void fetchHistories().catch(() => undefined), 5000);
+    return () => window.clearInterval(interval);
   }, [fetchHistories]);
 
   const visible = histories.filter((item) => tab === "image" ? historyKind(item) === "image" : tab === "video" ? historyKind(item) === "video" : false);
@@ -303,7 +309,7 @@ function HistoryDrawer({ onClose }: { onClose: () => void }) {
     <>
     <DrawerFrame title="历史" onClose={onClose}>
       <div className="flex border-b border-white/[0.07] px-3 pt-2">
-        {([["image", "图片历史"], ["video", "视频历史"], ["audio", "音频"], ["3d", "3D 世界"]] as const).map(([value, label]) => <button key={value} onClick={() => setTab(value)} className={`drawer-tab ${tab === value ? "is-active" : ""}`}>{label}</button>)}
+        {([["image", "图片历史"], ["video", "视频历史"], ["audio", "音频"], ["3d", "3D 世界"]] as const).map(([value, label]) => <button key={value} onClick={() => { window.sessionStorage.setItem("moon:history-tab", value); setTab(value); }} className={`drawer-tab ${tab === value ? "is-active" : ""}`}>{label}</button>)}
       </div>
       <div className="grid grid-cols-3 gap-2 p-3">
         {samples.map((item, index) => {
@@ -312,9 +318,10 @@ function HistoryDrawer({ onClose }: { onClose: () => void }) {
           return (
             <div key={item.id} className={`drawer-history-tile ${!src ? `is-placeholder tone-${index % 4}` : ""}`}>
               {src && kind === "image" ? <img src={src} alt="" /> : src && kind === "video" ? <video src={src} muted /> : <span>{kind === "image" ? <ImageIcon size={19} /> : <Video size={19} />}</span>}
+              {!item.id.startsWith("mock-") && <span className={`drawer-history-status is-${item.status}`}>{item.status === "processing" ? "生成中" : item.status === "error" ? "失败" : "已完成"}</span>}
               {item.outputUrl && <span className="drawer-resource-actions">
                 <button type="button" title="预览" onClick={() => setPreview(item)}><Eye size={12} /></button>
-                <button type="button" title="加入画布" onClick={() => addAssetNode({ assetId: item.id, type: kind === "image" ? "image" : "video", url: item.outputUrl, aspectRatio: item.aspectRatio, duration: item.duration })}><Plus size={12} /></button>
+                <button type="button" title="加入画布" onClick={() => addAssetNode({ assetId: item.outputAssetId || item.id, type: kind === "image" ? "image" : "video", url: item.outputUrl, aspectRatio: item.aspectRatio, duration: item.duration })}><Plus size={12} /></button>
                 <button type="button" title="下载" onClick={() => download(item)}><Download size={12} /></button>
                 <button type="button" title="删除" onClick={() => void deleteHistory(item.id)}><Trash2 size={12} /></button>
               </span>}

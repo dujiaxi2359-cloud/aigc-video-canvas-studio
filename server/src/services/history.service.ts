@@ -17,15 +17,38 @@ function toHistory(row: any) {
     aspectRatio: row.aspect_ratio,
     resolution: row.resolution,
     status: row.status,
-    outputUrl: row.output_url,
+    outputUrl: row.output_asset_url || row.output_url,
     errorMessage: row.error_message,
+    outputAssetId: row.output_asset_id,
     createdAt: row.created_at
   };
 }
 
 export async function listHistory() {
   const db = await getDb();
-  const rows = await db.all("SELECT * FROM generation_history WHERE workspace_id = ? ORDER BY created_at DESC", requireRequestContext().workspace.id);
+  const rows = await db.all(
+    `SELECT history.*,
+      (SELECT asset.id
+       FROM assets asset
+       WHERE asset.workspace_id = history.workspace_id
+         AND asset.node_id = history.node_id
+         AND asset.deleted_at IS NULL
+         AND asset.created_at <= history.created_at + 5000
+       ORDER BY asset.created_at DESC
+       LIMIT 1) AS output_asset_id,
+      (SELECT asset.url
+       FROM assets asset
+       WHERE asset.workspace_id = history.workspace_id
+         AND asset.node_id = history.node_id
+         AND asset.deleted_at IS NULL
+         AND asset.created_at <= history.created_at + 5000
+       ORDER BY asset.created_at DESC
+       LIMIT 1) AS output_asset_url
+     FROM generation_history history
+     WHERE history.workspace_id = ?
+     ORDER BY history.created_at DESC`,
+    requireRequestContext().workspace.id
+  );
   return rows.map(toHistory);
 }
 

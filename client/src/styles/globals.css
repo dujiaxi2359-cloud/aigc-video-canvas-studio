@@ -3006,6 +3006,9 @@ select {
 .asset-folder-menu button.is-danger { color: rgba(255,165,165,.78); }
 .drawer-media-tile,
 .drawer-history-tile { position: relative; display: grid; aspect-ratio: 1; place-items: center; overflow: hidden; border: 1px solid rgba(255,255,255,.08); border-radius: 9px; background: rgba(255,255,255,.04); color: rgba(255,255,255,.28); }
+.drawer-history-status { position: absolute; left: 7px; top: 7px; z-index: 3; border: 1px solid rgba(255,255,255,.1); border-radius: 999px; background: rgba(12,13,15,.78); padding: 3px 7px; color: rgba(255,255,255,.72); font-size: 10px; font-weight: 600; line-height: 1; backdrop-filter: blur(10px); }
+.drawer-history-status.is-processing { border-color: rgba(141,232,212,.2); color: #8de8d4; }
+.drawer-history-status.is-error { border-color: rgba(255,122,122,.22); color: #ff9b9b; }
 .drawer-media-tile img, .drawer-media-tile video, .drawer-history-tile img, .drawer-history-tile video { width: 100%; height: 100%; object-fit: cover; }
 .drawer-media-tile:hover,
 .drawer-history-tile:hover { border-color: rgba(255,255,255,.18); }
@@ -7597,6 +7600,83 @@ select optgroup {
 .canvas-file-drop-overlay.is-importing {
   border-style: solid;
   border-color: rgba(141, 232, 212, 0.28);
+}
+
+.canvas-delete-undo-toast {
+  position: absolute;
+  left: 50%;
+  bottom: 20px;
+  z-index: 84;
+  display: flex;
+  min-height: 48px;
+  max-width: min(620px, calc(100vw - 32px));
+  align-items: center;
+  gap: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  border-radius: 12px;
+  background: rgba(22, 23, 25, 0.94);
+  padding: 6px 7px 6px 14px;
+  box-shadow: 0 18px 52px rgba(0, 0, 0, 0.46), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  color: rgba(250, 251, 252, 0.94);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  transform: translateX(-50%);
+}
+
+.canvas-delete-undo-copy {
+  display: grid;
+  min-width: 220px;
+  gap: 2px;
+  padding-right: 6px;
+}
+
+.canvas-delete-undo-copy strong {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+.canvas-delete-undo-copy small {
+  color: rgba(246, 248, 250, 0.5);
+  font-size: 0.6875rem;
+  line-height: 1.35;
+  letter-spacing: 0;
+}
+
+.canvas-delete-undo-toast button {
+  display: inline-flex;
+  height: 34px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border-radius: 8px;
+  padding: 0 10px;
+  color: rgba(246, 248, 250, 0.68);
+  font-size: 0.75rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.canvas-delete-undo-toast button:hover {
+  background: rgba(255, 255, 255, 0.07);
+  color: rgba(250, 251, 252, 0.94);
+}
+
+.canvas-delete-undo-toast button.is-primary {
+  background: rgba(141, 232, 212, 0.1);
+  color: #a9f2e3;
+}
+
+@media (max-width: 640px) {
+  .canvas-delete-undo-toast {
+    bottom: 64px;
+    width: calc(100vw - 24px);
+    flex-wrap: wrap;
+  }
+
+  .canvas-delete-undo-copy {
+    width: 100%;
+  }
 }
 
 .canvas-file-drop-message {

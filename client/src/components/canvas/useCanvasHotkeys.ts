@@ -13,6 +13,7 @@ export function useCanvasHotkeys() {
   const selectAll = useCanvasStore((state) => state.selectAll);
   const clearSelection = useCanvasStore((state) => state.clearSelection);
   const duplicateNode = useCanvasStore((state) => state.duplicateNode);
+  const restoreLastDeletion = useCanvasStore((state) => state.restoreLastDeletion);
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -21,10 +22,12 @@ export function useCanvasHotkeys() {
       if (event.key === "Delete" || event.key === "Backspace") {
         event.preventDefault();
         const { nodes, edges } = useCanvasStore.getState();
-        const selectedNodes = nodes.filter((node) => node.selected);
-        const selectedEdges = edges.filter((edge) => edge.selected);
-        if (selectedNodes.length > 1 && !window.confirm(`确定删除 ${selectedNodes.length} 个节点及相关连线吗？`)) return;
-        if (selectedNodes.length || selectedEdges.length) deleteSelected();
+        if (nodes.some((node) => node.selected) || edges.some((edge) => edge.selected)) deleteSelected();
+      }
+
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "z" && useCanvasStore.getState().lastDeletion) {
+        event.preventDefault();
+        restoreLastDeletion();
       }
 
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "a") {
@@ -46,6 +49,5 @@ export function useCanvasHotkeys() {
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [clearSelection, deleteSelected, duplicateNode, selectAll]);
+  }, [clearSelection, deleteSelected, duplicateNode, restoreLastDeletion, selectAll]);
 }
-

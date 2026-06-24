@@ -10,6 +10,7 @@ import { historyApi } from "../../services/historyApi";
 import { modelConfigApi } from "../../services/modelConfigApi";
 import { useCanvasStore } from "../../store/canvasStore";
 import { useModelConfigStore } from "../../store/modelConfigStore";
+import { useProjectStore } from "../../store/projectStore";
 import { absoluteUploadUrl } from "../../utils/file";
 import { buildReferenceAwareVideoPrompt, compactAssetIds, resolvePromptReferencedVideoInputs, resolveVideoNodeInputs } from "../../utils/workflowInputs";
 import { diagnoseVideoChannel } from "../../utils/videoChannelCapability";
@@ -813,6 +814,7 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
       const result = await generationApi.video({
         clientRequestId,
         nodeId: props.id,
+        projectId: useProjectStore.getState().currentProject?.id,
         modelConfigId: props.data.modelConfigId,
         inputMode: props.data.inputMode,
         videoMode,

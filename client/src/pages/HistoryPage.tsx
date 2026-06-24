@@ -9,6 +9,7 @@ import { formatTime } from "../utils/time";
 type Filter = "all" | "image" | "video";
 
 function historyKind(item: GenerationHistory) {
+  if (item.generationType === "image" || item.generationType === "video") return item.generationType;
   const value = `${item.inputMode || ""} ${item.outputUrl || ""}`.toLowerCase();
   return /\.(png|jpe?g|webp)(\?|$)/.test(value) || value.includes("image") ? "image" : "video";
 }
@@ -20,7 +21,9 @@ export function HistoryPage() {
   const [keyword, setKeyword] = useState("");
 
   useEffect(() => {
-    fetchHistories();
+    void fetchHistories();
+    const interval = window.setInterval(() => void fetchHistories(), 5000);
+    return () => window.clearInterval(interval);
   }, [fetchHistories]);
 
   const visible = useMemo(() => {

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent as ReactDragEvent } from "react";
 import ReactFlow, { ConnectionLineType, MiniMap, Panel, useReactFlow, type ReactFlowInstance } from "reactflow";
-import { CircleHelp, Grid3X3, ImagePlus, Magnet, Map, Scan } from "lucide-react";
+import { CircleHelp, Grid3X3, History, ImagePlus, Magnet, Map, Scan, Undo2 } from "lucide-react";
 import { ConnectionCreateMenu, type ConnectionCreateMenuState } from "./ConnectionCreateMenu";
 import { nodeTypes } from "./nodeTypes";
 import { StudioEdge } from "./StudioEdge";
@@ -142,6 +142,9 @@ function nearestTargetHandle(point: { x: number; y: number }, sourceNodeId: stri
 export function WorkflowCanvas({ showGrid = true, onToggleGrid = () => undefined }: { showGrid?: boolean; onToggleGrid?: () => void }) {
   const { nodes, edges, onNodesChange, onEdgesChange, connectNodes, addConnectedNode, addAssetNode, selectEdge, clearSelection, organizeCanvas } = useCanvasStore();
   const uploadAsset = useAssetStore((state) => state.uploadAsset);
+  const lastDeletion = useCanvasStore((state) => state.lastDeletion);
+  const restoreLastDeletion = useCanvasStore((state) => state.restoreLastDeletion);
+  const clearLastDeletion = useCanvasStore((state) => state.clearLastDeletion);
   const reactFlowWrapper = useRef<HTMLDivElement | null>(null);
   const systemFileDragDepthRef = useRef(0);
   const connectingNodeRef = useRef<{ nodeId: string | null; handleId?: string | null }>({ nodeId: null, handleId: null });
@@ -203,6 +206,12 @@ export function WorkflowCanvas({ showGrid = true, onToggleGrid = () => undefined
   useEffect(() => () => {
     if (interactionTimeoutRef.current) window.clearTimeout(interactionTimeoutRef.current);
   }, []);
+
+  useEffect(() => {
+    if (!lastDeletion) return;
+    const timeout = window.setTimeout(clearLastDeletion, 10000);
+    return () => window.clearTimeout(timeout);
+  }, [clearLastDeletion, lastDeletion?.deletedAt]);
 
   useEffect(() => {
     function preventBrowserFileNavigation(event: DragEvent) {
@@ -483,6 +492,26 @@ export function WorkflowCanvas({ showGrid = true, onToggleGrid = () => undefined
             <strong>{dropImportProgress ? `正在导入图片 ${dropImportProgress.completed}/${dropImportProgress.total}` : "松开以添加图片素材"}</strong>
             <small>{dropImportProgress ? "上传完成后将自动创建图片素材节点" : "支持从 Finder 或外置文件夹拖入，可一次添加多张"}</small>
           </div>
+        </div>
+      )}
+      {lastDeletion && (
+        <div className="canvas-delete-undo-toast" role="status" aria-live="polite">
+          <span className="canvas-delete-undo-copy">
+            <strong>{lastDeletion.wasGeneratingVideo ? "视频节点已删除，任务仍在后台生成" : "节点已删除"}</strong>
+            <small>{lastDeletion.wasGeneratingVideo ? "完成后可在视频历史或素材库找回" : "10 秒内可以恢复节点和连线"}</small>
+          </span>
+          {lastDeletion.wasGeneratingVideo && (
+            <button
+              type="button"
+              onClick={() => {
+                window.sessionStorage.setItem("moon:history-tab", "video");
+                window.dispatchEvent(new CustomEvent("studio:open-drawer", { detail: "history" }));
+              }}
+            >
+              <History size={15} />视频历史
+            </button>
+          )}
+          <button type="button" className="is-primary" onClick={restoreLastDeletion}><Undo2 size={15} />撤销</button>
         </div>
       )}
       {showGrid && !isCanvasInteracting && <DotGridBackground />}
