@@ -1,4 +1,4 @@
-import { grokCreateEndpoint, grokPollEndpoint, grokPollEndpointCandidates, grokRequestModelName, isAi666GrokRelay, isOfficialGrokEndpoint } from "../services/providers/grokVideo.service.js";
+import { buildGrokRelayMultipart, grokCreateEndpoint, grokPollEndpoint, grokPollEndpointCandidates, grokRequestModelName, isAi666GrokRelay, isOfficialGrokEndpoint } from "../services/providers/grokVideo.service.js";
 import { klingBearerToken, klingCreateEndpoint, klingPollEndpoint, normalizeKlingPrompt } from "../services/providers/klingVideo.service.js";
 import { buildMiniMaxVideoBody, minimaxCreateEndpoint, minimaxCreateEndpointCandidates, minimaxQueryEndpoint, minimaxRetrieveEndpoint } from "../services/providers/minimaxVideo.service.js";
 import { buildOpenAiVideosMultipart, buildProxyBody, buildSeedance15Multipart, isRetryableSeedancePollFailure, relayCreateEndpointCandidates, seedanceAssetUploadShouldFallback, seedanceAuthorizationValues, seedanceCreateEndpoint, seedancePollEndpoint } from "../services/providers/seedanceVideo.service.js";
@@ -104,7 +104,27 @@ assert(grokPollEndpoint("https://ai.ai666.net/v1", "video_1") === "https://ai.ai
 assert(grokRequestModelName("grok-1.5-video-6s", "https://ai.ai666.net/v1") === "grok-video-3", "ai666 legacy 6s Grok config should map to current base model");
 assert(grokRequestModelName("grok-1.5-video-10s", "https://ai.ai666.net/v1") === "grok-video-3-pro", "ai666 legacy 10s Grok config should map to current pro model");
 assert(grokRequestModelName("grok-1.5-video-15s", "https://ai.ai666.net/v1") === "grok-video-3-max", "ai666 legacy 15s Grok config should map to current max model");
-assert(grokRequestModelName("grok-1.5-video-6s", "https://ai.cy88.ai/v1") === "grok-1.5-video-6s", "non-ai666 Grok relays must retain their configured upstream model name");
+assert(grokRequestModelName("grok-1.5-video-6s", "https://ai.cy88.ai/v1") === "grok-video-3", "cy88 legacy 6s Grok config should map to the documented base model");
+assert(grokRequestModelName("grok-video-3-10s", "https://ai.cy88.ai/v1") === "grok-video-3-pro", "cy88 legacy 10s Grok config should map to the documented pro model");
+assert(grokRequestModelName("grok-video-3-15s", "https://ai.cy88.ai/v1") === "grok-video-3-max", "cy88 legacy 15s Grok config should map to the documented max model");
+const cy88GrokForm = buildGrokRelayMultipart({
+  apiBaseUrl: "https://ai.cy88.ai/v1",
+  modelName: grokRequestModelName("grok-video-3-15s", "https://ai.cy88.ai/v1"),
+  prompt: "four-shot storyboard",
+  duration: 9,
+  aspectRatio: "9:16",
+  resolution: "1080p",
+  images: [
+    { blob: new Blob(["front"], { type: "image/png" }), filename: "front.png" },
+    { blob: new Blob(["product"], { type: "image/png" }), filename: "product.png" }
+  ]
+});
+assert(cy88GrokForm.get("model") === "grok-video-3-max", "cy88 legacy 15s model must submit the documented max model name");
+assert(cy88GrokForm.get("seconds") === "15", "grok-video-3-max must always submit 15 seconds");
+assert(cy88GrokForm.get("size") === "1080P", "Duoyuan Grok size must use the documented 720P/1080P value");
+assert(cy88GrokForm.get("aspect_ratio") === "9:16", "Duoyuan Grok must preserve the documented aspect_ratio field");
+assert(cy88GrokForm.getAll("input_reference").length === 2, "Duoyuan Grok must repeat input_reference for multiple images");
+assert(!cy88GrokForm.has("duration") && !cy88GrokForm.has("ratio") && !cy88GrokForm.has("dimensions"), "Duoyuan Grok multipart must not mix undocumented compatibility aliases");
 assert(normalizeVideoAspectRatio("2:3") === "2:3", "ai666 documented 2:3 ratio must be preserved");
 assert(normalizeVideoAspectRatio("3:2") === "3:2", "ai666 documented 3:2 ratio must be preserved");
 assert(

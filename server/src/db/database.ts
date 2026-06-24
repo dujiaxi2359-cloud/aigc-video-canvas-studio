@@ -3,6 +3,7 @@ import path from "node:path";
 import { createRequire } from "node:module";
 import { inferImageModelType, inferImageProvider, normalizeImageCapabilities } from "../services/imageCapabilityNormalization.js";
 import type { ModelCapabilities } from "../types/model.js";
+import { canonicalDuoyuanGrokModelName } from "../utils/grokRelayModels.js";
 
 type SqliteValue = string | number | bigint | null | Buffer;
 
@@ -76,14 +77,16 @@ async function migrateAi666VideoProtocols(database: AppDatabase) {
     "SELECT id, api_base_url, display_name, model_name, capabilities_json FROM model_configs WHERE lower(api_base_url) LIKE '%ai666.net%' OR lower(api_base_url) LIKE '%cy88.ai%' OR lower(model_name) LIKE '%seedance%' OR lower(model_name) LIKE '%kling%' OR lower(model_name) LIKE '%grok%'"
   );
   for (const row of rows) {
-    const name = row.model_name.toLowerCase();
+    const modelName = canonicalDuoyuanGrokModelName(row.model_name, row.api_base_url);
+    const grokModelCanonicalized = modelName !== row.model_name;
+    const name = modelName.toLowerCase();
     const capabilities = JSON.parse(row.capabilities_json) as Record<string, unknown>;
     const channelCapability = capabilities.channelCapability && typeof capabilities.channelCapability === "object" ? capabilities.channelCapability as Record<string, unknown> : {};
     const oldFamily = String(channelCapability.apiFamily ?? capabilities.apiFamily ?? "");
     const modelCapability = capabilities.modelCapability as Record<string, unknown> | undefined;
     const officialModel = String(modelCapability?.model ?? "");
     const hasOfficialModel = Boolean(officialModel);
-    let changed = false;
+    let changed = grokModelCanonicalized;
     let displayName = row.display_name;
     const assign = (values: Record<string, unknown>) => {
       Object.assign(capabilities, values);
@@ -168,7 +171,7 @@ async function migrateAi666VideoProtocols(database: AppDatabase) {
       : /grok[-_ .]?video[-_ .]?3[-_ .]?pro/.test(name) ? { displayName: "Grok Video 3 Pro", model: "grok-video-3-pro", duration: { type: "enum", values: [10] }, supportedDurations: [10] }
         : /grok[-_ .]?video[-_ .]?3/.test(name) ? { displayName: "Grok Video 3", model: "grok-video-3", duration: { type: "range", min: 1, max: 15, step: 1 }, supportedDurations: Array.from({ length: 15 }, (_, index) => index + 1) }
           : undefined;
-    const grokNeedsCapabilityUpgrade = grokKnownModel && (
+    const grokNeedsCapabilityUpgrade = grokKnownModel && (grokModelCanonicalized ||
       !Array.isArray(capabilities.aspectRatios) || capabilities.aspectRatios.length === 0 ||
       !Array.isArray(capabilities.resolutions) || capabilities.resolutions.length === 0 ||
       !capabilities.duration
@@ -221,7 +224,7 @@ async function migrateAi666VideoProtocols(database: AppDatabase) {
         ? capabilities.channelCapability as Record<string, unknown>
         : {};
       const isRunApiGrok = /runapi\.co/i.test(row.api_base_url);
-      const isAi666Grok = /ai\.ai666\.net/i.test(row.api_base_url);
+      const isDuoyuanGrok = /(?:ai\.ai666\.net|ai\.cy88\.ai)/i.test(row.api_base_url);
       const grokResolutions = Array.isArray(capabilities.resolutions) ? capabilities.resolutions.map((value) => String(value).toUpperCase()) : [];
       const channelInputs = Array.isArray(existingChannel.supportedInputs) ? existingChannel.supportedInputs.map(String) : [];
       const rootInputs = Array.isArray(capabilities.supportedInputs) ? capabilities.supportedInputs.map(String) : [];
@@ -229,7 +232,10 @@ async function migrateAi666VideoProtocols(database: AppDatabase) {
         || !channelInputs.includes("first_last_frame")
         || !rootInputs.includes("reference_image")
         || (isRunApiGrok && String(existingChannel.apiFamily ?? "") !== "unified_video_create")
-        || (isAi666Grok && (!grokResolutions.includes("720P") || !grokResolutions.includes("1080P") || grokResolutions.some((value) => !["720P", "1080P"].includes(value))))
+        || (isDuoyuanGrok && String(existingChannel.apiFamily ?? "") !== "grok_video")
+        || (isDuoyuanGrok && String(existingChannel.requestFormat ?? "") !== "multipart")
+        || (isDuoyuanGrok && String(existingChannel.imageTransport ?? "") !== "multipart_file")
+        || (isDuoyuanGrok && (!grokResolutions.includes("720P") || !grokResolutions.includes("1080P") || grokResolutions.some((value) => !["720P", "1080P"].includes(value))))
         || String(existingChannel.imageTransport ?? "") === "unsupported"
         || String(existingChannel.videoTransport ?? "") === "unsupported";
       if (needsReferenceRepair) {
@@ -242,7 +248,7 @@ async function migrateAi666VideoProtocols(database: AppDatabase) {
           supportsMultiImageInput: true,
           supportsVideoInput: true,
           maxReferenceImages: Number(capabilities.maxReferenceImages ?? 7),
-          ...(isAi666Grok ? {
+          ...(isDuoyuanGrok ? {
             aspectRatios: ["16:9", "9:16", "2:3", "3:2", "1:1"],
             supportedAspectRatios: ["16:9", "9:16", "2:3", "3:2", "1:1"],
             resolutions: ["720P", "1080P"],
@@ -267,7 +273,7 @@ async function migrateAi666VideoProtocols(database: AppDatabase) {
     }
 
     if (changed) {
-      await database.run("UPDATE model_configs SET display_name = ?, capabilities_json = ?, updated_at = ? WHERE id = ?", displayName, JSON.stringify(capabilities), Date.now(), row.id);
+      await database.run("UPDATE model_configs SET display_name = ?, model_name = ?, capabilities_json = ?, updated_at = ? WHERE id = ?", displayName, modelName, JSON.stringify(capabilities), Date.now(), row.id);
     }
   }
 }
