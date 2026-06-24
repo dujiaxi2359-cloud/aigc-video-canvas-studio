@@ -42,6 +42,8 @@ export type ImageGenerateNodeData = {
   status: "idle" | "generating" | "success" | "error";
   outputAssetId?: string;
   outputUrl?: string;
+  url?: string;
+  thumbnailUrl?: string;
   errorCode?: string;
   errorMessage?: string;
   debugMessage?: string;

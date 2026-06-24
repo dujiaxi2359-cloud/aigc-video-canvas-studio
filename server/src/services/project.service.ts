@@ -30,13 +30,14 @@ async function hydrateProjectNodes(nodes: ProjectNode[]) {
     if (!data) return node;
     const assetId = typeof data.assetId === "string" ? data.assetId : undefined;
     const outputAssetId = typeof data.outputAssetId === "string" ? data.outputAssetId : undefined;
-    const asset = (assetId && assets.get(assetId)) || (outputAssetId && assets.get(outputAssetId));
+    const asset = (outputAssetId && assets.get(outputAssetId)) || (assetId && assets.get(assetId));
     if (!asset) return node;
 
     const nextData = { ...data };
     if (asset.type === "image") {
       if (!nextData.thumbnailUrl && asset.thumbnailUrl) nextData.thumbnailUrl = asset.thumbnailUrl;
       if (!nextData.url && asset.url) nextData.url = asset.url;
+      if (!nextData.outputUrl && outputAssetId && asset.url) nextData.outputUrl = asset.url;
       if (!nextData.width && asset.width) nextData.width = asset.width;
       if (!nextData.height && asset.height) nextData.height = asset.height;
     }
