@@ -6355,6 +6355,14 @@ select optgroup {
   object-fit: cover !important;
 }
 
+video:fullscreen,
+video:-webkit-full-screen {
+  width: 100vw !important;
+  height: 100vh !important;
+  background: #000 !important;
+  object-fit: contain !important;
+}
+
 .studio-handle {
   width: 28px !important;
   height: 28px !important;
