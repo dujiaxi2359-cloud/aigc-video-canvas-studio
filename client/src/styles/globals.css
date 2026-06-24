@@ -7578,3 +7578,151 @@ select optgroup {
   overflow-y: auto !important;
   overscroll-behavior: contain;
 }
+
+/* Minimal image asset floating toolbar: Linear/Raycast style, no neon treatment. */
+.image-asset-production-toolbar {
+  position: absolute !important;
+  left: 50% !important;
+  top: -52px !important;
+  z-index: 70 !important;
+  display: inline-flex !important;
+  width: max-content !important;
+  max-width: min(860px, calc(100vw - 56px)) !important;
+  height: 36px !important;
+  align-items: center !important;
+  gap: 8px !important;
+  padding: 4px 6px !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  border-radius: 999px !important;
+  background: rgba(18, 19, 21, 0.72) !important;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35) !important;
+  color: rgba(255, 255, 255, 0.62) !important;
+  transform: translateX(-50%) !important;
+  backdrop-filter: blur(16px) !important;
+  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Microsoft YaHei", sans-serif !important;
+}
+
+.image-asset-tool-group {
+  position: relative !important;
+  display: inline-flex !important;
+  height: 28px !important;
+  align-items: center !important;
+  gap: 4px !important;
+  border: 0 !important;
+  border-radius: 999px !important;
+  background: transparent !important;
+  padding: 0 !important;
+}
+
+.image-asset-tool-group.is-icons {
+  margin-left: 0 !important;
+  padding-left: 9px !important;
+  background: transparent !important;
+}
+
+.image-asset-tool-group.is-icons::before {
+  position: absolute;
+  left: 0;
+  top: 6px;
+  width: 1px;
+  height: 16px;
+  background: rgba(255, 255, 255, 0.08);
+  content: "";
+}
+
+.image-asset-tool,
+.image-asset-icon-tool {
+  display: inline-flex !important;
+  height: 28px !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 5px !important;
+  border: 0 !important;
+  border-radius: 999px !important;
+  background: transparent !important;
+  padding: 0 10px !important;
+  color: rgba(255, 255, 255, 0.62) !important;
+  box-shadow: none !important;
+  font-size: 13px !important;
+  font-weight: 400 !important;
+  line-height: 1 !important;
+  letter-spacing: 0 !important;
+  white-space: nowrap !important;
+  transform: none !important;
+  transition: background 140ms ease, color 140ms ease !important;
+}
+
+.image-asset-icon-tool {
+  width: 28px !important;
+  padding: 0 !important;
+}
+
+.image-asset-tool svg,
+.image-asset-icon-tool svg {
+  width: 14px !important;
+  height: 14px !important;
+  flex: 0 0 auto !important;
+}
+
+.image-asset-tool:hover,
+.image-asset-icon-tool:hover,
+.image-asset-tool-menu.is-open > .image-asset-tool {
+  background: rgba(255, 255, 255, 0.06) !important;
+  color: rgba(255, 255, 255, 0.9) !important;
+  transform: none !important;
+}
+
+.image-asset-tool.is-emphasis {
+  background: rgba(255, 255, 255, 0.08) !important;
+  color: rgba(255, 255, 255, 0.92) !important;
+  box-shadow: none !important;
+}
+
+.image-asset-tool.is-emphasis svg {
+  color: #8DE8D4 !important;
+}
+
+.image-asset-tool.is-emphasis small {
+  margin-left: 1px !important;
+  padding: 1px 5px !important;
+  border: 1px solid rgba(141, 232, 212, 0.16) !important;
+  border-radius: 999px !important;
+  background: rgba(141, 232, 212, 0.10) !important;
+  color: #8DE8D4 !important;
+  box-shadow: none !important;
+  font-size: 10px !important;
+  font-weight: 400 !important;
+  line-height: 1.2 !important;
+  letter-spacing: 0 !important;
+}
+
+.image-asset-icon-tool.is-danger {
+  color: rgba(255, 255, 255, 0.62) !important;
+}
+
+.image-asset-icon-tool.is-danger:hover {
+  border-color: transparent !important;
+  background: rgba(255, 80, 80, 0.08) !important;
+  color: #FF7A7A !important;
+}
+
+.image-asset-tool-popover {
+  top: calc(100% + 10px) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  border-radius: 14px !important;
+  background: rgba(18, 19, 21, 0.92) !important;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.34) !important;
+  backdrop-filter: blur(16px) !important;
+}
+
+.image-asset-tool-popover button {
+  height: 32px !important;
+  border-radius: 10px !important;
+  color: rgba(255, 255, 255, 0.66) !important;
+  font-size: 12px !important;
+}
+
+.image-asset-tool-popover button:hover {
+  background: rgba(255, 255, 255, 0.06) !important;
+  color: rgba(255, 255, 255, 0.9) !important;
+}
