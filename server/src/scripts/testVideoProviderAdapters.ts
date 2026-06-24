@@ -138,8 +138,8 @@ assert(grokPollEndpoint("https://ai.ai666.net/v1", "video_1") === "https://ai.ai
 assert(grokRequestModelName("grok-1.5-video-6s", "https://ai.ai666.net/v1") === "grok-1.5-video-6s", "ai666 Grok 1.5 6s should keep the relay-documented model name");
 assert(grokRequestModelName("grok-1.5-video-10s", "https://ai.ai666.net/v1") === "grok-1.5-video-10s", "ai666 Grok 1.5 10s should keep the relay-documented model name");
 assert(grokRequestModelName("grok-1.5-video-15s", "https://ai.ai666.net/v1") === "grok-1.5-video-15s", "ai666 Grok 1.5 15s should keep the relay-documented model name");
-assert(grokRequestModelName("grok-video-3-pro", "https://ai.cy88.ai/v1") === "grok-video-3-10s", "cy88 old Pro label should migrate to the relay-documented 10s model");
-assert(grokRequestModelName("grok-video-3-max", "https://ai.cy88.ai/v1") === "grok-video-3-15s", "cy88 old Max label should migrate to the relay-documented 15s model");
+assert(grokRequestModelName("grok-video-3-pro", "https://ai.cy88.ai/v1") === "grok-video-3-pro", "runtime requests must preserve the configured upstream model id");
+assert(grokRequestModelName("grok-video-3-max", "https://ai.cy88.ai/v1") === "grok-video-3-max", "runtime requests must never rename an upstream model id");
 assert(grokRequestModelName("grok-video-3-10s", "https://ai.cy88.ai/v1") === "grok-video-3-10s", "cy88 10s Grok config should keep the relay-documented model name");
 assert(grokRequestModelName("grok-video-3-15s", "https://ai.cy88.ai/v1") === "grok-video-3-15s", "cy88 15s Grok config should keep the relay-documented model name");
 const cy88GrokForm = buildGrokRelayMultipart({
@@ -1077,6 +1077,17 @@ const normalizedGrokImagineOptions = calculateAvailableVideoOptions(normalizedGr
   hasFirstLastFrame: false
 });
 assert(normalizedGrokImagineOptions.availableInputModes.includes("video-to-video"), "Official-style Grok Imagine capabilities should not be restricted by Duoyuan Grok Video 3 rules");
+
+const upstreamOwnedCapabilities = normalizeVideoCapabilities({
+  capabilitySource: "upstream",
+  upstreamModelId: "vendor-video-exact-id",
+  inputModes: ["text-to-video"],
+  supportedInputs: ["text"],
+  imageTransport: "unsupported",
+  modelCapability: { model: "vendor-video-exact-id", supportsTextToVideo: true }
+}, "grok", "vendor-video-exact-id");
+assert(upstreamOwnedCapabilities.inputModes.length === 1 && upstreamOwnedCapabilities.inputModes[0] === "text-to-video", "upstream-owned capabilities must not be widened by local model heuristics");
+assert(upstreamOwnedCapabilities.modelCapability?.model === "vendor-video-exact-id", "upstream-owned model ids must remain exact");
 
 const repairedSeedanceReferenceConfig = resolveVideoRequestConfig({
   providerId: "seedance",

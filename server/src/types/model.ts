@@ -47,6 +47,8 @@ export type ModelConstraint = {
 };
 
 export type ModelCapabilities = {
+  capabilitySource?: "official" | "upstream" | "legacy_inferred";
+  upstreamModelId?: string;
   modelCapability?: {
     model?: string;
     supportsText?: boolean;

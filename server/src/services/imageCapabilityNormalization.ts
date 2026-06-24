@@ -47,6 +47,9 @@ export function normalizeImageCapabilities(
   displayName?: string,
   provider?: string
 ): ModelCapabilities {
+  if (capabilities.capabilitySource === "upstream" || capabilities.capabilitySource === "official") {
+    return capabilities;
+  }
   const value = identity(providerId, modelName, displayName, provider);
   const model = modelName || capabilities.modelCapability?.model || "";
 

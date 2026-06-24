@@ -3,7 +3,7 @@ import path from "node:path";
 import { legacyInputModeToOfficialMode } from "../../types/videoModes.js";
 import { downloadGeneratedFile, downloadGeneratedVideoOrUseRemote, saveGeneratedBuffer } from "../../utils/downloadGeneratedFile.js";
 import { ProviderError, rawErrorMessage } from "../../utils/providerErrors.js";
-import { canonicalDuoyuanGrokModelName, documentedGrokDuration, isDuoyuanGrokRelay } from "../../utils/grokRelayModels.js";
+import { documentedGrokDuration, isDuoyuanGrokRelay } from "../../utils/grokRelayModels.js";
 import { mapVideoDimensions, normalizeVideoAspectRatio, normalizeVideoResolution } from "../../utils/videoParams.js";
 import { getAsset } from "../asset.service.js";
 import { ensureAssetLocalFile } from "../assets/ensureAssetLocalFile.service.js";
@@ -140,8 +140,8 @@ function isUnifiedGrokEndpoint(apiBaseUrl: string) {
   return /\/v1\/video\/create\/?$/i.test(baseUrl(apiBaseUrl));
 }
 
-export function grokRequestModelName(modelName: string, apiBaseUrl: string) {
-  return canonicalDuoyuanGrokModelName(modelName, apiBaseUrl);
+export function grokRequestModelName(modelName: string, _apiBaseUrl: string) {
+  return modelName.trim();
 }
 
 function record(value: unknown) {

@@ -177,9 +177,13 @@ function normalizeModelConfigInput(input: Partial<ModelConfig> & { apiKey?: stri
     ? "grsai"
     : zhipuOfficial ? "zhipu" : agnesOfficial ? "agnes" : input.providerId ?? fallback?.provider_id ?? undefined;
   const category = input.category ?? fallback?.category ?? inferCategory(input.modelType ?? fallback?.model_type ?? "text-to-video");
-  const baseCapabilities = input.capabilities ?? (fallback ? JSON.parse(fallback.capabilities_json) as ModelCapabilities : defaultCapabilities());
+  const baseCapabilities: ModelCapabilities = input.capabilities
+    ?? (fallback ? JSON.parse(fallback.capabilities_json) as ModelCapabilities : defaultCapabilities());
 
   if (category === "image") {
+    if (baseCapabilities.capabilitySource === "upstream" || baseCapabilities.capabilitySource === "official") {
+      return { ...input, apiBaseUrl, providerId, provider, category: "image" as const, capabilities: baseCapabilities };
+    }
     const inferred = inferImageProvider({ providerId, provider, modelName, displayName });
     const nextProviderId = inferred.providerId;
     const nextProvider = inferred.provider;
@@ -202,11 +206,16 @@ function normalizeModelConfigInput(input: Partial<ModelConfig> & { apiKey?: stri
       providerId,
       provider,
       category: "video" as const,
-      capabilities: normalizeVideoCapabilities(baseCapabilities, providerId, modelName)
+      capabilities: baseCapabilities.capabilitySource === "upstream" || baseCapabilities.capabilitySource === "official"
+        ? baseCapabilities
+        : normalizeVideoCapabilities(baseCapabilities, providerId, modelName)
     };
   }
 
   if (category === "text") {
+    if (baseCapabilities.capabilitySource === "upstream" || baseCapabilities.capabilitySource === "official") {
+      return { ...input, apiBaseUrl, category: "text" as const, modelType: "text" as const, capabilities: baseCapabilities };
+    }
     return {
       ...input,
       apiBaseUrl,

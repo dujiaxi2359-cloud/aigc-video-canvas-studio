@@ -161,6 +161,9 @@ export function normalizeVideoCapabilities(
   providerId?: string,
   modelName?: string
 ): ModelCapabilities {
+  if (capabilities.capabilitySource === "upstream" || capabilities.capabilitySource === "official") {
+    return capabilities;
+  }
   if (isAgnesVideoModel(providerId, modelName, capabilities)) {
     const channelCapability = {
       ...capabilities.channelCapability,

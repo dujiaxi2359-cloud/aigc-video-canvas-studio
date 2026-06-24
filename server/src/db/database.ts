@@ -83,6 +83,7 @@ async function migrateAi666VideoProtocols(database: AppDatabase) {
     const grokModelCanonicalized = modelName !== row.model_name;
     const name = modelName.toLowerCase();
     const capabilities = JSON.parse(row.capabilities_json) as Record<string, unknown>;
+    if (capabilities.capabilitySource === "upstream" || capabilities.capabilitySource === "official") continue;
     const channelCapability = capabilities.channelCapability && typeof capabilities.channelCapability === "object" ? capabilities.channelCapability as Record<string, unknown> : {};
     const oldFamily = String(channelCapability.apiFamily ?? capabilities.apiFamily ?? "");
     const modelCapability = capabilities.modelCapability as Record<string, unknown> | undefined;
@@ -297,6 +298,11 @@ async function migrateAi666VideoProtocols(database: AppDatabase) {
       if (JSON.stringify(capabilities) !== beforeNormalize) changed = true;
     }
 
+    const officialRoute = /(?:api\.x\.ai|generativelanguage\.googleapis\.com|aiplatform\.googleapis\.com|volces\.com|volcengineapi\.com|dashscope\.aliyuncs\.com|klingai\.com|api\.minimax(?:i)?\.com|open\.bigmodel\.cn|apihub\.agnes-ai\.com)/i.test(row.api_base_url);
+    capabilities.capabilitySource = officialRoute ? "official" : "upstream";
+    capabilities.upstreamModelId = modelName;
+    if (!officialRoute) displayName = modelName;
+    changed = true;
     if (changed) {
       await database.run("UPDATE model_configs SET display_name = ?, model_name = ?, capabilities_json = ?, updated_at = ? WHERE id = ?", displayName, modelName, JSON.stringify(capabilities), Date.now(), row.id);
     }

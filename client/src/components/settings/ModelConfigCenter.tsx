@@ -140,6 +140,33 @@ const veoCapabilities: ModelCapabilities = {
 
 function videoCapabilitiesFor(modelName: string): ModelCapabilities {
   const name = modelName.toLowerCase();
+  if (/^grok-(?:video-3(?:-(?:6s|10s|15s))?|1\.5-video-(?:6s|10s|15s))$/.test(name)) {
+    const fixedDuration = name.match(/-(6|10|15)s$/)?.[1];
+    const durations = fixedDuration ? [Number(fixedDuration)] : [4, 5, 6, 8, 10, 15];
+    return {
+      ...defaultVideoCapabilities,
+      provider: "custom",
+      apiFamily: "grok_video",
+      requestFormat: "multipart",
+      imageTransport: "multipart_file",
+      videoTransport: undefined,
+      imageField: "input_reference",
+      duration: fixedDuration ? { type: "fixed", value: Number(fixedDuration) } : { type: "enum", values: durations },
+      supportedDurations: durations,
+      aspectRatios: ["16:9", "9:16", "2:3", "3:2", "1:1"],
+      supportedAspectRatios: ["16:9", "9:16", "2:3", "3:2", "1:1"],
+      resolutions: ["720P", "1080P"],
+      supportedResolutions: ["720P", "1080P"],
+      inputModes: ["text-to-video", "image-to-video", "first-last-frame", "reference-to-video"],
+      supportedInputs: ["text", "image", "first_frame", "reference_image", "first_last_frame"],
+      supportsImageInput: true,
+      supportsReferenceImage: true,
+      supportsMultiImageInput: true,
+      supportsFirstLastFrame: true,
+      supportsVideoInput: false,
+      maxReferenceImages: 7
+    };
+  }
   if (/omni[-_]?fast[-_]?v2v/.test(name)) {
     return {
       ...veoCapabilities,
@@ -303,6 +330,20 @@ function zhipuVideoCapabilitiesFor(modelName: string): ModelCapabilities {
 
 function videoCapabilitiesForChannel(modelName: string, baseUrl: string): ModelCapabilities {
   const capabilities = videoCapabilitiesFor(modelName);
+  if (/(?:ai666\.net|cy88\.ai)/i.test(baseUrl) && /^grok-(?:video-3|1\.5-video)/i.test(modelName)) {
+    return {
+      ...capabilities,
+      channel: "proxy",
+      apiFamily: "grok_video",
+      createEndpoint: "/v1/videos",
+      endpoint: "/v1/videos",
+      pollEndpoint: "/v1/videos/{taskId}",
+      requestFormat: "multipart",
+      imageTransport: "multipart_file",
+      videoTransport: undefined,
+      imageField: "input_reference"
+    };
+  }
   if (/runapi\.co/i.test(baseUrl)) {
     return {
       ...capabilities,
@@ -513,6 +554,8 @@ function mergeOfficialAndChannelCapabilities(official: ModelCatalogItem | undefi
   const officialCapabilities = official?.capabilities ?? channelCapabilities;
   return {
     ...officialCapabilities,
+    capabilitySource: "official",
+    upstreamModelId: upstreamModelName,
     modelCapability: modelCapabilityFor(officialCapabilities, official?.id ?? upstreamModelName),
     channelCapability: pickChannelCapability(channelCapabilities)
   } satisfies ModelCapabilities;
@@ -682,11 +725,13 @@ function inferModel(modelName: string, baseUrl = ""): Pick<ModelConfig, "provide
       displayName: modelName
     };
   }
-  const official = officialTemplateFor(modelName);
+  const officialRoute = isOfficialApiRoute(baseUrl);
+  const official = officialRoute ? officialTemplateFor(modelName) : undefined;
   if (official) {
-    const officialRoute = isOfficialApiRoute(baseUrl);
     const capabilities = {
       ...official.capabilities,
+      capabilitySource: "official" as const,
+      upstreamModelId: modelName,
       modelCapability: modelCapabilityFor(official.capabilities, officialRoute ? official.id : modelName)
     };
     return {
@@ -709,7 +754,7 @@ function inferModel(modelName: string, baseUrl = ""): Pick<ModelConfig, "provide
       providerId: isAlibabaImage ? "alibaba" : isVolcengineImage ? "seedance" : isGeminiImage ? "google" : "openai",
       category,
       modelType: isQwenImageEditModel(modelName) ? "image-edit" : "text-to-image",
-      capabilities,
+      capabilities: { ...capabilities, capabilitySource: baseUrl && !officialRoute ? "upstream" : "official", upstreamModelId: modelName },
       displayName: baseUrl && !isOfficialApiRoute(baseUrl) ? modelName : displayNameFor(modelName)
     };
   }
@@ -719,17 +764,24 @@ function inferModel(modelName: string, baseUrl = ""): Pick<ModelConfig, "provide
       providerId: "deepseek",
       category,
       modelType: "text",
-      capabilities: { ...defaultTextCapabilities, modelCapability: modelCapabilityFor(defaultTextCapabilities, modelName) },
+      capabilities: { ...defaultTextCapabilities, capabilitySource: baseUrl && !officialRoute ? "upstream" : "official", upstreamModelId: modelName, modelCapability: modelCapabilityFor(defaultTextCapabilities, modelName) },
       displayName: baseUrl && !isOfficialApiRoute(baseUrl) ? modelName : displayNameFor(modelName)
     };
   }
   const capabilities = videoCapabilitiesFor(modelName);
+  const channelCapabilities = videoCapabilitiesForChannel(modelName, baseUrl);
   return {
     provider: baseUrl && !isOfficialApiRoute(baseUrl) ? relayProviderLabel(baseUrl) : "OpenAI 兼容视频中转",
     providerId: "openai-video",
     category,
     modelType: /grok|xai/.test(name) ? "text-to-video" : "image-to-video",
-    capabilities: { ...capabilities, modelCapability: modelCapabilityFor(capabilities, modelName) },
+    capabilities: {
+      ...capabilities,
+      capabilitySource: baseUrl && !officialRoute ? "upstream" : "official",
+      upstreamModelId: modelName,
+      modelCapability: modelCapabilityFor(capabilities, modelName),
+      channelCapability: pickChannelCapability(channelCapabilities)
+    },
     displayName: baseUrl && !isOfficialApiRoute(baseUrl) ? modelName : displayNameFor(modelName)
   };
 }
@@ -797,7 +849,7 @@ function groupEnabledModels(models: ModelConfig[]): EnabledModelGroup[] {
   const groups = new Map<string, EnabledModelGroup>();
   for (const model of models) {
     const modelName = model.modelName || model.displayName || model.id;
-    const official = officialTemplateFor(modelName);
+    const official = isOfficialApiRoute(model.apiBaseUrl) ? officialTemplateFor(modelName) : undefined;
     const modelCapability = model.capabilities?.modelCapability?.model;
     const baseLabel = official?.displayName || model.displayName || model.modelName;
     const host = apiHost(model.apiBaseUrl);
@@ -1019,15 +1071,10 @@ export function ModelConfigCenter() {
       if (result.models.length) {
         const categoryModels = result.models.filter((model) => classifyModel(model) === activeCategory);
         setFetchedModels(categoryModels);
-        const autoSelectedModels = categoryModels.filter((model) => activeCategory !== "video" || officialTemplateFor(model));
-        const skippedVideoCount = categoryModels.filter((model) => activeCategory === "video" && !officialTemplateFor(model)).length;
-        setSelectedModels(new Set(autoSelectedModels));
+        setSelectedModels(new Set(categoryModels));
         if (!categoryModels.length) {
           setMessage(`${result.message} 但没有识别到${categoryMeta[activeCategory].label}模型，请检查线路类型或手动添加模型 ID。`);
           setMessageTone("danger");
-        }
-        if (skippedVideoCount > 0) {
-          setMessage(`${result.message} 已默认勾选官方可识别模型；${skippedVideoCount} 个未知视频模型需手动确认后启用。`);
         }
       }
     } catch (error) {
@@ -1081,8 +1128,8 @@ export function ModelConfigCenter() {
           modelName,
           modelType: inferred.modelType as ModelType,
           enabled: true,
-          capabilities: inferred.category === "video"
-            ? mergeOfficialAndChannelCapabilities(isOfficialApiRoute(normalizedBaseUrl) ? official : undefined, modelName, normalizedBaseUrl)
+          capabilities: inferred.category === "video" && isOfficialApiRoute(normalizedBaseUrl)
+            ? mergeOfficialAndChannelCapabilities(official, modelName, normalizedBaseUrl)
             : inferred.capabilities
         } satisfies Partial<ModelConfig> & { apiKey?: string };
       });
