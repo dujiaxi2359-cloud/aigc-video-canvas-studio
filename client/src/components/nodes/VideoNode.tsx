@@ -1,6 +1,6 @@
 import { memo, useEffect, useMemo, useRef, useState, type ChangeEvent, type CompositionEvent } from "react";
 import type { NodeProps } from "reactflow";
-import { Activity, AlertCircle, ArrowUp, BoxSelect, Film, Image as ImageIcon, Library, Loader2, Maximize2, Mic, Play, Plus, Sparkles, X } from "lucide-react";
+import { Activity, AlertCircle, ArrowUp, BoxSelect, Film, Image as ImageIcon, Library, Loader2, Mic, Play, Plus, Sparkles, X } from "lucide-react";
 import { Button } from "../common/Button";
 import { Select } from "../common/Select";
 import { Textarea } from "../common/Textarea";
@@ -977,6 +977,7 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
       outputUrl={outputIsVideo ? props.data.outputUrl : undefined}
       aspectRatio={aspectRatioCss(displayRatio)}
       className="creation-media-preview"
+      showInlineActions={false}
     >
       {props.data.status === "generating" ? <div className="creation-preview-empty"><Loader2 className="animate-spin" size={25} /><span>正在生成视频</span></div> : props.data.status === "error" ? <div className="creation-preview-empty is-error"><AlertCircle size={25} /><span>生成失败</span></div> : <div className="creation-preview-empty"><Play size={24} fill="currentColor" /><span>视频预览</span></div>}
     </MediaPreview>
@@ -1017,7 +1018,6 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
           ))}
           <button type="button" title="添加参考素材" className={`creation-video-reference-add ${activeTool === "assets" ? "is-active" : ""}`} onClick={() => { setParametersOpen(false); setActiveTool(activeTool === "assets" ? null : "assets"); }}><Plus size={20} /></button>
         </div>
-        <button type="button" title={expanded ? "收起详情" : "展开详情"} className="creation-detail-toggle" onClick={() => setExpanded((value) => !value)}><Maximize2 size={14} /></button>
       </div>
       {referenceVisualItems.length > 0 && (
         <div className="creation-video-reference-chips">

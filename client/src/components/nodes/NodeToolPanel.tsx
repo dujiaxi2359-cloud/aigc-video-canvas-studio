@@ -47,7 +47,7 @@ export function NodeToolPanel({
     { label: "速度", value: "速度：", icon: Gauge }
   ];
   return (
-    <div className="node-tool-panel nodrag nopan" onPointerDown={(event) => event.stopPropagation()}>
+    <div className="node-tool-panel nodrag nopan nowheel" onPointerDown={(event) => event.stopPropagation()}>
       <div className="flex items-center justify-between"><strong>{title}</strong><button type="button" className="drawer-icon" onClick={onClose}><X size={14} /></button></div>
       {tool === "quick" ? (
         <div className="mt-3 grid grid-cols-2 gap-2">

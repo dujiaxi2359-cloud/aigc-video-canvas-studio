@@ -7533,3 +7533,48 @@ select optgroup {
     scroll-behavior: auto !important;
   }
 }
+
+/* Scroll containment for filled creation nodes and reference panels. */
+.creation-dock-content {
+  max-height: min(360px, calc(100vh - 220px));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 2px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(226, 232, 240, 0.3) transparent;
+}
+
+.creation-node[data-node-type="video"] .creation-dock-content,
+.creation-node[data-node-type="imageGenerate"] .creation-dock-content,
+.creation-node[data-node-type="textGenerate"] .creation-dock-content {
+  min-height: 0;
+}
+
+.creation-dock-content::-webkit-scrollbar,
+.node-tool-panel::-webkit-scrollbar {
+  width: 7px;
+}
+
+.creation-dock-content::-webkit-scrollbar-track,
+.node-tool-panel::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.creation-dock-content::-webkit-scrollbar-thumb,
+.node-tool-panel::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(226, 232, 240, 0.28);
+}
+
+.node-tool-panel {
+  max-height: min(360px, calc(100vh - 150px)) !important;
+  overflow-y: auto !important;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(226, 232, 240, 0.3) transparent;
+}
+
+.creation-prompt-input {
+  overflow-y: auto !important;
+  overscroll-behavior: contain;
+}

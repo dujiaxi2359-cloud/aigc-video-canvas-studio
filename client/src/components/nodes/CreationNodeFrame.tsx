@@ -66,7 +66,7 @@ function CreationNodeFrameComponent({ id, type, selected, title, ratio, status, 
       </div>
       {dock && (
         <div
-          className="creation-dock drag-handle"
+          className="creation-dock drag-handle nowheel"
           onPointerDown={(event) => {
             if ((event.target as HTMLElement).closest("button, input, textarea, select, .nodrag")) event.stopPropagation();
           }}

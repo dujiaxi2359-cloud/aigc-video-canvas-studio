@@ -1,6 +1,6 @@
 import { memo, useEffect, useMemo, useRef, useState, type ChangeEvent, type CompositionEvent } from "react";
 import type { NodeProps } from "reactflow";
-import { ArrowUp, Camera, ImagePlus, Library, Maximize2, Palette, Plus, Sparkles, X } from "lucide-react";
+import { ArrowUp, Camera, ImagePlus, Library, Palette, Plus, Sparkles, X } from "lucide-react";
 import { Button } from "../common/Button";
 import { Select } from "../common/Select";
 import { Textarea } from "../common/Textarea";
@@ -452,7 +452,7 @@ function ImageGenerateNodeComponent(props: NodeProps<ImageGenerateNodeData>) {
   }
 
   const preview = imageModels.length === 0 ? <div className="creation-preview-empty"><ImagePlus size={29} /><span>请先配置图片模型</span></div> : (
-    <MediaPreview type="image" title={props.data.title} outputUrl={props.data.outputUrl} aspectRatio={aspectRatioCss(displayRatio)} className="creation-media-preview">
+    <MediaPreview type="image" title={props.data.title} outputUrl={props.data.outputUrl} aspectRatio={aspectRatioCss(displayRatio)} className="creation-media-preview" showInlineActions={false}>
       <div className={`creation-preview-empty ${props.data.status === "error" ? "is-error" : ""}`}><ImagePlus size={28} /><span>{props.data.status === "generating" ? "正在生成图片" : props.data.status === "error" ? "图片生成失败" : "图片预览"}</span></div>
     </MediaPreview>
   );
@@ -483,7 +483,6 @@ function ImageGenerateNodeComponent(props: NodeProps<ImageGenerateNodeData>) {
           {referenceVisualItems.map((item) => <button type="button" className="creation-video-reference-thumbnail" key={item.token} title={`${item.token} · ${item.name}`} onClick={() => insertReferenceToken(item.token)}>{item.previewUrl ? <img src={item.previewUrl} alt="" onError={(event) => { const image = event.currentTarget; if (item.fallbackUrl && image.src !== item.fallbackUrl) image.src = item.fallbackUrl; else image.style.display = "none"; }} /> : <Library size={17} />}</button>)}
           <button type="button" title="添加参考素材" className={`creation-video-reference-add ${activeTool === "assets" ? "is-active" : ""}`} onClick={() => { setParametersOpen(false); setActiveTool(activeTool === "assets" ? null : "assets"); }}><Plus size={20} /></button>
         </div>
-        <button type="button" title={expanded ? "收起详情" : "展开详情"} className="creation-detail-toggle" onClick={() => setExpanded((value) => !value)}><Maximize2 size={14} /></button>
       </div>
       {referenceVisualItems.length > 0 && <div className="creation-video-reference-chips">{referenceVisualItems.map((item) => <span key={item.token} className="creation-video-reference-chip"><button type="button" className="creation-video-reference-remove" title="移除连接" onClick={() => disconnectReference(item.input.sourceNodeId)}><X size={13} /></button>{item.previewUrl ? <img src={item.previewUrl} alt="" onError={(event) => { const image = event.currentTarget; if (item.fallbackUrl && image.src !== item.fallbackUrl) image.src = item.fallbackUrl; else image.style.display = "none"; }} /> : <Library size={14} />}<button type="button" className="creation-video-reference-token" onClick={() => insertReferenceToken(item.token)}><span>图像</span><strong>{item.name}</strong></button></span>)}</div>}
       <div className="creation-dock-composer">

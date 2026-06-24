@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type CompositionEvent } from "react";
 import type { Edge, Node, NodeProps } from "reactflow";
-import { AlertCircle, ArrowUp, Copy, FileText, Image as ImageIcon, Library, Maximize2, Sparkles } from "lucide-react";
+import { AlertCircle, ArrowUp, Copy, FileText, Image as ImageIcon, Library, Sparkles } from "lucide-react";
 import { Select } from "../common/Select";
 import { Textarea } from "../common/Textarea";
 import { CreationNodeFrame } from "./CreationNodeFrame";
@@ -297,7 +297,6 @@ export function TextGenerateNode(props: NodeProps<TextGenerateNodeData>) {
           ))}
           <button type="button" title="添加参考素材" className={`creation-video-reference-add ${activeTool === "assets" ? "is-active" : ""}`} onClick={() => setActiveTool(activeTool === "assets" ? null : "assets")}><Library size={18} /></button>
         </div>
-        <button type="button" title={expanded ? "收起详情" : "展开详情"} className="creation-detail-toggle" onClick={() => setExpanded((value) => !value)}><Maximize2 size={14} /></button>
       </div>
       {referenceVisualItems.length > 0 && <div className="creation-video-reference-chips">{referenceVisualItems.map((item) => <span key={item.token} className="creation-video-reference-chip">{item.previewUrl ? <img src={item.previewUrl} alt="" /> : <ImageIcon size={14} />}<button type="button" className="creation-video-reference-token" onClick={() => insertReferenceToken(item.token)}><span>图像</span><strong>{item.name}</strong></button></span>)}</div>}
       <div className="creation-dock-composer">
