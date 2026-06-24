@@ -49,7 +49,7 @@ type State = {
     historyTab?: "image" | "video";
     deletedAt: number;
   };
-  addNode: (type: WorkflowNodeType, position?: { x: number; y: number }) => void;
+  addNode: (type: WorkflowNodeType, position?: { x: number; y: number }, data?: Record<string, unknown>) => void;
   addAssetNode: (asset: { assetId: string; type: string; url?: string; filePath?: string; thumbnailUrl?: string; width?: number; height?: number; aspectRatio?: string; duration?: number }, position?: { x: number; y: number }) => void;
   addConnectedNode: (sourceId: string, type: WorkflowNodeType, position?: { x: number; y: number }, data?: Record<string, unknown>) => void;
   updateNodeData: (id: string, data: Record<string, unknown>) => void;
@@ -263,11 +263,17 @@ function organizeNodes(nodes: Node[], edges: Edge[]) {
 export const useCanvasStore = create<State>((set, get) => ({
   nodes: [],
   edges: [],
-  addNode: (type, position) =>
+  addNode: (type, position, dataOverride) =>
     set((state) => ({
       nodes: [
         ...state.nodes,
-        { id: createClientId(type), type, dragHandle: ".drag-handle", position: nextPosition(state.nodes, position), data: defaults[type] }
+        {
+          id: createClientId(type),
+          type,
+          dragHandle: ".drag-handle",
+          position: nextPosition(state.nodes, position),
+          data: { ...(defaults[type] as Record<string, unknown>), ...(dataOverride ?? {}) }
+        }
       ]
     })),
   addAssetNode: (asset, position) =>

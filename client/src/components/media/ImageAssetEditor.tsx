@@ -4,6 +4,7 @@ import { Brush, Check, Loader2, RotateCcw, Scissors, Undo2, X } from "lucide-rea
 import type { Asset } from "../../types/asset";
 
 type EditorMode = "mosaic" | "cover";
+type ExportQuality = "standard" | "hd";
 
 type ImageAssetEditorProps = {
   open: boolean;
@@ -53,6 +54,7 @@ export function ImageAssetEditor({ open, src, title, uploadAsset, onSaved, onClo
   const [mode, setMode] = useState<EditorMode>("mosaic");
   const [brushSize, setBrushSize] = useState(36);
   const [cropRatio, setCropRatio] = useState<(typeof cropRatios)[number]["value"]>("original");
+  const [exportQuality, setExportQuality] = useState<ExportQuality>("hd");
   const [canvasSize, setCanvasSize] = useState({ width: 1, height: 1 });
   const [historyVersion, setHistoryVersion] = useState(0);
 
@@ -210,12 +212,17 @@ export function ImageAssetEditor({ open, src, title, uploadAsset, onSaved, onClo
     try {
       const targetRatio = ratioValue(cropRatio, currentRatio);
       const crop = centeredCrop(canvas.width, canvas.height, targetRatio);
+      const maxExportSide = exportQuality === "hd" ? 4096 : 2400;
+      const desiredScale = exportQuality === "hd" ? 2 : 1;
+      const exportScale = Math.max(1, Math.min(desiredScale, maxExportSide / Math.max(crop.width, crop.height)));
       const output = document.createElement("canvas");
-      output.width = crop.width;
-      output.height = crop.height;
+      output.width = Math.max(1, Math.round(crop.width * exportScale));
+      output.height = Math.max(1, Math.round(crop.height * exportScale));
       const out = output.getContext("2d");
       if (!out) throw new Error("无法创建编辑画布。");
-      out.drawImage(canvas, crop.x, crop.y, crop.width, crop.height, 0, 0, crop.width, crop.height);
+      out.imageSmoothingEnabled = true;
+      out.imageSmoothingQuality = "high";
+      out.drawImage(canvas, crop.x, crop.y, crop.width, crop.height, 0, 0, output.width, output.height);
       const blob = await new Promise<Blob | null>((resolve) => output.toBlob(resolve, "image/png", 0.96));
       if (!blob) throw new Error("图片导出失败。");
       const asset = await uploadAsset(new File([blob], fileName(title), { type: "image/png" }), { name: `${title || "图片素材"} · 已编辑` });
@@ -235,7 +242,7 @@ export function ImageAssetEditor({ open, src, title, uploadAsset, onSaved, onClo
         <div className="image-asset-editor-top">
           <div>
             <div className="image-asset-editor-title">图片素材编辑</div>
-            <div className="image-asset-editor-subtitle">涂抹隐私、人脸、品牌或水印，保存为新素材，不覆盖原图。</div>
+            <div className="image-asset-editor-subtitle">涂抹隐私、人脸、品牌或水印，可按高清尺寸保存为新素材，不覆盖原图。</div>
           </div>
           <button type="button" className="image-asset-editor-icon" onClick={onClose} title="关闭"><X size={18} /></button>
         </div>
@@ -295,6 +302,12 @@ export function ImageAssetEditor({ open, src, title, uploadAsset, onSaved, onClo
             <div className="image-asset-editor-group">
               <span><Scissors size={14} />保存比例</span>
               {cropRatios.map((ratio) => <button key={ratio.value} type="button" className={cropRatio === ratio.value ? "is-active" : ""} onClick={() => setCropRatio(ratio.value)}>{ratio.label}</button>)}
+            </div>
+            <div className="image-asset-editor-group">
+              <span>保存清晰度</span>
+              <button type="button" className={exportQuality === "hd" ? "is-active" : ""} onClick={() => setExportQuality("hd")}>高清</button>
+              <button type="button" className={exportQuality === "standard" ? "is-active" : ""} onClick={() => setExportQuality("standard")}>标准</button>
+              <small className="image-asset-editor-note">高清会用高质量采样导出，适合继续接入生成节点。</small>
             </div>
             <div className="image-asset-editor-actions">
               <button type="button" onClick={undo} disabled={!historyVersion || historyRef.current.length === 0}><Undo2 size={15} />撤销</button>

@@ -394,9 +394,9 @@ export function CanvasDrawer({ drawer, onClose }: { drawer: DrawerName; onClose:
   return <AnimatePresence>{drawer === "assets" ? <AssetDrawer key="assets" onClose={onClose} /> : drawer === "history" ? <HistoryDrawer key="history" onClose={onClose} /> : drawer === "templates" ? <TemplateDrawer key="templates" onClose={onClose} /> : null}</AnimatePresence>;
 }
 
-export function CanvasEmptyGuide({ onAdd, onTemplates }: { onAdd: (type: WorkflowNodeType, position?: { x: number; y: number }) => void; onTemplates: () => void }) {
-  const actions: Array<{ label: string; type: WorkflowNodeType; icon: ElementType; position: { x: number; y: number } }> = [
-    { label: "拆解脚本", type: "script", icon: ScrollText, position: { x: 220, y: 180 } },
+export function CanvasEmptyGuide({ onAdd, onTemplates }: { onAdd: (type: WorkflowNodeType, position?: { x: number; y: number }, data?: Record<string, unknown>) => void; onTemplates: () => void }) {
+  const actions: Array<{ label: string; type: WorkflowNodeType; icon: ElementType; position: { x: number; y: number }; data?: Record<string, unknown> }> = [
+    { label: "拆解脚本", type: "textGenerate", icon: ScrollText, position: { x: 220, y: 180 }, data: { title: "脚本 / 分镜", taskType: "script", prompt: "" } },
     { label: "建立角色", type: "imageGenerate", icon: UserRound, position: { x: 660, y: 170 } },
     { label: "生成首帧", type: "imageGenerate", icon: ImageIcon, position: { x: 1100, y: 170 } },
     { label: "音画起稿", type: "audio", icon: FileAudio, position: { x: 1540, y: 180 } }
@@ -417,7 +417,7 @@ export function CanvasEmptyGuide({ onAdd, onTemplates }: { onAdd: (type: Workflo
                 key={item.label}
                 type="button"
                 className="canvas-empty-task"
-                onClick={() => onAdd(item.type, item.position)}
+                onClick={() => onAdd(item.type, item.position, item.data)}
               >
                 <span className="canvas-empty-task-icon"><Icon size={18} /></span>
                 <span className="canvas-empty-task-text"><strong>{item.label}</strong></span>

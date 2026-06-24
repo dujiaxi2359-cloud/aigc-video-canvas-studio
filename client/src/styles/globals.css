@@ -4053,6 +4053,12 @@ select {
   font-size: 12px;
 }
 
+.image-asset-editor-note {
+  color: rgba(255, 255, 255, 0.42);
+  font-size: 11px;
+  line-height: 1.55;
+}
+
 .image-asset-editor-group button,
 .image-asset-editor-actions button {
   display: inline-flex;
