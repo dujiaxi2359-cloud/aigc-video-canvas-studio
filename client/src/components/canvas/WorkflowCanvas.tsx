@@ -88,15 +88,14 @@ function ZoomControls({ showMiniMap, snapToGrid, onToggleMiniMap, onToggleSnap, 
   return (
     <Panel position="bottom-left" className="!bottom-1 !left-1 !m-0">
       <div className="canvas-view-controls">
-        <button title="画布小地图" aria-label="画布小地图" className={showMiniMap ? "is-active" : ""} onClick={onToggleMiniMap}><Map size={16} /><span>小地图</span></button>
+        <button title="画布小地图" aria-label="画布小地图" className={showMiniMap ? "is-active" : ""} onClick={onToggleMiniMap}><Map size={16} /><span>地图</span></button>
         <button title="自动整理画布 ⌥F" aria-label="自动整理画布" onClick={onOrganize}><Scan size={16} /><span>整理</span></button>
         <button title="网格吸附" aria-label="网格吸附" className={snapToGrid ? "is-active" : ""} onClick={onToggleSnap}><Magnet size={16} /><span>吸附</span></button>
         <div className="canvas-view-zoom-control" title="缩放画布">
-          <span>缩放</span>
           <input aria-label="缩放画布" type="range" min="30" max="140" value={Math.round(zoom * 100)} onChange={handleZoomChange} />
           <span className="canvas-view-zoom-readout">{Math.round(zoom * 100)}%</span>
         </div>
-        <button title="帮助" aria-label="帮助说明" onClick={() => window.dispatchEvent(new CustomEvent("studio:open-help"))}><CircleHelp size={16} /><span>帮助</span></button>
+        <button title="帮助说明" aria-label="帮助说明" className="is-icon-only" onClick={() => window.dispatchEvent(new CustomEvent("studio:open-help"))}><CircleHelp size={16} /></button>
       </div>
     </Panel>
   );

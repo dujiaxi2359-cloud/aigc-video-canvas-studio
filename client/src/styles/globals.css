@@ -8453,14 +8453,14 @@ video:-webkit-full-screen,
 }
 
 .canvas-view-controls {
-  height: 64px !important;
-  gap: 7px !important;
+  height: 58px !important;
+  gap: 5px !important;
   border-color: var(--moon-control-border) !important;
-  border-radius: 20px !important;
+  border-radius: 18px !important;
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.012)),
     var(--moon-control-surface) !important;
-  padding: 7px !important;
+  padding: 6px !important;
   box-shadow:
     0 20px 48px rgba(0, 0, 0, 0.5),
     inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
@@ -8471,25 +8471,31 @@ video:-webkit-full-screen,
 .canvas-view-controls button {
   display: inline-flex !important;
   width: auto !important;
-  min-width: 54px !important;
-  height: 50px !important;
+  min-width: 48px !important;
+  height: 46px !important;
   flex: 0 0 auto !important;
   align-items: center !important;
   justify-content: center !important;
-  gap: 9px !important;
-  border-radius: 16px !important;
-  padding: 0 17px !important;
+  gap: 8px !important;
+  border-radius: 14px !important;
+  padding: 0 13px !important;
   color: var(--moon-control-text) !important;
   font-family: var(--moon-control-font) !important;
-  font-size: 17px !important;
+  font-size: 16px !important;
   font-weight: 650 !important;
   letter-spacing: 0 !important;
 }
 
 .canvas-view-controls button svg {
-  width: 19px !important;
-  height: 19px !important;
+  width: 18px !important;
+  height: 18px !important;
   stroke-width: 2 !important;
+}
+
+.canvas-view-controls button.is-icon-only {
+  width: 46px !important;
+  min-width: 46px !important;
+  padding: 0 !important;
 }
 
 .canvas-view-controls button:hover {
@@ -8509,52 +8515,52 @@ video:-webkit-full-screen,
 
 .canvas-view-zoom-control {
   display: inline-flex;
-  height: 50px;
+  height: 46px;
   align-items: center;
-  gap: 14px;
-  border-radius: 16px;
-  padding: 0 18px;
+  gap: 11px;
+  border-radius: 14px;
+  padding: 0 12px;
   color: var(--moon-control-muted);
   font-family: var(--moon-control-font);
-  font-size: 17px;
+  font-size: 16px;
   font-weight: 650;
 }
 
 .canvas-view-controls input[type="range"] {
-  width: 170px !important;
-  height: 40px !important;
+  width: 126px !important;
+  height: 36px !important;
   margin: 0 !important;
 }
 
 .canvas-view-controls input[type="range"]::-webkit-slider-runnable-track {
-  height: 6px !important;
+  height: 5px !important;
   background: rgba(255, 255, 255, 0.26) !important;
 }
 
 .canvas-view-controls input[type="range"]::-webkit-slider-thumb {
-  width: 20px !important;
-  height: 20px !important;
-  margin-top: -7px !important;
+  width: 18px !important;
+  height: 18px !important;
+  margin-top: -6.5px !important;
   border: 2px solid rgba(13, 13, 14, 0.88) !important;
   background: #ffffff !important;
 }
 
 .canvas-view-controls input[type="range"]::-moz-range-track {
-  height: 6px !important;
+  height: 5px !important;
   background: rgba(255, 255, 255, 0.26) !important;
 }
 
 .canvas-view-controls input[type="range"]::-moz-range-thumb {
-  width: 20px !important;
-  height: 20px !important;
+  width: 18px !important;
+  height: 18px !important;
   border: 2px solid rgba(13, 13, 14, 0.88) !important;
   background: #ffffff !important;
 }
 
 .canvas-view-zoom-readout {
-  min-width: 54px !important;
+  min-width: 48px !important;
   color: var(--moon-control-text-strong) !important;
-  font-size: 17px !important;
+  font-size: 16px !important;
   font-weight: 750 !important;
 }
 
