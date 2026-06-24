@@ -7726,3 +7726,177 @@ select optgroup {
   background: rgba(255, 255, 255, 0.06) !important;
   color: rgba(255, 255, 255, 0.9) !important;
 }
+
+/* Moon control chrome: one quiet graphite language for floating canvas tools. */
+:root {
+  --moon-control-bg: rgba(18, 19, 21, 0.72);
+  --moon-control-border: rgba(255, 255, 255, 0.08);
+  --moon-control-text: rgba(255, 255, 255, 0.62);
+  --moon-control-text-hover: rgba(255, 255, 255, 0.9);
+  --moon-control-active: rgba(255, 255, 255, 0.08);
+  --moon-control-mint: #8DE8D4;
+  --moon-control-danger: #FF7A7A;
+}
+
+.image-asset-production-toolbar,
+.canvas-view-controls {
+  border: 1px solid var(--moon-control-border) !important;
+  border-radius: 999px !important;
+  background: var(--moon-control-bg) !important;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35) !important;
+  backdrop-filter: blur(16px) !important;
+  -webkit-backdrop-filter: blur(16px) !important;
+}
+
+.image-asset-production-toolbar {
+  top: -48px !important;
+  height: 36px !important;
+  padding: 4px 6px !important;
+  gap: 8px !important;
+}
+
+.image-asset-tool-group,
+.image-asset-tool-group.is-icons {
+  height: 28px !important;
+  gap: 4px !important;
+}
+
+.image-asset-tool-group.is-icons::before {
+  top: 6px !important;
+  height: 16px !important;
+  background: var(--moon-control-border) !important;
+}
+
+.image-asset-tool,
+.image-asset-icon-tool,
+.canvas-view-controls button {
+  height: 28px !important;
+  border: 0 !important;
+  border-radius: 999px !important;
+  background: transparent !important;
+  color: var(--moon-control-text) !important;
+  box-shadow: none !important;
+  letter-spacing: 0 !important;
+  transition: background 140ms ease, color 140ms ease, opacity 140ms ease !important;
+}
+
+.image-asset-tool,
+.canvas-view-zoom-readout {
+  font-size: 13px !important;
+  font-weight: 400 !important;
+}
+
+.image-asset-tool {
+  padding: 0 10px !important;
+}
+
+.image-asset-icon-tool,
+.canvas-view-controls button {
+  width: 28px !important;
+  padding: 0 !important;
+}
+
+.image-asset-tool svg,
+.image-asset-icon-tool svg,
+.canvas-view-controls button svg {
+  width: 14px !important;
+  height: 14px !important;
+}
+
+.image-asset-tool:hover,
+.image-asset-icon-tool:hover,
+.image-asset-tool-menu.is-open > .image-asset-tool,
+.canvas-view-controls button:hover {
+  background: rgba(255, 255, 255, 0.06) !important;
+  color: var(--moon-control-text-hover) !important;
+}
+
+.image-asset-tool.is-emphasis,
+.canvas-view-controls button.is-active {
+  background: var(--moon-control-active) !important;
+  color: rgba(255, 255, 255, 0.92) !important;
+}
+
+.image-asset-tool.is-emphasis svg,
+.canvas-view-controls button.is-active svg {
+  color: var(--moon-control-mint) !important;
+}
+
+.image-asset-tool.is-emphasis small {
+  border-color: rgba(141, 232, 212, 0.16) !important;
+  background: rgba(141, 232, 212, 0.10) !important;
+  color: var(--moon-control-mint) !important;
+}
+
+.image-asset-icon-tool.is-danger:hover {
+  background: rgba(255, 80, 80, 0.08) !important;
+  color: var(--moon-control-danger) !important;
+}
+
+.canvas-view-controls {
+  height: 36px !important;
+  align-items: center !important;
+  gap: 4px !important;
+  padding: 4px 6px !important;
+}
+
+.canvas-view-controls input[type="range"] {
+  width: 86px !important;
+  height: 28px !important;
+  accent-color: var(--moon-control-mint) !important;
+  opacity: 0.88;
+}
+
+.canvas-view-controls input[type="range"]::-webkit-slider-runnable-track {
+  height: 3px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.canvas-view-controls input[type="range"]::-webkit-slider-thumb {
+  width: 12px;
+  height: 12px;
+  margin-top: -4.5px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--moon-control-mint);
+  box-shadow: none;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+.canvas-view-controls input[type="range"]::-moz-range-track {
+  height: 3px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.canvas-view-controls input[type="range"]::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--moon-control-mint);
+}
+
+.canvas-view-zoom-readout {
+  min-width: 34px !important;
+  padding: 0 2px !important;
+  color: var(--moon-control-text) !important;
+  font-variant-numeric: tabular-nums !important;
+}
+
+@media (max-width: 720px) {
+  .image-asset-tool {
+    padding: 0 8px !important;
+    font-size: 12px !important;
+  }
+
+  .image-asset-tool.is-emphasis small {
+    display: none !important;
+  }
+
+  .canvas-view-controls input[type="range"] {
+    width: 60px !important;
+  }
+}
