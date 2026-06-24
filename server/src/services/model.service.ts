@@ -614,9 +614,45 @@ function videoProviderPriority(providerId?: string) {
   return 9;
 }
 
-export function shouldUseVideoFallbackCandidate(primary: Pick<ActiveModelConfig, "provider_id" | "api_base_url">, candidate: Pick<ActiveModelConfig, "provider_id" | "api_base_url">) {
-  return (candidate.provider_id ?? "") === (primary.provider_id ?? "")
+type VideoFallbackCandidateConfig = Pick<ActiveModelConfig, "provider_id" | "api_base_url"> & Partial<Pick<ActiveModelConfig, "model_name" | "capabilities_json">>;
+
+function videoFallbackApiFamily(config: VideoFallbackCandidateConfig) {
+  if (!config.model_name && !config.capabilities_json) return undefined;
+  try {
+    const configuredCapabilities = config.capabilities_json ? JSON.parse(config.capabilities_json) as ModelCapabilities : { inputModes: [] };
+    const capabilities = normalizeVideoCapabilities(configuredCapabilities, config.provider_id, config.model_name);
+    return resolveVideoRequestConfig({
+      nodeId: "fallback-check",
+      modelConfigId: "fallback-check",
+      inputMode: "text-to-video",
+      videoMode: "text_to_video",
+      prompt: "fallback check",
+      imageAssetIds: [],
+      videoAssetIds: [],
+      audioAssetIds: [],
+      duration: 10,
+      aspectRatio: "16:9",
+      resolution: "720p",
+      generateCount: 1,
+      apiKey: "",
+      apiBaseUrl: resolveProviderApiBaseUrl(config.provider_id, config.api_base_url ?? ""),
+      modelName: config.model_name ?? "",
+      providerId: config.provider_id ?? "",
+      qualityMode: "full_quality"
+    }, capabilities).apiFamily;
+  } catch {
+    return undefined;
+  }
+}
+
+export function shouldUseVideoFallbackCandidate(primary: VideoFallbackCandidateConfig, candidate: VideoFallbackCandidateConfig) {
+  const sameRelay = (candidate.provider_id ?? "") === (primary.provider_id ?? "")
     && (candidate.api_base_url ?? "") === (primary.api_base_url ?? "");
+  if (!sameRelay) return false;
+  const primaryApiFamily = videoFallbackApiFamily(primary);
+  const candidateApiFamily = videoFallbackApiFamily(candidate);
+  if (primaryApiFamily && candidateApiFamily && primaryApiFamily !== candidateApiFamily) return false;
+  return true;
 }
 
 async function listVideoFallbackModels(primary: ActiveModelConfig) {

@@ -57,6 +57,40 @@ assert(
   "Video fallback can stay within the same provider and relay"
 );
 assert(
+  !shouldUseVideoFallbackCandidate(
+    {
+      provider_id: "google",
+      api_base_url: "https://ai.cy88.ai/v1",
+      model_name: "omni-fast-v2v",
+      capabilities_json: JSON.stringify({ channelCapability: { apiFamily: "omni_fast_v2v" } })
+    },
+    {
+      provider_id: "google",
+      api_base_url: "https://ai.cy88.ai/v1",
+      model_name: "omni-fast",
+      capabilities_json: JSON.stringify({ channelCapability: { apiFamily: "omni_fast" } })
+    }
+  ),
+  "Omni-fast-v2v fallback must not switch to the image/text omni-fast route"
+);
+assert(
+  !shouldUseVideoFallbackCandidate(
+    {
+      provider_id: "google",
+      api_base_url: "https://ai.cy88.ai/v1",
+      model_name: "omni-fast-v2v",
+      capabilities_json: JSON.stringify({ channelCapability: { apiFamily: "omni_fast_v2v" } })
+    },
+    {
+      provider_id: "google",
+      api_base_url: "https://ai.cy88.ai/v1",
+      model_name: "veo_3_1-fast",
+      capabilities_json: JSON.stringify({ channelCapability: { apiFamily: "veo_proxy" } })
+    }
+  ),
+  "Omni-fast-v2v fallback must not switch to a Veo route with different video input rules"
+);
+assert(
   grokPollEndpoint("https://api.x.ai/v1", "request/1") === "https://api.x.ai/v1/videos/request%2F1",
   "Grok poll endpoint should encode request id"
 );
