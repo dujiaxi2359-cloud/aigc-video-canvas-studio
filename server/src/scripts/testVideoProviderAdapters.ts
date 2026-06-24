@@ -6,6 +6,7 @@ import { buildVeoProxyBody, configuredRelayModelName, veoProxyCreateEndpoint, ve
 import { joinUrl, resolveVideoRequestConfig } from "../services/providers/videoRequestAdapter.js";
 import { getVideoModelCapability } from "../config/videoModelCapabilities.js";
 import { modelCatalog } from "../services/modelCatalog.js";
+import { calculateAvailableVideoOptions } from "../services/modelCapability.service.js";
 import { hasSubmittedRemoteVideoTask, shouldUseVideoFallbackCandidate } from "../services/model.service.js";
 import { isGrokLikeVideoModel, normalizeVideoCapabilities } from "../services/videoCapabilityNormalization.js";
 import { ProviderError } from "../utils/providerErrors.js";
@@ -1025,16 +1026,39 @@ const omniV2vConfig = resolveVideoRequestConfig({
 const normalizedOmniV2v = normalizeVideoCapabilities({
   inputModes: ["text-to-video", "image-to-video", "reference-to-video", "video-to-video"],
   supportedInputs: ["text", "image", "reference_image", "video"],
+  modelCapability: {
+    supportsImageToVideo: true,
+    supportsFirstLastFrame: true,
+    supportsVideoToVideo: true
+  },
+  channelCapability: {
+    inputModes: ["first-last-frame", "video-to-video"],
+    supportedInputs: ["first_last_frame", "video"],
+    videoTransport: "url_or_base64_json"
+  } as any,
   duration: { type: "enum", values: [4, 6, 8, 10] },
   supportedDurations: [4, 6, 8, 10],
   videoTransport: "url_or_base64_json"
 }, "openai-video", "omni-fast-v2v");
+const normalizedOmniV2vOptions = calculateAvailableVideoOptions(normalizedOmniV2v, {
+  inputMode: "first-last-frame",
+  videoMode: "image_to_video_first_last_frame",
+  selectedDuration: 8,
+  selectedAspectRatio: "9:16",
+  selectedResolution: "720p",
+  hasImageInput: true,
+  hasVideoInput: true,
+  hasReferenceImage: true,
+  hasFirstLastFrame: true
+});
 assert(omniV2vConfig.apiFamily === "omni_fast_v2v", "Omni-fast-v2v should use its video reference family");
 assert(omniV2vConfig.videoField === "video", "Omni-fast-v2v should send the video field");
 assert(omniV2vConfig.videoTransport === "url_or_base64_json", "Omni-fast-v2v should preserve video transport");
 assert(normalizedOmniV2v.inputModes?.length === 1 && normalizedOmniV2v.inputModes[0] === "video-to-video", "Omni-fast-v2v must only expose video-to-video");
 assert(normalizedOmniV2v.supportedInputs?.length === 1 && normalizedOmniV2v.supportedInputs[0] === "video", "Omni-fast-v2v must only accept video input");
 assert(normalizedOmniV2v.supportedDurations?.length === 1 && normalizedOmniV2v.supportedDurations[0] === 10, "Omni-fast-v2v normalized capability should be fixed at 10 seconds");
+assert(normalizedOmniV2vOptions.availableInputModes.length === 1 && normalizedOmniV2vOptions.availableInputModes[0] === "video-to-video", "Omni-fast-v2v UI options must not show first/last-frame video");
+assert(normalizedOmniV2vOptions.normalizedSelection.inputMode === "video-to-video", "Omni-fast-v2v should normalize stale first/last selections back to video-to-video");
 assert(omniV2vConfig.supportedInputs.length === 1 && omniV2vConfig.supportedInputs[0] === "video", "Omni-fast-v2v must only accept video input");
 assert(omniV2vConfig.supportedDurations.length === 1 && omniV2vConfig.supportedDurations[0] === 10, "Omni-fast-v2v should be fixed at 10 seconds");
 const unifiedConfig = resolveVideoRequestConfig({

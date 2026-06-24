@@ -153,9 +153,17 @@ function videoCapabilitiesFor(modelName: string): ModelCapabilities {
       supportedResolutions: ["720p", "1080p", "4k"],
       inputModes: ["video-to-video"],
       supportedInputs: ["video"],
+      modelCapability: {
+        supportsTextToVideo: false,
+        supportsImageToVideo: false,
+        supportsReferenceToVideo: false,
+        supportsFirstLastFrame: false,
+        supportsVideoToVideo: true
+      },
       supportsVideoInput: true,
       supportsImageInput: false,
       supportsReferenceImage: false,
+      supportsFirstLastFrame: false,
       maxReferenceImages: 0,
       maxReferenceVideos: 1
     };

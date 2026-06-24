@@ -545,14 +545,18 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
   const availableDurations = useMemo(() => dynamicOptions?.availableDurations ?? durationOptions(selectedModel) ?? emptyNumbers, [dynamicOptions?.availableDurations, selectedModel]);
 
   useEffect(() => {
-    if (!resolvedInputs.hasImageInput || !selectedModel) return;
+    if (!selectedModel || !availableVideoModes.length) return;
     const currentMode = props.data.videoMode ?? legacyInputModeToOfficialMode(props.data.inputMode);
-    if (currentMode !== "text_to_video" && availableVideoModes.includes(currentMode)) return;
-    const nextMode = availableVideoModes.includes("reference_images_to_video")
-      ? "reference_images_to_video"
-      : availableVideoModes.includes("image_to_video_first_frame")
-        ? "image_to_video_first_frame"
-        : undefined;
+    const currentModeAvailable = availableVideoModes.includes(currentMode);
+    let nextMode: OfficialVideoMode | undefined;
+    if (resolvedInputs.hasImageInput && (currentMode === "text_to_video" || !currentModeAvailable)) {
+      nextMode = availableVideoModes.includes("reference_images_to_video")
+        ? "reference_images_to_video"
+        : availableVideoModes.includes("image_to_video_first_frame")
+          ? "image_to_video_first_frame"
+          : undefined;
+    }
+    if (!nextMode && !currentModeAvailable) nextMode = availableVideoModes[0];
     if (!nextMode || nextMode === currentMode) return;
     setVideoCategory(categoryForOfficialVideoMode(nextMode));
     update(props.id, {

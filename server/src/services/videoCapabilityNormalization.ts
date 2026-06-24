@@ -219,6 +219,14 @@ export function normalizeVideoCapabilities(
       apiFamily: "omni_fast_v2v",
       inputModes: omniFastV2vInputModes,
       supportedInputs: omniFastV2vSupportedInputs,
+      modelCapability: {
+        ...capabilities.modelCapability,
+        supportsTextToVideo: false,
+        supportsImageToVideo: false,
+        supportsReferenceToVideo: false,
+        supportsFirstLastFrame: false,
+        supportsVideoToVideo: true
+      },
       duration: { type: "fixed", value: 10 },
       supportedDurations: omniFastDurations,
       aspectRatios: ["16:9", "9:16"],

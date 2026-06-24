@@ -36,7 +36,7 @@ function constraintMatches(constraint: ModelConstraint, context: VideoNodeContex
 
 export function calculateAvailableVideoOptions(capabilities: ModelCapabilities, nodeContext: VideoNodeContext): AvailableVideoOptions {
   const channel = { ...capabilities, ...capabilities.channelCapability };
-  const inputModes = new Set(channel.inputModes);
+  const inputModes = new Set(capabilities.inputModes);
   const theoretical = capabilities.modelCapability;
   if (theoretical?.supportsTextToVideo) inputModes.add("text-to-video");
   if (theoretical?.supportsImageToVideo) inputModes.add("image-to-video");
