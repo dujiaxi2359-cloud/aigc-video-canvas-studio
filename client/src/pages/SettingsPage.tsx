@@ -1,15 +1,24 @@
 import { ModelConfigCenter } from "../components/settings/ModelConfigCenter";
 import { AgentSettingsPanel } from "../components/settings/AgentSettingsPanel";
-import { ArrowLeft, Bot, KeyRound, ShieldCheck, SlidersHorizontal } from "lucide-react";
+import { ArrowLeft, Bot, KeyRound, Monitor, Moon, ShieldCheck, SlidersHorizontal, Sun } from "lucide-react";
 import type { Page } from "../App";
 import { CommercialAdminPanel } from "../components/settings/CommercialAdminPanel";
 import { useI18nStore } from "../i18n";
 import { useAuthStore } from "../store/authStore";
+import { useThemeStore, type ThemePreference } from "../store/themeStore";
 import { isLocalAdminHost } from "../utils/localAdmin";
+
+const themeOptions: Array<{ id: ThemePreference; label: string; desc: string; icon: typeof Moon }> = [
+  { id: "dark", label: "深色", desc: "Moon 经典暗色画布", icon: Moon },
+  { id: "light", label: "浅色", desc: "柔和月光白，长时间创作更舒适", icon: Sun },
+  { id: "system", label: "跟随系统", desc: "自动跟随 macOS / 浏览器主题", icon: Monitor }
+];
 
 export function SettingsPage({ onNavigate }: { onNavigate: (page: Page) => void }) {
   const user = useAuthStore((state) => state.user);
   const t = useI18nStore((state) => state.t);
+  const themePreference = useThemeStore((state) => state.preference);
+  const setThemePreference = useThemeStore((state) => state.setPreference);
   const isAdmin = isLocalAdminHost() || Boolean(user && ["admin", "super_admin"].includes(user.role));
   const roleLabel = isAdmin ? t("settings.roleAdmin") : user?.role || t("settings.roleGuest");
   function returnHome() {
@@ -58,6 +67,40 @@ export function SettingsPage({ onNavigate }: { onNavigate: (page: Page) => void 
             <SlidersHorizontal size={14} /> {t("settings.role", { role: roleLabel })}
           </div>
         </div>
+
+        <section className="settings-section settings-theme-section mb-6 p-4 md:p-5">
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <div className="min-w-0">
+              <div className="mb-2 flex items-center gap-2 text-[12px] text-white/48">
+                <Moon size={14} /> Moon Appearance
+              </div>
+              <h3 className="text-[18px] font-semibold tracking-[-0.02em] text-white">主题外观</h3>
+              <p className="mt-1 max-w-[560px] text-[13px] leading-6 text-white/45">
+                在深色宇宙感和柔和月光白之间切换，不刷新页面，也不影响画布与生成流程。
+              </p>
+            </div>
+            <div className="settings-theme-options">
+              {themeOptions.map((option) => {
+                const Icon = option.icon;
+                const active = themePreference === option.id;
+                return (
+                  <button
+                    key={option.id}
+                    type="button"
+                    className={`settings-theme-option ${active ? "is-active" : ""}`}
+                    onClick={() => setThemePreference(option.id)}
+                  >
+                    <Icon size={16} />
+                    <span>
+                      <strong>{option.label}</strong>
+                      <small>{option.desc}</small>
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </section>
 
       <div id="admin-settings">{isAdmin && <CommercialAdminPanel />}</div>
       {!isAdmin && (

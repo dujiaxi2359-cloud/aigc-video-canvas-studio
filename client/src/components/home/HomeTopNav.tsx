@@ -10,14 +10,18 @@ import {
   Infinity,
   LogIn,
   LogOut,
+  Monitor,
   MessageCircle,
+  Moon,
   Settings,
+  Sun,
   UserRound,
   WalletCards
 } from "lucide-react";
 import type { Page } from "../../App";
 import { localeOptions, useI18nStore } from "../../i18n";
 import { useAuthStore } from "../../store/authStore";
+import { useThemeStore, type ThemePreference } from "../../store/themeStore";
 import { BrandIdentity } from "../common/BrandIdentity";
 
 const links: Array<[Page, string]> = [
@@ -27,6 +31,12 @@ const links: Array<[Page, string]> = [
   ["workspace", "nav.workspace"],
   ["assets", "nav.assets"],
   ["settings", "nav.settings"]
+];
+
+const themeOptions: Array<{ id: ThemePreference; label: string; icon: typeof Moon }> = [
+  { id: "dark", label: "深色", icon: Moon },
+  { id: "light", label: "浅色", icon: Sun },
+  { id: "system", label: "跟随系统", icon: Monitor }
 ];
 
 function accountName(email: string | undefined, name: string | undefined, fallback: string) {
@@ -47,7 +57,11 @@ export function HomeTopNav({ page, onNavigate }: { page: Page; onNavigate: (page
   const [accountOpen, setAccountOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const [languageOpen, setLanguageOpen] = useState(false);
+  const [themeOpen, setThemeOpen] = useState(false);
   const auth = useAuthStore();
+  const themePreference = useThemeStore((state) => state.preference);
+  const resolvedTheme = useThemeStore((state) => state.resolvedTheme);
+  const setThemePreference = useThemeStore((state) => state.setPreference);
   const locale = useI18nStore((state) => state.locale);
   const setLocale = useI18nStore((state) => state.setLocale);
   const t = useI18nStore((state) => state.t);
@@ -70,6 +84,7 @@ export function HomeTopNav({ page, onNavigate }: { page: Page; onNavigate: (page
       setAccountOpen(false);
       setHelpOpen(false);
       setLanguageOpen(false);
+      setThemeOpen(false);
       setNotificationsOpen(false);
     }
 
@@ -78,6 +93,7 @@ export function HomeTopNav({ page, onNavigate }: { page: Page; onNavigate: (page
       setAccountOpen(false);
       setHelpOpen(false);
       setLanguageOpen(false);
+      setThemeOpen(false);
       setNotificationsOpen(false);
     }
 
@@ -120,6 +136,14 @@ export function HomeTopNav({ page, onNavigate }: { page: Page; onNavigate: (page
         {auth.user && (
           <>
             <button type="button" title={t("account.helpIconTitle")} onClick={() => onNavigate("settings")} className="studio-nav-icon"><Headphones size={16} /></button>
+            <button
+              type="button"
+              title={`切换为${resolvedTheme === "dark" ? "浅色" : "深色"}主题`}
+              onClick={() => setThemePreference(resolvedTheme === "dark" ? "light" : "dark")}
+              className="studio-nav-icon"
+            >
+              {resolvedTheme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
+            </button>
             <div ref={notificationRef} className="relative">
               <button
                 type="button"
@@ -149,6 +173,7 @@ export function HomeTopNav({ page, onNavigate }: { page: Page; onNavigate: (page
                     if (value) {
                       setHelpOpen(false);
                       setLanguageOpen(false);
+                      setThemeOpen(false);
                     }
                     return !value;
                   });
@@ -206,6 +231,7 @@ export function HomeTopNav({ page, onNavigate }: { page: Page; onNavigate: (page
                         className={`studio-account-row ${languageOpen ? "is-active" : ""}`}
                         onClick={() => {
                           setHelpOpen(false);
+                          setThemeOpen(false);
                           setLanguageOpen((value) => !value);
                         }}
                       >
@@ -217,6 +243,21 @@ export function HomeTopNav({ page, onNavigate }: { page: Page; onNavigate: (page
                         <span className="studio-account-row-icon"><Settings size={18} /></span>
                         <span>{t("account.accountSettings")}</span>
                       </button>
+                      <button
+                        type="button"
+                        className={`studio-account-row ${themeOpen ? "is-active" : ""}`}
+                        onClick={() => {
+                          setHelpOpen(false);
+                          setLanguageOpen(false);
+                          setThemeOpen((value) => !value);
+                        }}
+                      >
+                        <span className="studio-account-row-icon">
+                          {resolvedTheme === "dark" ? <Moon size={18} /> : <Sun size={18} />}
+                        </span>
+                        <span>主题：{themeOptions.find((option) => option.id === themePreference)?.label || "深色"}</span>
+                        <ChevronDown size={18} className="studio-account-row-arrow" />
+                      </button>
                     </div>
 
                     <div className="studio-account-divider" />
@@ -226,6 +267,7 @@ export function HomeTopNav({ page, onNavigate }: { page: Page; onNavigate: (page
                         className={`studio-account-row ${helpOpen ? "is-active" : ""}`}
                         onClick={() => {
                           setLanguageOpen(false);
+                          setThemeOpen(false);
                           setHelpOpen((value) => !value);
                         }}
                       >
@@ -261,6 +303,33 @@ export function HomeTopNav({ page, onNavigate }: { page: Page; onNavigate: (page
                               {locale === option.id && <small>{t("common.current")}</small>}
                             </button>
                           ))}
+                        </motion.div>
+                      )}
+                      {themeOpen && (
+                        <motion.div
+                          className="studio-account-theme-flyout"
+                          initial={{ opacity: 0, x: 8, scale: 0.985 }}
+                          animate={{ opacity: 1, x: 0, scale: 1 }}
+                          exit={{ opacity: 0, x: 8, scale: 0.985 }}
+                          transition={{ duration: 0.16, ease: [0.22, 1, 0.36, 1] }}
+                        >
+                          {themeOptions.map((option) => {
+                            const Icon = option.icon;
+                            return (
+                              <button
+                                key={option.id}
+                                type="button"
+                                className={`studio-account-language-row ${themePreference === option.id ? "is-active" : ""}`}
+                                onClick={() => {
+                                  setThemePreference(option.id);
+                                  setThemeOpen(false);
+                                }}
+                              >
+                                <span><Icon size={15} /> {option.label}</span>
+                                {themePreference === option.id && <small>{t("common.current")}</small>}
+                              </button>
+                            );
+                          })}
                         </motion.div>
                       )}
                       {helpOpen && (

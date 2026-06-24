@@ -16,6 +16,7 @@ import { useCanvasStore } from "./store/canvasStore";
 import { useProjectStore } from "./store/projectStore";
 import { ErrorBoundary } from "./components/common/ErrorBoundary";
 import { useAuthStore } from "./store/authStore";
+import { useThemeStore } from "./store/themeStore";
 import { LoginPage } from "./pages/LoginPage";
 import { InvitePage } from "./pages/InvitePage";
 import { LegalPage } from "./pages/LegalPage";
@@ -49,6 +50,8 @@ export default function App() {
   const loadProject = useProjectStore((state) => state.loadProject);
   const auth = useAuthStore();
   const t = useI18nStore((state) => state.t);
+  const hydrateThemeForUser = useThemeStore((state) => state.hydrateForUser);
+  const syncSystemTheme = useThemeStore((state) => state.syncSystemTheme);
   const canAdmin = isLocalMode || Boolean(auth.user && ["admin", "super_admin"].includes(auth.user.role));
 
   useEffect(() => {
@@ -62,6 +65,17 @@ export default function App() {
       root.classList.remove("is-windows", "is-performance-safe");
     };
   }, []);
+
+  useEffect(() => {
+    hydrateThemeForUser(auth.user?.id);
+  }, [auth.user?.id, hydrateThemeForUser]);
+
+  useEffect(() => {
+    if (!window.matchMedia) return;
+    const query = window.matchMedia("(prefers-color-scheme: light)");
+    query.addEventListener("change", syncSystemTheme);
+    return () => query.removeEventListener("change", syncSystemTheme);
+  }, [syncSystemTheme]);
 
   function navigate(pageName: Page, projectId?: string, replace = false) {
     const nextProjectId = pageName === "canvas" ? projectId || useProjectStore.getState().currentProject?.id || "new" : undefined;

@@ -8,8 +8,10 @@ import { StudioConnectionLine } from "./StudioConnectionLine";
 import { useCanvasHotkeys } from "./useCanvasHotkeys";
 import { useCanvasStore } from "../../store/canvasStore";
 import { useAssetStore } from "../../store/assetStore";
+import { useThemeStore } from "../../store/themeStore";
 import type { WorkflowNodeType } from "../../types/node";
 import { DotGridBackground } from "./DotGridBackground";
+import { MoonlightDotField } from "./MoonlightDotField";
 
 type PendingConnection = {
   sourceNodeId: string;
@@ -141,6 +143,7 @@ function nearestTargetHandle(point: { x: number; y: number }, sourceNodeId: stri
 export function WorkflowCanvas({ showGrid = true, onToggleGrid = () => undefined }: { showGrid?: boolean; onToggleGrid?: () => void }) {
   const { nodes, edges, onNodesChange, onEdgesChange, connectNodes, addConnectedNode, addAssetNode, selectEdge, clearSelection, organizeCanvas } = useCanvasStore();
   const uploadAsset = useAssetStore((state) => state.uploadAsset);
+  const resolvedTheme = useThemeStore((state) => state.resolvedTheme);
   const lastDeletion = useCanvasStore((state) => state.lastDeletion);
   const restoreLastDeletion = useCanvasStore((state) => state.restoreLastDeletion);
   const clearLastDeletion = useCanvasStore((state) => state.clearLastDeletion);
@@ -513,7 +516,11 @@ export function WorkflowCanvas({ showGrid = true, onToggleGrid = () => undefined
           <button type="button" className="is-primary" onClick={restoreLastDeletion}><Undo2 size={15} />撤销</button>
         </div>
       )}
-      {showGrid && !isCanvasInteracting && <DotGridBackground />}
+      {showGrid && !isCanvasInteracting && (
+        resolvedTheme === "light"
+          ? <MoonlightDotField />
+          : <DotGridBackground />
+      )}
       <ReactFlowWithExtras
         className="studio-flow"
         nodes={displayNodes}
@@ -585,7 +592,7 @@ export function WorkflowCanvas({ showGrid = true, onToggleGrid = () => undefined
             className="canvas-mini-map"
             nodeBorderRadius={8}
             nodeStrokeWidth={2}
-            maskColor="rgba(0,0,0,0.42)"
+            maskColor={resolvedTheme === "light" ? "rgba(78,70,60,0.18)" : "rgba(0,0,0,0.42)"}
             pannable
             zoomable
           />
