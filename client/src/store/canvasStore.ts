@@ -45,7 +45,8 @@ type State = {
   lastDeletion?: {
     nodes: Node[];
     edges: Edge[];
-    wasGeneratingVideo: boolean;
+    wasGenerating: boolean;
+    historyTab?: "image" | "video";
     deletedAt: number;
   };
   addNode: (type: WorkflowNodeType, position?: { x: number; y: number }) => void;
@@ -93,17 +94,22 @@ function normalizeLegacyNodeTitles(nodes: Node[]) {
   });
 }
 
-function isGeneratingVideoNode(node: Node) {
-  if (node.type !== "video") return false;
+function isGeneratingNode(node: Node) {
   const status = String((node.data as { status?: string } | undefined)?.status || "").toLowerCase();
   return ["generating", "processing", "pending", "queued", "running"].includes(status);
 }
 
+function historyTabForDeletedNodes(nodes: Node[]): "image" | "video" | undefined {
+  if (nodes.some((node) => node.type === "video" && isGeneratingNode(node))) return "video";
+  if (nodes.some((node) => node.type === "imageGenerate" && isGeneratingNode(node))) return "image";
+  return undefined;
+}
+
 function confirmNodeDeletion(nodes: Node[]) {
-  const generatingVideoCount = nodes.filter(isGeneratingVideoNode).length;
-  if (generatingVideoCount > 0) {
+  const generatingCount = nodes.filter(isGeneratingNode).length;
+  if (generatingCount > 0) {
     return window.confirm(
-      `${generatingVideoCount} 个视频节点仍在生成。\n\n删除节点不会取消后台任务，完成后可在「历史记录 > 视频历史」或「素材库」找回。\n\n仍要删除吗？`
+      `${generatingCount} 个节点仍在生成。\n\n删除节点不会取消后台任务；如果上游生成成功，结果会保留在「历史记录」和「素材库」里，之后可以重新加入画布。\n\n仍要删除吗？`
     );
   }
   if (nodes.length > 1) return window.confirm(`确定删除 ${nodes.length} 个节点及相关连线吗？`);
@@ -326,7 +332,8 @@ export const useCanvasStore = create<State>((set, get) => ({
         lastDeletion: {
           nodes: [node],
           edges: deletedEdges,
-          wasGeneratingVideo: isGeneratingVideoNode(node),
+          wasGenerating: isGeneratingNode(node),
+          historyTab: historyTabForDeletedNodes([node]),
           deletedAt: Date.now()
         }
       };
@@ -391,7 +398,8 @@ export const useCanvasStore = create<State>((set, get) => ({
           ? {
               nodes: selectedNodes,
               edges: deletedEdges,
-              wasGeneratingVideo: selectedNodes.some(isGeneratingVideoNode),
+              wasGenerating: selectedNodes.some(isGeneratingNode),
+              historyTab: historyTabForDeletedNodes(selectedNodes),
               deletedAt: Date.now()
             }
           : state.lastDeletion

@@ -22,6 +22,7 @@ import { generateVideoWithKling } from "./providers/klingVideo.service.js";
 import { generateVideoWithMiniMax } from "./providers/minimaxVideo.service.js";
 import { generateImageWithMidjourney, isMidjourneyImageModel } from "./providers/midjourneyImage.service.js";
 import { generateImageWithOpenAI } from "./providers/openaiImage.service.js";
+import { generateTextWithOpenAICompatible } from "./providers/openaiCompatibleText.service.js";
 import { generateVideoWithSeedance } from "./providers/seedanceVideo.service.js";
 import { generateImageWithZhipu } from "./providers/zhipuImage.service.js";
 import { isZhipuOfficialEndpoint } from "./providers/zhipuProtocol.js";
@@ -48,6 +49,8 @@ export type GenerateTextRequest = {
   systemPrompt?: string;
   taskType?: "prompt-polish" | "script" | "reverse-prompt" | "custom";
   imageAssetIds?: string[];
+  videoAssetIds?: string[];
+  audioAssetIds?: string[];
 };
 
 export type GenerateVideoRequest = {
@@ -979,7 +982,7 @@ export async function generateText(input: GenerateTextRequest) {
 
     if (model.provider_id === "deepseek") return await generateTextWithDeepSeek(providerParams);
     if (model.provider_id === "google") return await generateTextWithGoogle(providerParams);
-    throw new Error("该文本模型暂未支持真实调用");
+    return await generateTextWithOpenAICompatible(providerParams);
   } catch (error) {
     const meta = providerErrorMeta(model.provider_id, error);
     return errorResponse(meta.errorMessage, meta.errorCode, meta.debugMessage, meta.payloadSummary);

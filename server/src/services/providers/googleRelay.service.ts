@@ -28,15 +28,21 @@ function mimeTypeFromPath(filePath: string) {
   const extension = path.extname(filePath).toLowerCase();
   if (extension === ".png") return "image/png";
   if (extension === ".webp") return "image/webp";
+  if (extension === ".mp4") return "video/mp4";
+  if (extension === ".mov") return "video/quicktime";
+  if (extension === ".webm") return "video/webm";
+  if (extension === ".mp3") return "audio/mpeg";
+  if (extension === ".wav") return "audio/wav";
+  if (extension === ".m4a") return "audio/mp4";
   return "image/jpeg";
 }
 
-async function imageParts(assetIds?: string[]) {
+async function mediaParts(assetIds?: string[], label = "素材") {
   const parts: Array<Record<string, unknown>> = [];
   const skipped: Array<{ assetId: string; reason: string }> = [];
   for (const assetId of assetIds ?? []) {
     try {
-      const asset = await ensureAssetLocalFile(await getAsset(assetId), "Gemini 中转接口引用的图片素材");
+      const asset = await ensureAssetLocalFile(await getAsset(assetId), `Gemini 中转接口引用的${label}`);
       parts.push({
         inlineData: {
           mimeType: asset.mimeType || mimeTypeFromPath(asset.localPath),
@@ -49,6 +55,8 @@ async function imageParts(assetIds?: string[]) {
   }
   return { parts, skipped };
 }
+
+const imageParts = (assetIds?: string[]) => mediaParts(assetIds, "图片素材");
 
 async function requestRelay(apiBaseUrl: string, apiKey: string, modelName: string, body: Record<string, unknown>) {
   const response = await fetch(endpoint(apiBaseUrl, modelName), {
@@ -123,10 +131,16 @@ function findImage(value: unknown): { url?: string; data?: string; mimeType?: st
 
 export async function generateTextWithGoogleRelay(params: TextProviderParams): Promise<ProviderGenerateResult> {
   try {
-    const inputImages = await imageParts(params.imageAssetIds);
+    const [inputImages, inputVideos, inputAudios] = await Promise.all([
+      mediaParts(params.imageAssetIds, "图片素材"),
+      mediaParts(params.videoAssetIds, "视频素材"),
+      mediaParts(params.audioAssetIds, "音频素材")
+    ]);
     const parts: Array<Record<string, unknown>> = [
       { text: params.inputText || "请根据当前工作流上下文生成可用内容。" },
-      ...inputImages.parts
+      ...inputImages.parts,
+      ...inputVideos.parts,
+      ...inputAudios.parts
     ];
     const payload = await requestRelay(params.apiBaseUrl, params.apiKey, params.modelName, {
       contents: [{ role: "user", parts }],

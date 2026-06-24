@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type CompositionEvent } from "react";
 import type { Edge, Node, NodeProps } from "reactflow";
-import { AlertCircle, ArrowUp, Copy, FileText, Image as ImageIcon, Library, Sparkles } from "lucide-react";
+import { AlertCircle, ArrowUp, Copy, FileAudio, FileText, Image as ImageIcon, Library, Sparkles, Video } from "lucide-react";
 import { Select } from "../common/Select";
 import { Textarea } from "../common/Textarea";
 import { CreationNodeFrame } from "./CreationNodeFrame";
@@ -8,7 +8,7 @@ import { generationApi } from "../../services/generationApi";
 import { useCanvasStore } from "../../store/canvasStore";
 import { useModelConfigStore } from "../../store/modelConfigStore";
 import { absoluteUploadUrl } from "../../utils/file";
-import { buildReferenceAwareImagePrompt, compactAssetIds, resolveImageNodeInputs, resolvePromptReferencedImageInputs } from "../../utils/workflowInputs";
+import { buildReferenceAwareVideoPrompt, compactAssetIds, resolvePromptReferencedVideoInputs, resolveVideoNodeInputs, type AssetInput } from "../../utils/workflowInputs";
 import { dedupeModelConfigsForSelect, findCanonicalModelConfig } from "../../utils/modelConfigSelection";
 import { AgentAnalyzeErrorButton } from "../agent/AgentAnalyzeErrorButton";
 import type { ScriptNodeData, TextAgentTask, TextGenerateNodeData, TextNodeData } from "../../types/node";
@@ -51,7 +51,7 @@ function findReferenceMentionRange(value: string, caret = value.length): Mention
   return { start: at, end: safeCaret };
 }
 
-function compactName(value?: string, fallback = "图片") {
+function compactName(value?: string, fallback = "素材") {
   const text = value?.trim() || fallback;
   return text.length > 18 ? `${text.slice(0, 17)}...` : text;
 }
@@ -92,12 +92,32 @@ function incomingTextForNode(nodeId: string, nodes: Node[], edges: Edge[]) {
         const shots = (node.data as ScriptNodeData).shots ?? [];
         return shots.map((shot) => `镜头 ${shot.shotNumber}: ${shot.prompt || shot.visualDescription}`).filter(Boolean).join("\n");
       }
-      if (node.type === "image" || node.type === "imageGenerate") return "已连接图片素材，可用于反推提示词、识图描述或提取视觉卖点。";
-      if (node.type === "video") return "已连接视频素材，可用于视频内容总结或二创脚本。";
+      if (node.type === "image" || node.type === "imageGenerate") return "已连接图片素材，可用于识图写提示词、反推画面提示词、提取视觉卖点。";
+      if (node.type === "video") return "已连接视频素材，可用于反推视频提示词、拆解镜头动作、总结节奏和生成二创脚本。";
+      if (node.type === "audio") return "已连接音频素材，可用于提取节奏、氛围、口播脚本或声音设计建议。";
       return "";
     })
     .filter(Boolean)
     .join("\n\n");
+}
+
+function referenceContextForTextModel(inputs: ReturnType<typeof resolveVideoNodeInputs>) {
+  const rows: string[] = [];
+  const push = (kind: string, input: AssetInput, index: number, globalIndex: number) => {
+    const title = input.title || input.assetId || input.sourceNodeId || "未命名素材";
+    const url = input.publicUrl || input.url || input.localPath || "";
+    rows.push(`@素材${globalIndex} / @${kind}${index}: ${title}${input.assetId ? `，assetId=${input.assetId}` : ""}${url ? `，url=${url}` : ""}`);
+  };
+  let globalIndex = 1;
+  inputs.imageInputs.forEach((input, index) => push("图片", input, index + 1, globalIndex++));
+  inputs.videoInputs.forEach((input, index) => push("视频", input, index + 1, globalIndex++));
+  inputs.audioInputs.forEach((input, index) => push("音频", input, index + 1, globalIndex++));
+  if (!rows.length) return "";
+  return [
+    "【当前连接素材清单】",
+    ...rows,
+    "如果当前文本模型不能直接读取媒体内容，请基于素材名称、链接、上游文本和用户指令进行推理；不要编造无法从上下文确认的细节。"
+  ].join("\n");
 }
 
 export function TextGenerateNode(props: NodeProps<TextGenerateNodeData>) {
@@ -111,7 +131,7 @@ export function TextGenerateNode(props: NodeProps<TextGenerateNodeData>) {
   );
   const textModels = useMemo(() => dedupeModelConfigsForSelect(rawTextModels), [rawTextModels]);
   const selectedModel = textModels.find((model) => model.id === props.data.modelConfigId);
-  const resolvedImageInputs = useMemo(() => resolveImageNodeInputs(props.id, nodes, edges), [edges, nodes, props.id]);
+  const resolvedReferenceInputs = useMemo(() => resolveVideoNodeInputs(props.id, nodes, edges), [edges, nodes, props.id]);
   const upstreamText = useMemo(() => incomingTextForNode(props.id, nodes, edges), [edges, nodes, props.id]);
   const [localPrompt, setLocalPrompt] = useState(props.data.prompt || "");
   const [localError, setLocalError] = useState("");
@@ -166,7 +186,8 @@ export function TextGenerateNode(props: NodeProps<TextGenerateNodeData>) {
   }
 
   function maybeOpenReferenceMenu(textarea = promptTextareaRef.current) {
-    if (isComposingRef.current || !textarea || !resolvedImageInputs.imageInputs.length) return;
+    const hasReferences = resolvedReferenceInputs.imageInputs.length + resolvedReferenceInputs.videoInputs.length + resolvedReferenceInputs.audioInputs.length > 0;
+    if (isComposingRef.current || !textarea || !hasReferences) return;
     const range = findReferenceMentionRange(textarea.value, textarea.selectionStart ?? textarea.value.length);
     setPendingMentionRange(range);
     if (range) setActiveTool("assets");
@@ -206,21 +227,24 @@ export function TextGenerateNode(props: NodeProps<TextGenerateNodeData>) {
     setLocalError("");
 
     try {
-      const rawInputText = [localPrompt, upstreamText].filter(Boolean).join("\n\n---\n\n");
-      const promptReferencedInputs = resolvePromptReferencedImageInputs(rawInputText, resolvedImageInputs);
-      const requestInputs = promptReferencedInputs.hasPromptReferences ? promptReferencedInputs : resolvedImageInputs;
+      const rawInputText = [localPrompt, referenceContextForTextModel(resolvedReferenceInputs), upstreamText].filter(Boolean).join("\n\n---\n\n");
+      const promptReferencedInputs = resolvePromptReferencedVideoInputs(rawInputText, resolvedReferenceInputs);
+      const requestInputs = promptReferencedInputs.hasPromptReferences ? promptReferencedInputs : resolvedReferenceInputs;
       if (promptReferencedInputs.missingPromptReferences.length) {
-        throw new Error(`提示词中的图片引用不存在：${promptReferencedInputs.missingPromptReferences.join("、")}。请使用 @素材1 或 @图片1。`);
+        throw new Error(`提示词中的素材引用不存在：${promptReferencedInputs.missingPromptReferences.join("、")}。请使用 @素材1、@图片1 或 @视频1。`);
       }
-      const inputText = requestInputs.imageInputs.length
-        ? (promptReferencedInputs.referencePrompt ?? buildReferenceAwareImagePrompt(rawInputText, requestInputs))
+      const hasMediaInputs = requestInputs.imageInputs.length + requestInputs.videoInputs.length + requestInputs.audioInputs.length > 0;
+      const inputText = hasMediaInputs
+        ? (promptReferencedInputs.referencePrompt ?? buildReferenceAwareVideoPrompt(rawInputText, requestInputs))
         : rawInputText;
       const result = await generationApi.text({
         nodeId: props.id,
         modelConfigId: props.data.modelConfigId,
         inputText: inputText || "请根据当前工作流目标生成可用的提示词、脚本或反推提示词。",
         taskType: props.data.taskType,
-        imageAssetIds: compactAssetIds(requestInputs.imageInputs)
+        imageAssetIds: compactAssetIds(requestInputs.imageInputs),
+        videoAssetIds: compactAssetIds(requestInputs.videoInputs),
+        audioAssetIds: compactAssetIds(requestInputs.audioInputs)
       });
 
       update(
@@ -251,19 +275,30 @@ export function TextGenerateNode(props: NodeProps<TextGenerateNodeData>) {
     window.setTimeout(() => setCopyStatus(""), 1600);
   }
 
-  const referenceVisualItems = resolvedImageInputs.imageInputs.map((input, index) => ({
+  const allReferenceInputs = useMemo(() => [
+    ...resolvedReferenceInputs.imageInputs.map((input, index) => ({ input, kind: "image" as const, kindIndex: index + 1 })),
+    ...resolvedReferenceInputs.videoInputs.map((input, index) => ({ input, kind: "video" as const, kindIndex: index + 1 })),
+    ...resolvedReferenceInputs.audioInputs.map((input, index) => ({ input, kind: "audio" as const, kindIndex: index + 1 }))
+  ], [resolvedReferenceInputs]);
+  const kindName = (kind: "image" | "video" | "audio") => kind === "image" ? "图片" : kind === "video" ? "视频" : "音频";
+  const kindToken = (kind: "image" | "video" | "audio") => kind === "image" ? "图片" : kind === "video" ? "视频" : "音频";
+  const previewForInput = (input: AssetInput) => absoluteUploadUrl(input.thumbnailUrl || input.url);
+  const fallbackForInput = (input: AssetInput) => absoluteUploadUrl(input.url);
+  const referenceVisualItems = allReferenceInputs.map(({ input, kind, kindIndex }, index) => ({
     input,
     token: `@素材${index + 1}`,
-    typedToken: `@图片${index + 1}`,
-    name: compactName(input.title, `图片${index + 1}`),
-    previewUrl: absoluteUploadUrl(input.thumbnailUrl || input.url),
-    fallbackUrl: absoluteUploadUrl(input.url)
+    typedToken: `@${kindToken(kind)}${kindIndex}`,
+    kind,
+    kindIndex,
+    name: compactName(input.title, `${kindName(kind)}${kindIndex}`),
+    previewUrl: previewForInput(input),
+    fallbackUrl: fallbackForInput(input)
   }));
   const referenceMenuItems: ReferenceMenuItem[] = referenceVisualItems.map((item, index) => ({
     token: item.token,
     typedToken: item.typedToken,
-    label: `素材${index + 1} · 图片${index + 1}`,
-    kind: "图像",
+    label: `素材${index + 1} · ${kindName(item.kind)}${item.kindIndex}`,
+    kind: kindName(item.kind),
     name: item.name,
     previewUrl: item.previewUrl
   }));
@@ -292,13 +327,13 @@ export function TextGenerateNode(props: NodeProps<TextGenerateNodeData>) {
         <div className="creation-video-reference-thumbnails">
           {referenceVisualItems.map((item) => (
             <button type="button" className="creation-video-reference-thumbnail" key={item.token} title={`${item.token} · ${item.name}`} onClick={() => insertReferenceToken(item.token)}>
-              {item.previewUrl ? <img src={item.previewUrl} alt="" onError={(event) => { const image = event.currentTarget; if (item.fallbackUrl && image.src !== item.fallbackUrl) image.src = item.fallbackUrl; else image.style.display = "none"; }} /> : <ImageIcon size={17} />}
+              {item.previewUrl ? <img src={item.previewUrl} alt="" onError={(event) => { const image = event.currentTarget; if (item.fallbackUrl && image.src !== item.fallbackUrl) image.src = item.fallbackUrl; else image.style.display = "none"; }} /> : item.kind === "video" ? <Video size={17} /> : item.kind === "audio" ? <FileAudio size={17} /> : <ImageIcon size={17} />}
             </button>
           ))}
           <button type="button" title="添加参考素材" className={`creation-video-reference-add ${activeTool === "assets" ? "is-active" : ""}`} onClick={() => setActiveTool(activeTool === "assets" ? null : "assets")}><Library size={18} /></button>
         </div>
       </div>
-      {referenceVisualItems.length > 0 && <div className="creation-video-reference-chips">{referenceVisualItems.map((item) => <span key={item.token} className="creation-video-reference-chip">{item.previewUrl ? <img src={item.previewUrl} alt="" /> : <ImageIcon size={14} />}<button type="button" className="creation-video-reference-token" onClick={() => insertReferenceToken(item.token)}><span>图像</span><strong>{item.name}</strong></button></span>)}</div>}
+      {referenceVisualItems.length > 0 && <div className="creation-video-reference-chips">{referenceVisualItems.map((item) => <span key={item.token} className="creation-video-reference-chip">{item.previewUrl ? <img src={item.previewUrl} alt="" /> : item.kind === "video" ? <Video size={14} /> : item.kind === "audio" ? <FileAudio size={14} /> : <ImageIcon size={14} />}<button type="button" className="creation-video-reference-token" onClick={() => insertReferenceToken(item.token)}><span>{kindName(item.kind)}</span><strong>{item.name}</strong></button></span>)}</div>}
       <div className="creation-dock-composer">
         <Textarea ref={promptTextareaRef} className="creation-prompt-input nodrag nopan nowheel" placeholder="输入创作目标，或输入 @ 引用连接素材" value={localPrompt} onChange={handlePromptChange} onCompositionStart={handleCompositionStart} onCompositionEnd={handleCompositionEnd} onClick={(event) => maybeOpenReferenceMenu(event.currentTarget)} onKeyUp={(event) => maybeOpenReferenceMenu(event.currentTarget)} />
       </div>
@@ -310,8 +345,8 @@ export function TextGenerateNode(props: NodeProps<TextGenerateNodeData>) {
         </div>
         <div className="creation-dock-actions"><button type="button" title={buttonText(props.data.status)} aria-label={buttonText(props.data.status)} className="creation-generate-button creation-video-generate-button" disabled={!selectedModel || props.data.status === "generating"} onClick={() => void generate()}><ArrowUp size={19} strokeWidth={2.3} /></button></div>
       </div>
-      <NodeToolPanel tool={activeTool} onClose={() => setActiveTool(null)} onInsert={insertReferenceToken} referenceItems={referenceMenuItems} referenceTitle="图片引用" showReferenceCommands={false} />
-      {expanded && <div className="creation-detail-panel nodrag nopan">{props.data.taskType === "reverse-prompt" && !resolvedImageInputs.hasImageInput && <div className="creation-detail-copy">反推提示词需要连接图片素材或图片生成节点。</div>}{upstreamText && <div className="creation-detail-copy">已引用上游节点内容。</div>}{(props.data.errorMessage || localError) && <AgentAnalyzeErrorButton nodeId={props.id} errorMessage={props.data.errorMessage || localError} nodeData={props.data as unknown as Record<string, unknown>} />}</div>}
+      <NodeToolPanel tool={activeTool} onClose={() => setActiveTool(null)} onInsert={insertReferenceToken} referenceItems={referenceMenuItems} referenceTitle="全能参考" showReferenceCommands={false} />
+      {expanded && <div className="creation-detail-panel nodrag nopan">{props.data.taskType === "reverse-prompt" && !referenceVisualItems.length && <div className="creation-detail-copy">反推提示词需要连接图片、视频或音频素材。</div>}{upstreamText && <div className="creation-detail-copy">已引用上游节点内容。</div>}{(props.data.errorMessage || localError) && <AgentAnalyzeErrorButton nodeId={props.id} errorMessage={props.data.errorMessage || localError} nodeData={props.data as unknown as Record<string, unknown>} />}</div>}
     </div>
   );
 

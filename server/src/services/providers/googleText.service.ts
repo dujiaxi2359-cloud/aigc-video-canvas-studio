@@ -10,7 +10,14 @@ import type { ProviderGenerateResult, TextProviderParams } from "./providerTypes
 function mimeFromPath(filePath: string) {
   const ext = path.extname(filePath).toLowerCase();
   if (ext === ".jpg" || ext === ".jpeg") return "image/jpeg";
+  if (ext === ".png") return "image/png";
   if (ext === ".webp") return "image/webp";
+  if (ext === ".mp4") return "video/mp4";
+  if (ext === ".mov") return "video/quicktime";
+  if (ext === ".webm") return "video/webm";
+  if (ext === ".mp3") return "audio/mpeg";
+  if (ext === ".wav") return "audio/wav";
+  if (ext === ".m4a") return "audio/mp4";
   return "image/png";
 }
 
@@ -35,12 +42,17 @@ function collectText(value: unknown): string[] {
   return [];
 }
 
-async function imagePartsFromAssets(assetIds?: string[]) {
+async function mediaPartsFromAssets(assetIds?: string[]) {
   const parts: Array<{ inlineData: { data: string; mimeType: string } }> = [];
   for (const assetId of assetIds ?? []) {
     const asset = await getAsset(assetId);
     if (!asset?.localPath || !fs.existsSync(asset.localPath)) continue;
-    parts.push({ inlineData: { data: fs.readFileSync(asset.localPath).toString("base64"), mimeType: mimeFromPath(asset.localPath) } });
+    parts.push({
+      inlineData: {
+        data: fs.readFileSync(asset.localPath).toString("base64"),
+        mimeType: asset.mimeType || mimeFromPath(asset.localPath)
+      }
+    });
   }
   return parts;
 }
@@ -73,13 +85,17 @@ export async function generateTextWithGoogle(params: TextProviderParams): Promis
 
   try {
     const ai: any = new GoogleGenAI(googleGenAIOptions(params.apiKey, params.apiBaseUrl));
-    const imageParts = await imagePartsFromAssets(params.imageAssetIds);
+    const mediaParts = [
+      ...await mediaPartsFromAssets(params.imageAssetIds),
+      ...await mediaPartsFromAssets(params.videoAssetIds),
+      ...await mediaPartsFromAssets(params.audioAssetIds)
+    ];
     const response = await ai.models.generateContent({
       model: params.modelName,
       contents: [
         {
           role: "user",
-          parts: [{ text: params.inputText || "请根据当前工作流上下文生成可用内容。" }, ...imageParts]
+          parts: [{ text: params.inputText || "请根据当前工作流上下文生成可用内容。" }, ...mediaParts]
         }
       ],
       config: { systemInstruction: systemPromptForTask(params.taskType, params.systemPrompt) }

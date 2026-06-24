@@ -497,18 +497,18 @@ export function WorkflowCanvas({ showGrid = true, onToggleGrid = () => undefined
       {lastDeletion && (
         <div className="canvas-delete-undo-toast" role="status" aria-live="polite">
           <span className="canvas-delete-undo-copy">
-            <strong>{lastDeletion.wasGeneratingVideo ? "视频节点已删除，任务仍在后台生成" : "节点已删除"}</strong>
-            <small>{lastDeletion.wasGeneratingVideo ? "完成后可在视频历史或素材库找回" : "10 秒内可以恢复节点和连线"}</small>
+            <strong>{lastDeletion.wasGenerating ? "生成节点已删除，任务仍在后台生成" : "节点已删除"}</strong>
+            <small>{lastDeletion.wasGenerating ? "完成后可在历史记录或素材库找回" : "10 秒内可以恢复节点和连线"}</small>
           </span>
-          {lastDeletion.wasGeneratingVideo && (
+          {lastDeletion.wasGenerating && lastDeletion.historyTab && (
             <button
               type="button"
               onClick={() => {
-                window.sessionStorage.setItem("moon:history-tab", "video");
+                window.sessionStorage.setItem("moon:history-tab", lastDeletion.historyTab || "video");
                 window.dispatchEvent(new CustomEvent("studio:open-drawer", { detail: "history" }));
               }}
             >
-              <History size={15} />视频历史
+              <History size={15} />历史记录
             </button>
           )}
           <button type="button" className="is-primary" onClick={restoreLastDeletion}><Undo2 size={15} />撤销</button>
