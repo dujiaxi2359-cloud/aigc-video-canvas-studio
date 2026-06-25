@@ -22,6 +22,12 @@ assert.deepEqual(gptRelay.imageSizes, ["1024x1024"]);
 assert.equal(gptRelay.supportsImageInput, false);
 assert.equal(gptRelay.supportsReferenceImage, false);
 
+const gptRelayAlias = normalizeImageCapabilities(base, "openai", "gpt-image2-all", "GPT Image2 All", "duoyuanx");
+assert.equal(resolveImageEndpointFamily(gptRelayAlias, "openai", "gpt-image2-all", "GPT Image2 All", "duoyuanx"), "openai_images_generation");
+assert.deepEqual(gptRelayAlias.inputModes, ["text-to-image"]);
+assert.deepEqual(gptRelayAlias.imageSizes, ["1024x1024"]);
+assert.equal(gptRelayAlias.supportsImageInput, false);
+
 const gptRelayUpstream = normalizeImageCapabilities({
   ...base,
   capabilitySource: "upstream",

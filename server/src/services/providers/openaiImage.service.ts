@@ -113,6 +113,10 @@ function isGptImage2AllModel(modelName?: string) {
   return /gpt[-_ .]?image[-_ .]?2[-_ .]?all/i.test(modelName ?? "");
 }
 
+function openAIImageRequestModel(modelName: string) {
+  return isGptImage2AllModel(modelName) ? "gpt-image-2-all" : modelName;
+}
+
 function assertUsableApiKey(apiKey: string) {
   if (!apiKey) throw new Error("请先在设置中心配置该模型 API Key");
   if (apiKey.includes("*")) {
@@ -289,7 +293,7 @@ async function fetchOpenAIImageJson(input: {
     baseUrl: input.apiBaseUrl,
     endpoint: config.imageGenerationEndpoint,
     defaultEndpoint: "/v1/images/generations",
-    modelId: input.params.modelName,
+    modelId: openAIImageRequestModel(input.params.modelName),
     queryParams: config.queryParams
   });
   const request = async (body: Record<string, unknown>) => fetch(endpoint, {
@@ -351,7 +355,7 @@ async function fetchOpenAICompatJsonImageEdit(input: {
   });
   const buildBody = async (withDataUrl = false, sizeOverride?: string) => {
     const body: Record<string, unknown> = {
-      model: input.params.modelName,
+      model: openAIImageRequestModel(input.params.modelName),
       prompt: input.params.prompt,
       image: await imageAssetBase64(input.params.imageAssetIds ?? [], withDataUrl)
     };
@@ -487,7 +491,7 @@ export async function generateImageWithOpenAI(params: ImageProviderParams): Prom
 
   if (params.inputMode === "text-to-image") {
     const body: Record<string, unknown> = {
-      model: params.modelName,
+      model: openAIImageRequestModel(params.modelName),
       prompt: params.prompt
     };
     applySharedImageParams(body, params);
