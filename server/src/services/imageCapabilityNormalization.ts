@@ -24,6 +24,10 @@ function withImageModelCapability(capabilities: ModelCapabilities, modelName: st
   };
 }
 
+function isGptImage2AllModel(providerId?: string, modelName?: string, displayName?: string, provider?: string) {
+  return /gpt[-_ .]?image[-_ .]?2[-_ .]?all/.test(identity(providerId, modelName, displayName, provider));
+}
+
 export function isGeminiImageModel(providerId?: string, modelName?: string, displayName?: string, provider?: string) {
   return /gemini.*image|image.*gemini|nano[-_ .]?banana|flash[-_ .]?image|pro[-_ .]?image/.test(identity(providerId, modelName, displayName, provider));
 }
@@ -62,11 +66,28 @@ export function normalizeImageCapabilities(
   displayName?: string,
   provider?: string
 ): ModelCapabilities {
+  const model = modelName || capabilities.modelCapability?.model || "";
+  if (isGptImage2AllModel(providerId, modelName, displayName, provider) || isGptImage2AllModel(undefined, capabilities.upstreamModelId, capabilities.modelCapability?.model)) {
+    return withImageModelCapability({
+      ...capabilities,
+      endpointFamily: "openai_images_generation",
+      inputModes: ["text-to-image"],
+      imageAspectRatios: ["1:1"],
+      imageSizes: ["1024x1024"],
+      imageQualities: ["auto"],
+      imageFormats: ["png"],
+      supportsImageInput: false,
+      supportsMultiImageInput: false,
+      supportsReferenceImage: false,
+      supportsMask: false,
+      supportsTransparentBackground: false
+    }, model);
+  }
+
   if (capabilities.capabilitySource === "upstream" || capabilities.capabilitySource === "official") {
     return capabilities;
   }
   const value = identity(providerId, modelName, displayName, provider);
-  const model = modelName || capabilities.modelCapability?.model || "";
 
   if (providerId === "zhipu" || /open\.bigmodel\.cn|glm[-_ .]?image|cogview/.test(value)) {
     const glmImage = /glm[-_ .]?image/.test(value);

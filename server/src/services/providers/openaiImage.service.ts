@@ -109,6 +109,10 @@ function fallbackImageSize(size?: unknown) {
   return undefined;
 }
 
+function isGptImage2AllModel(modelName?: string) {
+  return /gpt[-_ .]?image[-_ .]?2[-_ .]?all/i.test(modelName ?? "");
+}
+
 function assertUsableApiKey(apiKey: string) {
   if (!apiKey) throw new Error("请先在设置中心配置该模型 API Key");
   if (apiKey.includes("*")) {
@@ -234,6 +238,12 @@ async function saveOpenAIImage(json: unknown, format: string | undefined, contex
 function applySharedImageParams(body: Record<string, unknown>, params: ImageProviderParams) {
   const n = Math.max(1, params.generateCount || 1);
   body.n = n;
+  if (isGptImage2AllModel(params.modelName)) {
+    body.size = "1024x1024";
+    delete body.quality;
+    delete body.output_format;
+    return;
+  }
   const mappedSize = params.aspectRatio ? aspectRatioToOpenAIImageSize(params.aspectRatio, params.modelName, params.imageSize) : params.imageSize && params.imageSize !== "auto" ? params.imageSize : undefined;
   if (mappedSize) body.size = mappedSize;
   if (params.imageQuality && params.imageQuality !== "auto") body.quality = params.imageQuality;

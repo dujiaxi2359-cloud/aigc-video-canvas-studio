@@ -76,42 +76,32 @@ adminRouter.get("/overview", async (_req, res) => {
     LEFT JOIN credit_balances cb ON cb.workspace_id = w.id GROUP BY w.id ORDER BY w.created_at DESC`);
   const invites = await db.all("SELECT * FROM invite_codes ORDER BY created_at DESC");
   const plans = await db.all("SELECT * FROM plans ORDER BY created_at DESC");
-  const failureRows = await db.all<any[]>(`SELECT gh.*, w.name AS workspace_name, u.email AS user_email, mc.provider AS model_provider, mc.model_name AS configured_model_name,
-      gt.id AS task_id,
-      gt.provider_status AS task_provider_status,
-      gt.provider_video_url AS task_provider_video_url,
-      gt.output_url AS task_output_url,
-      gt.cos_key AS task_cos_key,
-      gt.file_size AS task_file_size,
-      gt.mime_type AS task_mime_type,
-      gt.completed_at AS task_completed_at,
-      gt.failed_stage AS task_failed_stage,
-      gt.error_code AS task_error_code,
-      gt.error_message AS task_error_message,
-      gt.result_json AS task_result_json
+  const failureRows = await db.all<any[]>(`SELECT gh.*, w.name AS workspace_name, u.email AS user_email, mc.provider AS model_provider, mc.model_name AS configured_model_name
     FROM generation_history gh
     LEFT JOIN workspaces w ON w.id = gh.workspace_id
     LEFT JOIN users u ON u.id = gh.user_id
     LEFT JOIN model_configs mc ON mc.id = gh.model_config_id
-    LEFT JOIN generation_tasks gt ON gt.id = (
-      SELECT gt2.id FROM generation_tasks gt2
-      WHERE gt2.workspace_id = gh.workspace_id
-        AND (
-          (gh.node_id IS NOT NULL AND gt2.result_json LIKE '%' || gh.node_id || '%')
-          OR (gh.project_id IS NOT NULL AND gt2.result_json LIKE '%' || gh.project_id || '%')
-        )
-      ORDER BY ABS(gt2.updated_at - gh.created_at) ASC
-      LIMIT 1
-    )
     WHERE gh.status = 'error'
     ORDER BY gh.created_at DESC
     LIMIT 80`);
   const modelRows = await db.all<any[]>(`SELECT mc.*, w.name AS workspace_name,
-    (SELECT COUNT(*) FROM usage_records ur WHERE ur.model_id = mc.id) AS usage_count,
-    (SELECT COUNT(*) FROM generation_history gh WHERE gh.model_config_id = mc.id AND gh.status = 'success') AS success_count,
-    (SELECT COUNT(*) FROM generation_history gh WHERE gh.model_config_id = mc.id AND gh.status = 'error') AS error_count
+    COALESCE(ur.usage_count, 0) AS usage_count,
+    COALESCE(gh.success_count, 0) AS success_count,
+    COALESCE(gh.error_count, 0) AS error_count
     FROM model_configs mc
     LEFT JOIN workspaces w ON w.id = mc.workspace_id
+    LEFT JOIN (
+      SELECT model_id, COUNT(*) AS usage_count
+      FROM usage_records
+      GROUP BY model_id
+    ) ur ON ur.model_id = mc.id
+    LEFT JOIN (
+      SELECT model_config_id,
+        SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) AS success_count,
+        SUM(CASE WHEN status = 'error' THEN 1 ELSE 0 END) AS error_count
+      FROM generation_history
+      GROUP BY model_config_id
+    ) gh ON gh.model_config_id = mc.id
     ORDER BY mc.updated_at DESC`);
   const models = modelRows.map((row) => ({
     id: row.id,
@@ -132,7 +122,7 @@ adminRouter.get("/overview", async (_req, res) => {
     updatedAt: row.updated_at
   }));
   const failureLogs = failureRows.map((row) => {
-    const taskResult = parseJsonObject(row.task_result_json);
+    const taskResult = parseJsonObject(row.result_json);
     return {
       id: row.id,
       generationType: row.generation_type,
@@ -143,18 +133,18 @@ adminRouter.get("/overview", async (_req, res) => {
       provider: row.model_provider,
       inputMode: row.input_mode,
       prompt: row.prompt,
-      errorMessage: row.task_error_message || row.error_message,
+      errorMessage: row.error_message,
       createdAt: row.created_at,
-      taskId: row.task_id,
-      providerStatus: row.task_provider_status,
-      providerVideoUrl: row.task_provider_video_url ? sanitizeUrlForLog(row.task_provider_video_url) : undefined,
-      outputUrl: row.task_output_url,
-      cosObjectKey: row.task_cos_key,
-      fileSize: row.task_file_size,
-      mimeType: row.task_mime_type,
-      completedAt: row.task_completed_at,
-      failedStage: row.task_failed_stage,
-      errorCode: row.task_error_code,
+      taskId: undefined,
+      providerStatus: undefined,
+      providerVideoUrl: undefined,
+      outputUrl: undefined,
+      cosObjectKey: undefined,
+      fileSize: undefined,
+      mimeType: undefined,
+      completedAt: undefined,
+      failedStage: taskResult.failedStage,
+      errorCode: taskResult.errorCode,
       chain: {
         createEndpoint: taskResult.createEndpoint,
         pollEndpoint: taskResult.pollEndpoint,
@@ -165,11 +155,11 @@ adminRouter.get("/overview", async (_req, res) => {
         providerVideoUrl: taskResult.providerVideoUrl,
         downloadStatus: taskResult.downloadStatus,
         cosUploadStatus: taskResult.cosUploadStatus,
-        cosObjectKey: taskResult.cosObjectKey || row.task_cos_key,
-        finalOutputUrl: taskResult.finalOutputUrl || row.task_output_url,
-        failedStage: row.task_failed_stage || taskResult.failedStage,
-        errorCode: row.task_error_code || taskResult.errorCode,
-        errorMessage: row.task_error_message || taskResult.errorMessage || row.error_message,
+        cosObjectKey: taskResult.cosObjectKey,
+        finalOutputUrl: taskResult.finalOutputUrl,
+        failedStage: taskResult.failedStage,
+        errorCode: taskResult.errorCode,
+        errorMessage: taskResult.errorMessage || row.error_message,
         rawResponse: taskResult.rawResponse,
         rawError: taskResult.rawError
       }

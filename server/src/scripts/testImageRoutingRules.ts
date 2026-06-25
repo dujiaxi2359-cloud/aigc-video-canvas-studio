@@ -17,5 +17,22 @@ assert.equal(resolveImageEndpointFamily(geminiRelay, "openai", "nano-banana", "N
 const gptRelay = normalizeImageCapabilities(base, "openai", "gpt-image-2-all", "GPT Image 2 All", "duoyuanx");
 assert.equal(resolveImageEndpointFamily(gptRelay, "openai", "gpt-image-2-all", "GPT Image 2 All", "duoyuanx"), "openai_images_generation");
 assert.equal(gptRelay.modelCapability?.model, "gpt-image-2-all");
+assert.deepEqual(gptRelay.inputModes, ["text-to-image"]);
+assert.deepEqual(gptRelay.imageSizes, ["1024x1024"]);
+assert.equal(gptRelay.supportsImageInput, false);
+assert.equal(gptRelay.supportsReferenceImage, false);
+
+const gptRelayUpstream = normalizeImageCapabilities({
+  ...base,
+  capabilitySource: "upstream",
+  upstreamModelId: "gpt-image-2-all",
+  inputModes: ["text-to-image", "image-to-image", "image-edit"],
+  imageSizes: ["1K", "2K", "4K"],
+  supportsImageInput: true,
+  supportsReferenceImage: true
+}, "openai", "gpt-image-2-all", "GPT Image 2 All", "duoyuanx");
+assert.deepEqual(gptRelayUpstream.inputModes, ["text-to-image"]);
+assert.deepEqual(gptRelayUpstream.imageSizes, ["1024x1024"]);
+assert.equal(gptRelayUpstream.supportsImageInput, false);
 
 console.log("test:image-routing-rules ok");
