@@ -86,6 +86,30 @@ function placeholderApiBaseUrlMessage(apiBaseUrl: string) {
   return "";
 }
 
+function isAzureImageEndpoint(apiBaseUrl: string) {
+  return /\/openai\/deployments\/[^/]+\/images\/(?:generations|edits)(?:\?|$)/i.test(apiBaseUrl)
+    || /\/openai\/deployments\/[^/]+$/i.test(apiBaseUrl);
+}
+
+function extractAzureDeploymentName(apiBaseUrl: string) {
+  try {
+    const url = new URL(apiBaseUrl);
+    const match = url.pathname.match(/\/openai\/deployments\/([^/]+)/i);
+    return match ? decodeURIComponent(match[1]) : "";
+  } catch {
+    const match = apiBaseUrl.match(/\/openai\/deployments\/([^/?#]+)/i);
+    return match ? decodeURIComponent(match[1]) : "";
+  }
+}
+
+function azureImageProbeMessage(apiBaseUrl: string, modelName?: string) {
+  const deployment = extractAzureDeploymentName(apiBaseUrl) || modelName || "当前部署名";
+  const usesDeployment = /\/openai\/deployments\//i.test(apiBaseUrl);
+  return usesDeployment
+    ? `Azure 图片中转固定端点格式有效：生成会使用 api-key 请求头 POST 当前 deployment 图片接口，不再错误拉取 /models。已识别模型 ${deployment}。`
+    : "Azure OpenAI 图片端点格式有效：生成会按当前图片协议调用，模型名会原样传给上游。";
+}
+
 function grsaiProbeMessage(apiBaseUrl: string) {
   const root = normalizeGrsaiImageBaseUrl(apiBaseUrl);
   return [
@@ -170,12 +194,13 @@ function normalizeModelConfigInput(input: Partial<ModelConfig> & { apiKey?: stri
   const displayName = input.displayName ?? fallback?.display_name ?? "未命名模型";
   const zhipuOfficial = isZhipuOfficialEndpoint(apiBaseUrl);
   const agnesOfficial = /apihub\.agnes-ai\.com/i.test(apiBaseUrl);
+  const azureImageEndpoint = isAzureImageEndpoint(apiBaseUrl);
   const provider = isGrsaiImageEndpoint(apiBaseUrl)
     ? "Grsai 图片中转"
-    : zhipuOfficial ? "智普 BigModel 官方" : agnesOfficial ? "Agnes AI 官方" : input.provider ?? fallback?.provider;
+    : zhipuOfficial ? "智普 BigModel 官方" : agnesOfficial ? "Agnes AI 官方" : azureImageEndpoint ? "Azure OpenAI / Microsoft 中转" : input.provider ?? fallback?.provider;
   const providerId = isGrsaiImageEndpoint(apiBaseUrl)
     ? "grsai"
-    : zhipuOfficial ? "zhipu" : agnesOfficial ? "agnes" : input.providerId ?? fallback?.provider_id ?? undefined;
+    : zhipuOfficial ? "zhipu" : agnesOfficial ? "agnes" : azureImageEndpoint ? "azure-openai" : input.providerId ?? fallback?.provider_id ?? undefined;
   const category = input.category ?? fallback?.category ?? inferCategory(input.modelType ?? fallback?.model_type ?? "text-to-video");
   const baseCapabilities: ModelCapabilities = input.capabilities
     ?? (fallback ? JSON.parse(fallback.capabilities_json) as ModelCapabilities : defaultCapabilities());
@@ -442,6 +467,9 @@ export async function testModelConfig(id: string, input: Partial<ModelConfig> & 
   if (row.provider_id === "grsai" || isGrsaiImageEndpoint(apiBaseUrl)) {
     return { success: true, message: grsaiProbeMessage(apiBaseUrl) };
   }
+  if ((category === "image" || row.provider_id === "azure-openai") && isAzureImageEndpoint(apiBaseUrl)) {
+    return { success: true, message: azureImageProbeMessage(apiBaseUrl, modelName) };
+  }
   if (row.provider_id === "google" && !/generativelanguage\.googleapis\.com/i.test(apiBaseUrl)) {
     const videoProtocol = /\/v1\/video\/create\/?$/i.test(apiBaseUrl)
       ? "/v1/video/create + /v1/video/query"
@@ -478,6 +506,14 @@ export async function probeOpenAiCompatibleModels(input: { apiBaseUrl?: string; 
       success: true,
       message: grsaiProbeMessage(apiBaseUrl),
       models: category === "image" || !category ? [...grsaiImageModels] : []
+    };
+  }
+  if ((category === "image" || category === undefined) && isAzureImageEndpoint(apiBaseUrl)) {
+    const deployment = extractAzureDeploymentName(apiBaseUrl);
+    return {
+      success: true,
+      message: azureImageProbeMessage(apiBaseUrl, deployment),
+      models: deployment ? [deployment] : []
     };
   }
   const endpoint = endpointFrom(apiBaseUrl, validationPath);

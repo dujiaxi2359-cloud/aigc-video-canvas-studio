@@ -28,6 +28,26 @@ const completeGeneration = resolveAzureImageEndpoint({
 });
 assert(completeGeneration.includes("/images/generations"), "complete generation endpoint should stay generation endpoint");
 
+const guoheGeneration = resolveAzureImageEndpoint({
+  endpoint: "https://llm.guohe-sh.com/api/openai/deployments/gpt-image-2/images/generations?api-version=2025-04-01-preview",
+  deploymentName: "ignored",
+  kind: "generations"
+});
+assert(
+  guoheGeneration === "https://llm.guohe-sh.com/api/openai/deployments/gpt-image-2/images/generations?api-version=2025-04-01-preview",
+  "Guohe Azure relay full generation endpoint should be respected exactly"
+);
+
+const guoheDeploymentBase = resolveAzureImageEndpoint({
+  endpoint: "https://llm.guohe-sh.com/api/openai/deployments/gpt-image-2",
+  deploymentName: "ignored",
+  kind: "generations"
+});
+assert(
+  guoheDeploymentBase === "https://llm.guohe-sh.com/api/openai/deployments/gpt-image-2/images/generations?api-version=2025-04-01-preview",
+  "Guohe Azure relay deployment base should append the documented image generation path"
+);
+
 const switchedEdit = resolveAzureImageEndpoint({
   endpoint: "https://demo.openai.azure.com/openai/deployments/gpt-image-2/images/generations?api-version=preview",
   deploymentName: "ignored",
@@ -53,4 +73,3 @@ try {
 assert(rejectedProxy, "Azure endpoint resolver must reject local proxy addresses");
 
 console.log("test:azure-gpt-image-config ok");
-

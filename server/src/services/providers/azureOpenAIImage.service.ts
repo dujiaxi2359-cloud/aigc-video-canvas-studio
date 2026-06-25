@@ -9,7 +9,7 @@ import { resolveRemoteAsset, readLocalFileAsBase64 } from "../assets/resolveRemo
 import type { ImageProviderParams, ProviderGenerateResult } from "./providerTypes.js";
 
 function configuredApiVersion() {
-  return process.env.AZURE_OPENAI_API_VERSION || "preview";
+  return process.env.AZURE_OPENAI_API_VERSION || "2025-04-01-preview";
 }
 
 function cleanAzureEndpoint(value?: string) {
@@ -81,6 +81,10 @@ export function resolveAzureImageEndpoint(input: {
 
 function endpointUsesDeploymentPath(endpoint: string) {
   return endpoint.includes("/openai/deployments/");
+}
+
+function endpointUsesOpenAICompatPath(endpoint: string) {
+  return /\/openai\/v1\//i.test(endpoint);
 }
 
 function endpointHost(endpoint: string) {
@@ -186,6 +190,7 @@ export async function generateImageWithAzureOpenAI(params: ImageProviderParams):
     kind: params.inputMode === "text-to-image" ? "generations" : "edits"
   });
   const usesDeploymentPath = endpointUsesDeploymentPath(endpoint);
+  const usesOpenAICompatPath = endpointUsesOpenAICompatPath(endpoint);
 
   console.log("[Azure OpenAI Image] request", {
     endpointHost: endpointHost(endpoint),
@@ -207,7 +212,7 @@ export async function generateImageWithAzureOpenAI(params: ImageProviderParams):
         n: Math.max(1, params.generateCount || 1)
       };
       if (requestedSize) body.size = requestedSize;
-      if (!usesDeploymentPath) body.model = params.modelName;
+      if (!usesDeploymentPath || usesOpenAICompatPath) body.model = params.modelName;
       if (params.imageQuality && params.imageQuality !== "auto") body.quality = params.imageQuality;
       response = await fetch(endpoint, {
         method: "POST",
@@ -237,7 +242,7 @@ export async function generateImageWithAzureOpenAI(params: ImageProviderParams):
       if (!params.imageAssetIds?.length) throw new ProviderError("MISSING_INPUT_ASSET", "Azure 图片编辑需要连接一张图片素材。");
       const buildForm = async (size?: string) => {
         const form = new FormData();
-        if (!usesDeploymentPath) form.set("model", params.modelName);
+        if (!usesDeploymentPath || usesOpenAICompatPath) form.set("model", params.modelName);
         form.set("prompt", params.prompt);
         form.set("n", String(Math.max(1, params.generateCount || 1)));
         if (size) form.set("size", size);
