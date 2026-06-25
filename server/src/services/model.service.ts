@@ -798,8 +798,15 @@ function selectedVideoRouting(input: {
   };
 }
 
+function canonicalUpstreamModelName(modelName?: string) {
+  const value = modelName?.trim();
+  if (!value) return "";
+  if (/^gpt[-_ .]?image[-_ .]?2[-_ .]?all$/i.test(value)) return "gpt-image-2-all";
+  return value;
+}
+
 function upstreamModelName(model: ActiveModelConfig, capabilities: ModelCapabilities | undefined, fallback?: string) {
-  return capabilities?.upstreamModelId?.trim() || fallback?.trim() || model.model_name || model.id;
+  return canonicalUpstreamModelName(capabilities?.upstreamModelId) || canonicalUpstreamModelName(fallback) || canonicalUpstreamModelName(model.model_name) || model.id;
 }
 
 function assertOutboundImageModelRoute(input: {
@@ -809,8 +816,8 @@ function assertOutboundImageModelRoute(input: {
   endpoint?: string;
 }) {
   const selectedModelId = input.route.selectedModelId;
-  const explicitUpstream = input.configuredUpstreamModelId?.trim();
-  const expectedModel = explicitUpstream || input.route.actualModelId;
+  const explicitUpstream = canonicalUpstreamModelName(input.configuredUpstreamModelId);
+  const expectedModel = explicitUpstream || canonicalUpstreamModelName(input.route.actualModelId);
   if (!input.requestBodyModel || input.requestBodyModel !== expectedModel) {
     throw new ProviderError(
       "MODEL_ROUTING_MISMATCH",

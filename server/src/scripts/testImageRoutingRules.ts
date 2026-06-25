@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { normalizeImageCapabilities, resolveImageEndpointFamily } from "../services/imageCapabilityNormalization.js";
+import { openAIImageRequestModel } from "../services/providers/openaiImage.service.js";
 import type { ModelCapabilities } from "../types/model.js";
 
 const base: ModelCapabilities = {
@@ -27,6 +28,9 @@ assert.equal(resolveImageEndpointFamily(gptRelayAlias, "openai", "gpt-image2-all
 assert.deepEqual(gptRelayAlias.inputModes, ["text-to-image"]);
 assert.deepEqual(gptRelayAlias.imageSizes, ["1024x1024"]);
 assert.equal(gptRelayAlias.supportsImageInput, false);
+assert.equal(openAIImageRequestModel("gpt-image2-all"), "gpt-image-2-all");
+assert.equal(openAIImageRequestModel("gpt-image-2-all"), "gpt-image-2-all");
+assert.notEqual(openAIImageRequestModel("gpt-image-2-all"), "gpt-5-3-image");
 
 const gptRelayUpstream = normalizeImageCapabilities({
   ...base,

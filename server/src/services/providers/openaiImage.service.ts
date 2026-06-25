@@ -113,7 +113,7 @@ function isGptImage2AllModel(modelName?: string) {
   return /gpt[-_ .]?image[-_ .]?2[-_ .]?all/i.test(modelName ?? "");
 }
 
-function openAIImageRequestModel(modelName: string) {
+export function openAIImageRequestModel(modelName: string) {
   return isGptImage2AllModel(modelName) ? "gpt-image-2-all" : modelName;
 }
 
