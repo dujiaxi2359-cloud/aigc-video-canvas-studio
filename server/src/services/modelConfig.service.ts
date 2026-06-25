@@ -191,6 +191,7 @@ function defaultOpenAiCompatibleConfig(category: ModelConfig["category"], apiBas
   if (category === "video") {
     return {
       videoCreateEndpoint: "/v1/videos",
+      unifiedVideoCreateEndpoint: "/v1/video/create",
       videoPollEndpoint: "/v1/videos/{taskId}",
       videoPollMethod: "GET",
       videoPollBodyKey: "task_id",
@@ -208,9 +209,16 @@ function defaultOpenAiCompatibleConfig(category: ModelConfig["category"], apiBas
 function withRuntimeProtocolCapabilities(capabilities: ModelCapabilities, category: ModelConfig["category"], apiBaseUrl: string, modelName: string): ModelCapabilities {
   const providerType = providerTypeFor(apiBaseUrl);
   const capabilityKinds = capabilityKindsFor(capabilities, category);
+  const endpointFamily = capabilities.endpointFamily
+    ?? (category === "text" ? "openai_chat_completions"
+      : category === "video" ? capabilities.apiFamily === "unified_video_create" ? "unified_video_create" : "openai_videos"
+        : /gemini.*image|image.*gemini|nano[-_ .]?banana|imagen/i.test(modelName) ? "gemini_generate_content"
+          : /gpt[-_ .]?image|dall[-_ .]?e|openai/i.test(modelName) ? "openai_images_generation"
+            : undefined);
   return {
     ...capabilities,
     providerType,
+    endpointFamily,
     capability: capabilities.capability ?? capabilityKinds[0],
     capabilityKinds,
     modelStatus: modelName.trim() && apiBaseUrl.trim() ? "ready" : "need_config",
@@ -769,7 +777,7 @@ export async function probeOpenAiCompatibleModels(input: { apiBaseUrl?: string; 
       : input.pullModels === false
       ? "地址与 API Key 验证通过。请继续拉取模型，或直接手动添加上游模型 ID。"
       : models.length
-        ? `验证通过，已拉取 ${models.length} 个模型。`
+        ? `验证通过，已拉取 ${models.length} 个模型。拉取结果仅作为草稿，需确认 capability、endpointFamily、endpoint 和 upstreamModelId 后才可用于画布生成。`
         : "验证通过，但未从返回内容中识别到模型列表。",
     models
   };

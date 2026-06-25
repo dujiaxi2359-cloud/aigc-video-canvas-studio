@@ -17,6 +17,7 @@
     "test:model-config-probe": "node ../node_modules/tsx/dist/cli.mjs src/scripts/testModelConfigProbe.ts",
     "test:image-asset-compat": "node ../node_modules/tsx/dist/cli.mjs src/scripts/testImageAssetCompat.ts",
     "test:image-response-extractor": "node ../node_modules/tsx/dist/cli.mjs src/scripts/testImageResponseExtractor.ts",
+    "test:image-routing-rules": "node ../node_modules/tsx/dist/cli.mjs src/scripts/testImageRoutingRules.ts",
     "test:video-result-extractor": "node ../node_modules/tsx/dist/cli.mjs src/scripts/testVideoResultExtractor.ts",
     "test:midjourney-image-adapter": "node ../node_modules/tsx/dist/cli.mjs src/scripts/testMidjourneyImageAdapter.ts",
     "test:asset-access-token": "node ../node_modules/tsx/dist/cli.mjs src/scripts/testAssetAccessToken.ts",

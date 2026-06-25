@@ -1,5 +1,5 @@
 import type { ModelCapabilities, ModelCapabilityKind, OpenAiCompatibleConfig, ProviderType } from "../../types/model.js";
-import { ProviderError } from "../../utils/providerErrors.js";
+import { ProviderError, type ProviderErrorCode } from "../../utils/providerErrors.js";
 
 const OFFICIAL_HOSTS = [
   "api.openai.com",
@@ -167,11 +167,20 @@ export function throwOpenAiCompatibleHttpError(input: {
 }) {
   const raw = rawMessage(input.payload, input.text ?? "");
   const message = raw ? `${input.label}失败：HTTP ${input.status} · ${raw}` : `${input.label}失败：HTTP ${input.status}`;
-  throw new ProviderError("PROVIDER_ERROR", message, message, {
+  throw new ProviderError(classifyOpenAiCompatibleProviderErrorCode(raw || input.text || message), message, message, {
     endpoint: input.endpoint,
     status: input.status,
     rawResponse: input.payload ?? input.text
   });
+}
+
+export function classifyOpenAiCompatibleProviderErrorCode(message: string): ProviderErrorCode {
+  if (/contents\s+is\s+required|contents.*required/i.test(message)) return "GEMINI_REQUEST_SCHEMA_ERROR";
+  if (/unknown parameter|invalid.*parameter|invalid_request_error|bad request|request schema|schema/i.test(message)) return "REQUEST_SCHEMA_ERROR";
+  if (/no available compatible accounts|compatible accounts.*not available|账号.*不可用|账户.*不可用/i.test(message)) return "PROVIDER_ACCOUNT_UNAVAILABLE";
+  if (/无可用渠道|可用渠道不存在|no available channel|all channels|channel.*unavailable|所有分组.*模型|当前分组.*模型/i.test(message)) return "PROVIDER_CHANNEL_UNAVAILABLE";
+  if (/no available platform found|platform.*not found|model route|route unavailable|模型.*路由|平台.*不可用/i.test(message)) return "PROVIDER_MODEL_ROUTE_UNAVAILABLE";
+  return "PROVIDER_ERROR";
 }
 
 export function explicitCapabilityKinds(capabilities?: ModelCapabilities) {

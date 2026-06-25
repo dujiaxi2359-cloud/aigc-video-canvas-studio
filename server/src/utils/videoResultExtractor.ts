@@ -4,16 +4,28 @@ const VIDEO_URL_PATHS = [
   ["videoUrl"],
   ["output_url"],
   ["outputUrl"],
+  ["preview_url"],
+  ["previewUrl"],
+  ["download_url"],
+  ["downloadUrl"],
   ["data", "url"],
   ["data", "video_url"],
   ["data", "videoUrl"],
   ["data", "output_url"],
   ["data", "outputUrl"],
+  ["data", "preview_url"],
+  ["data", "previewUrl"],
+  ["data", "download_url"],
+  ["data", "downloadUrl"],
   ["result", "url"],
   ["result", "video_url"],
   ["result", "videoUrl"],
   ["result", "output_url"],
   ["result", "outputUrl"],
+  ["result", "preview_url"],
+  ["result", "previewUrl"],
+  ["result", "download_url"],
+  ["result", "downloadUrl"],
   ["video", "url"],
   ["video", "video_url"],
   ["videos", 0, "url"],
@@ -46,8 +58,12 @@ const STATUS_PATHS = [
   ["taskStatus"],
   ["data", "status"],
   ["data", "state"],
+  ["data", "task_status"],
+  ["data", "taskStatus"],
   ["result", "status"],
-  ["result", "state"]
+  ["result", "state"],
+  ["result", "task_status"],
+  ["result", "taskStatus"]
 ] as const;
 
 function valueAtPath(source: unknown, path: readonly (string | number)[]) {
@@ -87,7 +103,7 @@ export function extractProviderStatus(source: unknown) {
 
 export function isProviderSuccessStatus(source: unknown) {
   const status = extractProviderStatus(source);
-  return Boolean(status && ["success", "succeeded", "completed", "complete", "done", "finished"].includes(status));
+  return Boolean(status && ["success", "succeeded", "completed", "complete", "done", "finished", "generated", "generated_success", "task_success"].includes(status));
 }
 
 export function sanitizeUrlForLog(url?: string) {

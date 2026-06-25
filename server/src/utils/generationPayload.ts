@@ -6,6 +6,7 @@ export type OfficialPayloadSummary = {
   providerId?: string;
   selectedModelId?: string;
   actualModelName?: string;
+  upstreamModelId?: string;
   adapterName?: string;
   inputMode?: string;
   videoMode?: string;
@@ -51,6 +52,7 @@ export function buildPayloadSummary(input: {
   providerId?: string;
   selectedModelId?: string;
   actualModelName?: string;
+  upstreamModelId?: string;
   inputMode?: string;
   aspectRatio?: string;
   mappedSize?: string;
@@ -75,6 +77,7 @@ export function buildPayloadSummary(input: {
     providerId: input.providerId,
     selectedModelId: input.selectedModelId,
     actualModelName: input.actualModelName,
+    upstreamModelId: input.upstreamModelId,
     adapterName: official?.adapterName ?? videoOfficial?.adapterName,
     inputMode: input.inputMode,
     videoMode,

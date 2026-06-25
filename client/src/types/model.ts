@@ -43,12 +43,24 @@ export type ModelCapabilityKind =
 
 export type ModelRuntimeStatus = "ready" | "need_config" | "failed" | "unsupported";
 export type OpenAiCompatibleFallbackMode = "openai_first_then_unified";
+export type EndpointFamily =
+  | "openai_chat_completions"
+  | "openai_images_generation"
+  | "openai_images_edits"
+  | "gemini_generate_content"
+  | "openai_videos"
+  | "openai_video_create"
+  | "unified_video_create"
+  | "mj_task_submit"
+  | "unknown";
+export type ImageEndpointFamily = Extract<EndpointFamily, "openai_images_generation" | "openai_images_edits" | "gemini_generate_content" | "unknown">;
 
 export type OpenAiCompatibleConfig = {
   chatEndpoint?: string;
   imageGenerationEndpoint?: string;
   imageEditEndpoint?: string;
   videoCreateEndpoint?: string;
+  unifiedVideoCreateEndpoint?: string;
   videoPollEndpoint?: string;
   videoPollMethod?: "GET" | "POST";
   videoPollBodyKey?: "id" | "task_id" | "taskId" | "video_id" | "job_id";
@@ -65,6 +77,7 @@ export type OpenAiCompatibleConfig = {
 
 export type ModelCapabilities = {
   providerType?: ProviderType;
+  endpointFamily?: EndpointFamily;
   capability?: ModelCapabilityKind;
   capabilityKinds?: ModelCapabilityKind[];
   modelStatus?: ModelRuntimeStatus;

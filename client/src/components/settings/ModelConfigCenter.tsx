@@ -670,6 +670,7 @@ function openAiCompatibleConfigFor(category: ModelCategory, baseUrl: string): Mo
   }
   return {
     videoCreateEndpoint: "/v1/videos",
+    unifiedVideoCreateEndpoint: "/v1/video/create",
     videoPollEndpoint: "/v1/videos/{taskId}",
     videoPollMethod: "GET",
     videoPollBodyKey: "task_id",
@@ -682,15 +683,28 @@ function openAiCompatibleConfigFor(category: ModelCategory, baseUrl: string): Mo
   };
 }
 
-function withRuntimeProtocol(capabilities: ModelCapabilities, category: ModelCategory, baseUrl: string, modelName: string): ModelCapabilities {
+function endpointFamilyFor(capabilities: ModelCapabilities, category: ModelCategory, modelName: string): ModelCapabilities["endpointFamily"] {
+  if (capabilities.endpointFamily) return capabilities.endpointFamily;
+  if (category === "text") return "openai_chat_completions";
+  if (category === "image") {
+    if (/gemini.*image|image.*gemini|nano[-_ .]?banana|imagen/i.test(modelName)) return "gemini_generate_content";
+    if (/gpt[-_ .]?image|dall[-_ .]?e|openai/i.test(modelName)) return "openai_images_generation";
+    return undefined;
+  }
+  if (category === "video") return capabilities.apiFamily === "unified_video_create" ? "unified_video_create" : "openai_videos";
+  return "unknown";
+}
+
+function withRuntimeProtocol(capabilities: ModelCapabilities, category: ModelCategory, baseUrl: string, modelName: string, options: { pulledDraft?: boolean } = {}): ModelCapabilities {
   const official = isOfficialApiRoute(baseUrl);
   const capabilityKinds = capabilityKindsFor(capabilities, category);
   return {
     ...capabilities,
     providerType: official ? "official" : "openai_compatible",
+    endpointFamily: endpointFamilyFor(capabilities, category, modelName),
     capability: capabilities.capability ?? capabilityKinds[0],
     capabilityKinds,
-    modelStatus: modelName.trim() && baseUrl.trim() ? "ready" : "need_config",
+    modelStatus: options.pulledDraft && !official ? "need_config" : modelName.trim() && baseUrl.trim() ? "ready" : "need_config",
     openaiCompatibleConfig: official
       ? undefined
       : {
@@ -1204,6 +1218,8 @@ export function ModelConfigCenter() {
         const baseCapabilities = inferred.category === "video" && isOfficialApiRoute(normalizedBaseUrl)
           ? mergeOfficialAndChannelCapabilities(official, modelName, normalizedBaseUrl)
           : inferred.capabilities;
+        const officialRoute = isOfficialApiRoute(normalizedBaseUrl);
+        const pulledDraft = selectedActiveModels.includes(modelName) && !manualModels.includes(modelName) && !officialRoute;
         return {
           providerId: inferred.providerId,
           provider: inferred.provider,
@@ -1214,8 +1230,8 @@ export function ModelConfigCenter() {
           apiKey: apiKey.trim(),
           modelName,
           modelType: inferred.modelType as ModelType,
-          enabled: true,
-          capabilities: withRuntimeProtocol(baseCapabilities, category, normalizedBaseUrl, modelName)
+          enabled: !pulledDraft,
+          capabilities: withRuntimeProtocol(baseCapabilities, category, normalizedBaseUrl, modelName, { pulledDraft })
         } satisfies Partial<ModelConfig> & { apiKey?: string };
       });
       const result = await saveModelConfigsBulk(payloads, false);

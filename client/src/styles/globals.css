@@ -10193,3 +10193,49 @@ video:-webkit-full-screen,
 :root[data-theme="light"] .asset-library-page video {
   background: rgba(36, 34, 41, 0.08);
 }
+
+/* Moon light settings readability hard-stop.
+   Settings contains many legacy dark-theme Tailwind utilities; keep the final light layer stronger than them. */
+:root[data-theme="light"] .settings-workspace {
+  --settings-light-ink: #1f1d26;
+  --settings-light-body: #48424f;
+  --settings-light-muted: #675f6d;
+  --settings-light-panel: rgba(255, 255, 255, 0.92);
+  --settings-light-panel-soft: rgba(250, 248, 243, 0.84);
+  --settings-light-border: rgba(31, 29, 38, 0.13);
+  color: var(--settings-light-ink) !important;
+}
+
+:root[data-theme="light"] .settings-workspace :is(h1, h2, h3, h4, h5, h6, label, strong, .font-semibold, .font-medium),
+:root[data-theme="light"] .settings-workspace :is(.text-white, .text-white\/95, .text-white\/90, .text-white\/85, .text-white\/80) {
+  color: var(--settings-light-ink) !important;
+}
+
+:root[data-theme="light"] .settings-workspace :is(p, small, span, em, button, a),
+:root[data-theme="light"] .settings-workspace [class*="text-white/"],
+:root[data-theme="light"] .settings-workspace [class*="text-slate-"],
+:root[data-theme="light"] .settings-workspace [class*="text-zinc-"],
+:root[data-theme="light"] .settings-workspace [class*="text-neutral-"] {
+  color: var(--settings-light-body) !important;
+}
+
+:root[data-theme="light"] .settings-workspace :is(.text-xs, .text-sm, .settings-muted, .settings-description),
+:root[data-theme="light"] .settings-workspace :is(button:disabled, input:disabled, textarea:disabled, select:disabled) {
+  color: var(--settings-light-muted) !important;
+}
+
+:root[data-theme="light"] .settings-workspace :is(.settings-section, .settings-model-aside, .settings-theme-section, #api-settings > *, #admin-settings section, [class*="bg-[#0"], [class*="bg-[#1"], [class*="bg-black/"], [class*="bg-white/"]) {
+  border-color: var(--settings-light-border) !important;
+  background: linear-gradient(180deg, var(--settings-light-panel), var(--settings-light-panel-soft)) !important;
+  box-shadow: 0 18px 48px rgba(66, 56, 42, 0.11) !important;
+}
+
+:root[data-theme="light"] .settings-workspace :is(input, textarea, select, .settings-select, .settings-segment, .settings-check-option) {
+  border-color: var(--settings-light-border) !important;
+  background: rgba(255, 255, 255, 0.88) !important;
+  color: var(--settings-light-ink) !important;
+}
+
+:root[data-theme="light"] .settings-workspace :is(input, textarea)::placeholder {
+  color: #7b7280 !important;
+}

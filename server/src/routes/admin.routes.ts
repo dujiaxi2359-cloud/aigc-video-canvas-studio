@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import { Router } from "express";
+import { Router, type Request, type Response } from "express";
 import { requireAdmin, requireLogin } from "../middleware/auth.js";
 import { getDb } from "../db/database.js";
 import { createId } from "../utils/id.js";
@@ -178,7 +178,7 @@ adminRouter.get("/overview", async (_req, res) => {
   res.json({ users, workspaces, invites, plans, models, failureLogs });
 });
 
-adminRouter.post("/generation-tasks/:taskId/repair-video", async (req, res) => {
+export async function syncProviderVideoResult(req: Request, res: Response) {
   const providerVideoUrl = String(req.body?.providerVideoUrl || "").trim();
   if (!providerVideoUrl) {
     return res.status(400).json({
@@ -294,7 +294,7 @@ adminRouter.post("/generation-tasks/:taskId/repair-video", async (req, res) => {
       });
       await saveGenerationTask({
         id: task.id,
-        status: "success",
+        status: "succeeded",
         providerStatus: "succeeded",
         providerVideoUrl,
         outputUrl: persisted.cosUrl,
@@ -302,13 +302,14 @@ adminRouter.post("/generation-tasks/:taskId/repair-video", async (req, res) => {
         fileSize: persisted.fileSize,
         mimeType: persisted.mimeType,
         completedAt: now(),
-        stage: "canvas_updated",
+        stage: "succeeded",
         progress: 100,
         result: {
           providerVideoUrl: sanitizeUrlForLog(providerVideoUrl),
           cosUploadStatus: persisted.cosUploadStatus,
           cosObjectKey: persisted.cosObjectKey,
           finalOutputUrl: persisted.cosUrl,
+          outputUrl: persisted.cosUrl,
           canvasUpdated: true,
           manualRepair: true
         }
@@ -351,7 +352,9 @@ adminRouter.post("/generation-tasks/:taskId/repair-video", async (req, res) => {
       details
     });
   }
-});
+}
+
+adminRouter.post(["/generation-tasks/:taskId/repair-video", "/generation-tasks/:taskId/sync-provider-result"], syncProviderVideoResult);
 
 adminRouter.post("/invite-codes", async (req, res) => {
   const db = await getDb();

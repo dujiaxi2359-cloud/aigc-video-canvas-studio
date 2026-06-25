@@ -1,4 +1,4 @@
-import type { ImageInputMode, ModelCapabilities, ModelType } from "../types/model.js";
+import type { ImageEndpointFamily, ImageInputMode, ModelCapabilities, ModelType } from "../types/model.js";
 
 const imageRatios = ["1:1", "3:4", "4:3", "9:16", "16:9"];
 const grsaiRatios = ["auto", "1:1", "16:9", "9:16", "4:3", "3:4", "3:2", "2:3", "5:4", "4:5", "21:9", "9:21", "1:2", "2:1"];
@@ -22,6 +22,21 @@ function withImageModelCapability(capabilities: ModelCapabilities, modelName: st
       supportsImageEdit: modes.has("image-edit")
     }
   };
+}
+
+export function isGeminiImageModel(providerId?: string, modelName?: string, displayName?: string, provider?: string) {
+  return /gemini.*image|image.*gemini|nano[-_ .]?banana|flash[-_ .]?image|pro[-_ .]?image/.test(identity(providerId, modelName, displayName, provider));
+}
+
+export function resolveImageEndpointFamily(capabilities: ModelCapabilities | undefined, providerId?: string, modelName?: string, displayName?: string, provider?: string): ImageEndpointFamily {
+  if (capabilities?.endpointFamily === "openai_images_generation" || capabilities?.endpointFamily === "openai_images_edits" || capabilities?.endpointFamily === "gemini_generate_content" || capabilities?.endpointFamily === "unknown") {
+    return capabilities.endpointFamily;
+  }
+  if (isGeminiImageModel(providerId, modelName, displayName, provider)) return "gemini_generate_content";
+  if (/gpt[-_ .]?image|dall[-_ .]?e|openai/.test(identity(providerId, modelName, displayName, provider)) || providerId === "openai" || providerId === "azure-openai") {
+    return capabilities?.capability === "image_edit" ? "openai_images_edits" : "openai_images_generation";
+  }
+  return "unknown";
 }
 
 export function isQwenImageEditModel(providerId?: string, modelName?: string, displayName?: string, provider?: string) {
@@ -121,9 +136,10 @@ export function normalizeImageCapabilities(
     }, model);
   }
 
-  if (/gemini.*image|image.*gemini|nano[-_ .]?banana/.test(value)) {
+  if (isGeminiImageModel(providerId, modelName, displayName, provider)) {
     return withImageModelCapability({
       ...capabilities,
+      endpointFamily: capabilities.endpointFamily ?? "gemini_generate_content",
       inputModes: ["text-to-image", "image-to-image", "image-edit"],
       imageAspectRatios: capabilities.imageAspectRatios ?? imageRatios,
       imageSizes: ["1K"],
@@ -170,6 +186,7 @@ export function normalizeImageCapabilities(
   if (/gpt[-_ .]?image|dall[-_ .]?e|openai/.test(value) || providerId === "openai" || providerId === "azure-openai") {
     return withImageModelCapability({
       ...capabilities,
+      endpointFamily: capabilities.endpointFamily ?? "openai_images_generation",
       inputModes: ["text-to-image", "image-to-image", "image-edit"],
       imageAspectRatios: capabilities.imageAspectRatios ?? imageRatios,
       imageSizes: capabilities.imageSizes ?? openAiSizes,
@@ -205,7 +222,7 @@ export function inferImageProvider(input: { providerId?: string; modelName: stri
     return { providerId: "alibaba", provider: "通义万相 / 阿里百炼" };
   }
   if (input.providerId === "grsai" || /grsai/i.test(value)) return { providerId: "grsai", provider: "Grsai 图片中转" };
-  if (/gemini.*image|image.*gemini|nano[-_ .]?banana|imagen/.test(value)) return { providerId: "google", provider: "Gemini 图像中转" };
+  if (isGeminiImageModel(input.providerId, input.modelName, input.displayName, input.provider) || /imagen/.test(value)) return { providerId: "google", provider: "Gemini 图像中转" };
   if (/seedream|doubao[-_]?seedream/.test(value)) return { providerId: "seedance", provider: "Seedream / 火山方舟" };
   return { providerId: input.providerId ?? "openai", provider: input.provider ?? "OpenAI 兼容图像中转" };
 }

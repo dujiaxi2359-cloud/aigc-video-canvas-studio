@@ -841,8 +841,8 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
         const latestTask = await generationApi.latestTask(props.id, startedAt - 5000).catch(() => undefined);
         if (latestTask && !currentData.outputUrl) {
           const taskStatus = String(latestTask.status || "").toLowerCase();
-          const taskUrl = taskResultVideoUrl(latestTask.result);
-          if (["success", "completed", "succeeded", "done"].includes(taskStatus) && taskUrl) {
+          const taskUrl = latestTask.outputUrl || taskResultVideoUrl(latestTask.result);
+          if (["success", "completed", "complete", "succeeded", "done", "finished", "generated", "generated_success", "task_success"].includes(taskStatus) && taskUrl) {
             update(props.id, {
               status: "success",
               outputUrl: taskUrl,
@@ -1116,7 +1116,7 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
       const hasReturnedVideo = Boolean(result.outputUrl);
       update(
         props.id,
-        result.status === "success" && hasReturnedVideo
+        (result.status === "success" || result.status === "succeeded") && hasReturnedVideo
           ? {
             status: "success",
             outputAssetId: result.outputAssetId ?? previousOutputAssetId,
@@ -1131,7 +1131,7 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
             generationStartedAt: undefined,
             clientRequestId: undefined
           }
-          : result.status === "success"
+          : result.status === "success" || result.status === "succeeded"
             ? {
               status: "generating",
               outputAssetId: previousOutputAssetId,

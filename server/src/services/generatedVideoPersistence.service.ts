@@ -225,7 +225,7 @@ export async function updateCanvasNodeWithGeneratedVideo(input: {
     input.projectId,
     workspace.id
   );
-  if (!project) throw new ProviderError("CANVAS_UPDATE_FAILED", "COS 已转存，但没有找到对应画布项目。", undefined, { failedStage: "canvas_update", projectId: input.projectId, nodeId: input.nodeId });
+  if (!project) throw new ProviderError("CANVAS_NODE_UPDATE_FAILED", "COS 已转存，但没有找到对应画布项目。", undefined, { failedStage: "canvas_node_updated", projectId: input.projectId, nodeId: input.nodeId });
 
   let didUpdate = false;
   const nodes = JSON.parse(project.nodes_json) as Array<Record<string, unknown>>;
@@ -238,15 +238,17 @@ export async function updateCanvasNodeWithGeneratedVideo(input: {
       data: {
         ...data,
         status: "success",
+        generationStatus: "succeeded",
         outputUrl: input.outputUrl,
         previewUrl: input.outputUrl,
         downloadableUrl: input.downloadableUrl ?? input.outputUrl,
         outputAssetId: input.outputAssetId,
+        loading: false,
         errorMessage: undefined
       }
     };
   });
-  if (!didUpdate) throw new ProviderError("CANVAS_UPDATE_FAILED", "COS 已转存，但没有找到对应画布节点。", undefined, { failedStage: "canvas_update", projectId: input.projectId, nodeId: input.nodeId });
+  if (!didUpdate) throw new ProviderError("CANVAS_NODE_UPDATE_FAILED", "COS 已转存，但没有找到对应画布节点。", undefined, { failedStage: "canvas_node_updated", projectId: input.projectId, nodeId: input.nodeId });
 
   await db.run("UPDATE projects SET nodes_json = ?, updated_at = ? WHERE id = ? AND workspace_id = ?", JSON.stringify(nextNodes), now(), input.projectId, workspace.id);
   return { updated: true };

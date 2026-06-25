@@ -28,7 +28,7 @@ import { generateTextWithOpenAICompatible } from "./providers/openaiCompatibleTe
 import { generateVideoWithSeedance } from "./providers/seedanceVideo.service.js";
 import { generateImageWithZhipu } from "./providers/zhipuImage.service.js";
 import { isZhipuOfficialEndpoint } from "./providers/zhipuProtocol.js";
-import { isQwenImageEditModel, normalizeImageCapabilities, qwenTextModelForEdit } from "./imageCapabilityNormalization.js";
+import { isGeminiImageModel, isQwenImageEditModel, normalizeImageCapabilities, qwenTextModelForEdit, resolveImageEndpointFamily } from "./imageCapabilityNormalization.js";
 import { channelSupportsImage, resolveVideoRequestConfig, shouldUseProxyVideoAdapter, validateVideoRequestConfig } from "./providers/videoRequestAdapter.js";
 import { deriveCapabilityKinds, resolveProviderType } from "./providers/openaiCompatibleProtocol.js";
 import { resolveProviderApiBaseUrl } from "./providers/providerBaseUrl.js";
@@ -689,9 +689,11 @@ function selectedImageRouting(input: {
   model: ActiveModelConfig;
   request: GenerateImageRequest;
   modelName: string;
+  capabilities: ModelCapabilities;
 }) {
   const actualProviderId = input.model.provider_id ?? "";
-  const actualModelId = input.modelName || input.model.model_name || input.model.id;
+  const actualModelId = input.model.model_name || input.model.id;
+  const upstreamModelId = upstreamModelName(input.model, input.capabilities, input.modelName || actualModelId);
   const actualCapability = categoryCapability({ type: "image", inputMode: input.request.inputMode });
   return {
     requestId: input.request.requestId,
@@ -704,8 +706,10 @@ function selectedImageRouting(input: {
     selectedCapability: input.request.capability ?? actualCapability,
     actualProviderId,
     actualModelId,
+    upstreamModelId,
     actualModelConfigId: input.model.id,
     actualCapability,
+    actualEndpointFamily: resolveImageEndpointFamily(input.capabilities, actualProviderId, `${actualModelId} ${upstreamModelId}`, input.model.display_name, input.model.provider),
     autoModelSelection: input.request.autoModelSelection === true
   };
 }
@@ -744,6 +748,14 @@ function assertSelectedImageRouting(route: ReturnType<typeof selectedImageRoutin
       route
     );
   }
+  if (route.actualEndpointFamily === "unknown") {
+    throw new ProviderError(
+      "ADAPTER_ROUTING_MISMATCH",
+      "当前图片模型缺少 endpointFamily / adapterFamily 配置，禁止生成。",
+      undefined,
+      route
+    );
+  }
 }
 
 function selectedVideoRouting(input: {
@@ -753,7 +765,8 @@ function selectedVideoRouting(input: {
   capabilities: ModelCapabilities;
 }) {
   const actualProviderId = input.model.provider_id ?? "";
-  const actualModelId = input.modelName || input.model.model_name || input.model.id;
+  const actualModelId = input.model.model_name || input.model.id;
+  const upstreamModelId = upstreamModelName(input.model, input.capabilities, input.modelName || actualModelId);
   const actualCapability = categoryCapability({ type: "video", inputMode: input.request.inputMode });
   const videoConfig = resolveVideoRequestConfig({
     ...input.request,
@@ -775,6 +788,7 @@ function selectedVideoRouting(input: {
     selectedCapability: input.request.selectedCapability ?? input.request.capability ?? actualCapability,
     actualProviderId,
     actualModelId,
+    upstreamModelId,
     actualModelConfigId: input.model.id,
     actualCapability,
     createEndpoint: input.request.videoCreateEndpoint ?? videoConfig.createEndpoint,
@@ -782,6 +796,10 @@ function selectedVideoRouting(input: {
     apiFamily: videoConfig.apiFamily,
     autoModelSelection: input.request.autoModelSelection === true || input.request.autoVideoModelSelection === true
   };
+}
+
+function upstreamModelName(model: ActiveModelConfig, capabilities: ModelCapabilities | undefined, fallback?: string) {
+  return capabilities?.upstreamModelId?.trim() || fallback?.trim() || model.model_name || model.id;
 }
 
 function assertSelectedVideoRouting(route: ReturnType<typeof selectedVideoRouting>) {
@@ -856,7 +874,7 @@ async function callImageProvider(input: {
 }) {
   const { model, providerParams } = input;
   const providerId = model.provider_id ?? "";
-  const modelName = model.model_name ?? "";
+  const modelName = `${model.model_name ?? ""} ${providerParams.modelName ?? ""}`.trim();
   if (providerId === "grsai" || isGrsaiImageEndpoint(providerParams.apiBaseUrl)) {
     return generateImageWithGrsai(providerParams);
   }
@@ -866,7 +884,14 @@ async function callImageProvider(input: {
   if (isMidjourneyImageModel({ providerId, modelName, displayName: model.display_name, apiBaseUrl: providerParams.apiBaseUrl })) {
     return generateImageWithMidjourney(providerParams);
   }
+  const endpointFamily = resolveImageEndpointFamily(providerParams.capabilities, providerId, modelName, model.display_name, model.provider);
+  if (endpointFamily === "gemini_generate_content" || providerId === "google" || isGeminiImageModel(providerId, modelName, model.display_name, model.provider)) {
+    return generateImageWithGoogle(providerParams);
+  }
   const providerType = resolveProviderType(providerParams.capabilities, providerParams.apiBaseUrl);
+  if (endpointFamily === "openai_images_generation" || endpointFamily === "openai_images_edits") {
+    return generateImageWithOpenAI(providerParams);
+  }
   if (providerType === "openai_compatible") {
     return generateImageWithOpenAI(providerParams);
   }
@@ -1228,7 +1253,7 @@ export async function generateText(input: GenerateTextRequest) {
       ...input,
       apiKey,
       apiBaseUrl: apiBaseUrlFor(model),
-      modelName: model.model_name,
+      modelName: upstreamModelName(model, capabilities, model.model_name),
       providerId: model.provider_id,
       catalogModelId: catalogItem?.id,
       capabilities
@@ -1285,6 +1310,7 @@ export async function generateVideo(input: GenerateVideoRequest) {
     assertModelRuntimeReady({ model, apiKey, capabilities, type: "video", inputMode: inputForGeneration.inputMode });
     const providerId = model.provider_id ?? "";
     const modelName = model.model_name ?? "";
+    const upstreamModelId = upstreamModelName(model, capabilities, modelName);
     const officialVideoMode = inputForGeneration.videoMode ?? legacyInputModeToOfficialMode(inputForGeneration.inputMode, providerId);
     videoRoute = selectedVideoRouting({ model, request: inputForGeneration, modelName, capabilities });
     assertSelectedVideoRouting(videoRoute);
@@ -1293,7 +1319,7 @@ export async function generateVideo(input: GenerateVideoRequest) {
       videoMode: officialVideoMode,
       apiKey,
       apiBaseUrl: apiBaseUrlFor(model),
-      modelName,
+      modelName: upstreamModelId,
       providerId,
       capabilities,
       qualityMode: inputForGeneration.qualityMode ?? "full_quality"
@@ -1305,6 +1331,7 @@ export async function generateVideo(input: GenerateVideoRequest) {
       providerId,
       selectedModelId: videoRoute.selectedModelId,
       actualModelName: modelName,
+      upstreamModelId,
       inputMode: officialVideoMode,
       aspectRatio: inputForGeneration.aspectRatio,
       mappedResolution: inputForGeneration.resolution,
@@ -1333,6 +1360,7 @@ export async function generateVideo(input: GenerateVideoRequest) {
         selectedCapability: videoRoute.selectedCapability,
         actualProviderId: videoRoute.actualProviderId,
         actualModelId: videoRoute.actualModelId,
+        upstreamModelId: videoRoute.upstreamModelId,
         actualCapability: videoRoute.actualCapability,
         endpointStrategy: videoRoute.endpointStrategy,
         createEndpoint: videoRoute.createEndpoint,
@@ -1351,6 +1379,7 @@ export async function generateVideo(input: GenerateVideoRequest) {
         result: {
           provider: providerId,
           modelId: modelName,
+          upstreamModelId,
           capability: videoRoute.actualCapability,
           routing: videoRoute,
           nodeId: inputForGeneration.nodeId,
@@ -1369,6 +1398,7 @@ export async function generateVideo(input: GenerateVideoRequest) {
         result: {
           provider: providerId,
           modelId: modelName,
+          upstreamModelId,
           capability: videoRoute.actualCapability,
           routing: videoRoute,
           nodeId: inputForGeneration.nodeId,
@@ -1392,6 +1422,7 @@ export async function generateVideo(input: GenerateVideoRequest) {
             ...payloadSummary,
             provider: providerId,
             modelId: modelName,
+            upstreamModelId,
             capability: videoRoute.actualCapability,
             routing: videoRoute,
             nodeId: inputForGeneration.nodeId,
@@ -1613,11 +1644,11 @@ export async function generateVideo(input: GenerateVideoRequest) {
       });
     } catch (canvasError) {
       throw new ProviderError(
-        "CANVAS_UPDATE_FAILED",
+        "CANVAS_NODE_UPDATE_FAILED",
         "视频已转存并写入历史，但画布节点状态同步失败。",
         rawErrorMessage(canvasError),
         {
-          failedStage: "canvas_update",
+          failedStage: "canvas_node_updated",
           providerVideoUrl: sanitizeUrlForLog(providerVideoUrl),
           cosObjectKey: asset.storageKey,
           finalOutputUrl,
@@ -1628,8 +1659,8 @@ export async function generateVideo(input: GenerateVideoRequest) {
     const completedAt = Date.now();
     await markVideoTaskStage({
       id: taskId,
-      status: "success",
-      stage: "canvas_updated",
+      status: "succeeded",
+      stage: "succeeded",
       providerStatus: "succeeded",
       providerVideoUrl,
       outputUrl: finalOutputUrl,
@@ -1649,6 +1680,7 @@ export async function generateVideo(input: GenerateVideoRequest) {
         cosUploadStatus: "success",
         cosObjectKey: asset.storageKey,
         finalOutputUrl,
+        outputUrl: finalOutputUrl,
         canvasUpdated: true
       }
     });
@@ -1813,7 +1845,8 @@ export async function generateImage(input: GenerateImageRequest) {
 
     const providerId = model.provider_id ?? "";
     const modelName = runtime.modelName;
-    imageRoute = selectedImageRouting({ model, request: inputForGeneration, modelName });
+    const upstreamModelId = upstreamModelName(model, capabilities, modelName);
+    imageRoute = selectedImageRouting({ model, request: inputForGeneration, modelName, capabilities });
     assertSelectedImageRouting(imageRoute);
     assertModelRuntimeReady({ model, apiKey, capabilities, type: "image", inputMode: inputForGeneration.inputMode });
     if (useCatalogCapabilities) {
@@ -1830,7 +1863,7 @@ export async function generateImage(input: GenerateImageRequest) {
       ...inputForGeneration,
       apiKey,
       apiBaseUrl: apiBaseUrlFor(model),
-      modelName,
+      modelName: upstreamModelId,
       providerId,
       catalogModelId: useCatalogCapabilities ? catalogItem?.id : undefined,
       capabilities,
@@ -1845,6 +1878,7 @@ export async function generateImage(input: GenerateImageRequest) {
       providerId,
       selectedModelId: imageRoute.selectedModelId,
       actualModelName: modelName,
+      upstreamModelId,
       inputMode: inputForGeneration.inputMode,
       aspectRatio: inputForGeneration.aspectRatio,
       quality: inputForGeneration.imageQuality,
@@ -1869,7 +1903,9 @@ export async function generateImage(input: GenerateImageRequest) {
         selectedCapability: imageRoute.selectedCapability,
         actualProviderId: imageRoute.actualProviderId,
         actualModelId: imageRoute.actualModelId,
+        upstreamModelId: imageRoute.upstreamModelId,
         actualCapability: imageRoute.actualCapability,
+        actualEndpointFamily: imageRoute.actualEndpointFamily,
         endpointStrategy: imageRoute.endpointStrategy
       }
     });

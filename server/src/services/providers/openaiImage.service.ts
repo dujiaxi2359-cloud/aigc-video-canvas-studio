@@ -12,7 +12,8 @@ import {
   openAiCompatibleHeaders,
   readRawResponse,
   resolveOpenAiCompatibleEndpoint,
-  throwOpenAiCompatibleHttpError
+  throwOpenAiCompatibleHttpError,
+  classifyOpenAiCompatibleProviderErrorCode
 } from "./openaiCompatibleProtocol.js";
 
 type JsonRecord = Record<string, unknown>;
@@ -36,8 +37,13 @@ async function responseJson(response: Response, endpoint: string) {
     return JSON.parse(text) as unknown;
   } catch {
     const preview = text.replace(/\s+/g, " ").trim().slice(0, 220);
-    throw new Error(humanOpenAIError(`OPENAI_COMPAT_NON_JSON_RESPONSE endpoint=${endpoint} status=${response.status} body=${preview}`));
+    throw openAIImageProviderError(`OPENAI_COMPAT_NON_JSON_RESPONSE endpoint=${endpoint} status=${response.status} body=${preview}`);
   }
+}
+
+function openAIImageProviderError(message: string) {
+  const errorMessage = humanOpenAIError(message);
+  return new ProviderError(classifyOpenAiCompatibleProviderErrorCode(message), errorMessage, message);
 }
 
 function humanOpenAIError(message: string) {
@@ -234,6 +240,20 @@ function applySharedImageParams(body: Record<string, unknown>, params: ImageProv
   if (params.imageFormat && params.imageFormat !== "auto") body.output_format = params.imageFormat;
 }
 
+function assertOpenAIImageGenerationBody(body: Record<string, unknown>, params: ImageProviderParams) {
+  const forbidden = ["image", "images", "image_url", "input_image", "mask", "contents", "parts", "inlineData", "duration", "ratio", "aspect_ratio", "video", "files"];
+  const present = forbidden.filter((key) => body[key] !== undefined);
+  if (params.inputMode === "text-to-image" && params.imageAssetIds?.length) present.push("imageAssetIds");
+  if (present.length) {
+    throw new ProviderError(
+      "CAPABILITY_MISMATCH",
+      "当前模型是文生图模型，不支持参考图输入，请切换 image_edit 模型或移除参考图。",
+      undefined,
+      { model: params.modelName, forbiddenFields: Array.from(new Set(present)) }
+    );
+  }
+}
+
 async function imageAssetBase64(assetIds: string[], withDataUrl = false) {
   const images: string[] = [];
   for (const assetId of assetIds.slice(0, 16)) {
@@ -299,7 +319,7 @@ async function fetchOpenAIImageJson(input: {
     throwOpenAiCompatibleHttpError({ label: "OpenAI 兼容图片生成", endpoint, status: response.status, payload, text });
   }
 
-  throw new Error(humanOpenAIError(message));
+  throw openAIImageProviderError(message);
 }
 
 async function fetchOpenAICompatJsonImageEdit(input: {
@@ -352,7 +372,7 @@ async function fetchOpenAICompatJsonImageEdit(input: {
     message = await responseError(response);
   }
 
-  throw new Error(humanOpenAIError(message));
+  throw openAIImageProviderError(message);
 }
 
 function buildImageEditForm(params: ImageProviderParams, options: { omitOutputFormat?: boolean; sizeOverride?: string } = {}) {
@@ -428,7 +448,7 @@ async function fetchOpenAIImageEditJson(input: {
     throwOpenAiCompatibleHttpError({ label: "OpenAI 兼容图片编辑", endpoint, status: response.status, payload, text });
   }
 
-  throw new Error(humanOpenAIError(message));
+  throw openAIImageProviderError(message);
 }
 
 export async function generateImageWithOpenAI(params: ImageProviderParams): Promise<ProviderGenerateResult> {
@@ -449,6 +469,7 @@ export async function generateImageWithOpenAI(params: ImageProviderParams): Prom
       prompt: params.prompt
     };
     applySharedImageParams(body, params);
+    assertOpenAIImageGenerationBody(body, params);
 
     return saveOpenAIImage(await fetchOpenAIImageJson({ apiBaseUrl, apiKey: params.apiKey, params, body }), params.imageFormat, {
       endpoint: "/images/generations",

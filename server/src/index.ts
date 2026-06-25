@@ -18,8 +18,8 @@ import { agentRouter } from "./routes/agent.routes.js";
 import { exportRouter } from "./routes/export.routes.js";
 import { authRouter } from "./routes/auth.routes.js";
 import { inviteRouter } from "./routes/invite.routes.js";
-import { adminRouter } from "./routes/admin.routes.js";
-import { requireActiveWorkspace, requireAdmin, requireAssetFileAccess } from "./middleware/auth.js";
+import { adminRouter, syncProviderVideoResult } from "./routes/admin.routes.js";
+import { requireActiveWorkspace, requireAdmin, requireAssetFileAccess, requireLogin } from "./middleware/auth.js";
 import { applySmartProxyConfig } from "./utils/proxy.js";
 import { logOssConfig } from "./services/assets/ossUpload.service.js";
 
@@ -119,6 +119,7 @@ app.get("/api/system/share-info", (_req, res) => {
   });
 });
 app.use("/api/admin", adminRouter);
+app.post("/api/generation-tasks/:taskId/sync-provider-result", requireLogin, requireAdmin, syncProviderVideoResult);
 app.use("/api/model-configs", requireActiveWorkspace, modelConfigRouter);
 app.use("/api/projects", requireActiveWorkspace, projectRouter);
 app.use("/api/storage", requireActiveWorkspace, storageRouter);
