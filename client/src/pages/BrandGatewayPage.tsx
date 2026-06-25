@@ -79,10 +79,11 @@ export function BrandGatewayPage({ onNavigate }: { onNavigate: (page: Page, proj
       {launchComplete && resolvedTheme === "light" ? (
         <HomePlasmaBackground
           className="home-page-plasma"
-          color="#756f82"
-          speed={0.42}
-          scale={0.62}
-          opacity={0.74}
+          color="#94a3b8"
+          speed={1}
+          direction="forward"
+          scale={1}
+          opacity={1}
           mouseInteractive={false}
         />
       ) : null}

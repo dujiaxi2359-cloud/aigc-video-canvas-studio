@@ -9171,8 +9171,8 @@ video:-webkit-full-screen,
 }
 
 :root[data-theme="light"] .home-plasma-canvas {
-  opacity: 0.76;
-  filter: saturate(0.54) contrast(0.88) brightness(1.14);
+  opacity: 1;
+  filter: none;
   mix-blend-mode: normal;
 }
 
@@ -9186,7 +9186,7 @@ video:-webkit-full-screen,
 
 :root[data-theme="light"] .home-unicorn-copy::before {
   background:
-    radial-gradient(ellipse at 50% 46%, rgba(250, 249, 246, 0.76) 0%, rgba(250, 249, 246, 0.42) 38%, rgba(250, 249, 246, 0) 72%);
+    radial-gradient(ellipse at 50% 46%, rgba(250, 249, 246, 0.62) 0%, rgba(250, 249, 246, 0.3) 38%, rgba(250, 249, 246, 0) 72%);
 }
 
 :root[data-theme="light"] .home-unicorn-eyebrow {
