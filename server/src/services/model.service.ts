@@ -673,8 +673,7 @@ function validateImageRequest(capabilities: ModelCapabilities, input: GenerateIm
   if (input.inputMode !== "text-to-image" && !input.imageAssetIds?.length) {
     throw new Error(input.inputMode === "image-edit" ? "图片编辑需要连接一张图片素材" : "图生图需要连接一张图片素材");
   }
-  const isProductImageTier = /^(?:1K|2K|4K)$/i.test(input.imageSize ?? "");
-  if (input.imageSize && !isProductImageTier && !options.availableImageSizes.includes(input.imageSize)) {
+  if (input.imageSize && !options.availableImageSizes.includes(input.imageSize)) {
     input.imageSize = options.normalizedSelection.imageSize;
   }
   if (!options.availableImageQualities.includes(input.imageQuality)) {
@@ -798,15 +797,8 @@ function selectedVideoRouting(input: {
   };
 }
 
-function canonicalUpstreamModelName(modelName?: string) {
-  const value = modelName?.trim();
-  if (!value) return "";
-  if (/^gpt[-_ .]?image[-_ .]?2[-_ .]?all$/i.test(value)) return "gpt-image-2-all";
-  return value;
-}
-
 function upstreamModelName(model: ActiveModelConfig, capabilities: ModelCapabilities | undefined, fallback?: string) {
-  return canonicalUpstreamModelName(capabilities?.upstreamModelId) || canonicalUpstreamModelName(fallback) || canonicalUpstreamModelName(model.model_name) || model.id;
+  return capabilities?.upstreamModelId?.trim() || fallback?.trim() || model.model_name || model.id;
 }
 
 function assertOutboundImageModelRoute(input: {
@@ -816,8 +808,8 @@ function assertOutboundImageModelRoute(input: {
   endpoint?: string;
 }) {
   const selectedModelId = input.route.selectedModelId;
-  const explicitUpstream = canonicalUpstreamModelName(input.configuredUpstreamModelId);
-  const expectedModel = explicitUpstream || canonicalUpstreamModelName(input.route.actualModelId);
+  const explicitUpstream = input.configuredUpstreamModelId?.trim();
+  const expectedModel = explicitUpstream || input.route.actualModelId;
   if (!input.requestBodyModel || input.requestBodyModel !== expectedModel) {
     throw new ProviderError(
       "MODEL_ROUTING_MISMATCH",

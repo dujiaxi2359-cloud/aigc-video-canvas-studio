@@ -3,7 +3,7 @@ import path from "node:path";
 import { legacyInputModeToOfficialMode } from "../../types/videoModes.js";
 import { downloadGeneratedFile, downloadGeneratedVideoOrUseRemote, saveGeneratedBuffer } from "../../utils/downloadGeneratedFile.js";
 import { ProviderError, rawErrorMessage } from "../../utils/providerErrors.js";
-import { documentedGrokDuration, isDuoyuanGrokRelay } from "../../utils/grokRelayModels.js";
+import { documentedGrokDuration } from "../../utils/grokRelayModels.js";
 import { mapVideoDimensions, normalizeVideoAspectRatio, normalizeVideoResolution } from "../../utils/videoParams.js";
 import { getAsset } from "../asset.service.js";
 import { ensureAssetLocalFile } from "../assets/ensureAssetLocalFile.service.js";
@@ -128,14 +128,6 @@ export function isOfficialGrokEndpoint(apiBaseUrl: string) {
   }
 }
 
-export function isAi666GrokRelay(apiBaseUrl: string) {
-  try {
-    return new URL(baseUrl(apiBaseUrl)).hostname === "ai.ai666.net";
-  } catch {
-    return /(?:^|\.)ai\.ai666\.net/i.test(apiBaseUrl);
-  }
-}
-
 function isUnifiedGrokEndpoint(apiBaseUrl: string) {
   return /\/v1\/video\/create\/?$/i.test(baseUrl(apiBaseUrl));
 }
@@ -227,7 +219,6 @@ export function buildGrokRelayMultipart(input: {
   mode?: string;
 }) {
   const form = new FormData();
-  const duoyuanRelay = isDuoyuanGrokRelay(input.apiBaseUrl);
   const requestDuration = documentedGrokDuration(input.modelName, input.duration);
   const normalizedRatio = normalizeVideoAspectRatio(input.aspectRatio);
   const normalizedResolution = normalizeVideoResolution(input.resolution);
@@ -237,16 +228,14 @@ export function buildGrokRelayMultipart(input: {
   form.set("prompt", input.prompt);
   form.set("aspect_ratio", normalizedRatio);
   form.set("seconds", String(requestDuration));
-  form.set("size", duoyuanRelay ? normalizedResolution : pixelSize);
-  if (!duoyuanRelay) {
-    form.set("aspectRatio", normalizedRatio);
-    form.set("ratio", normalizedRatio);
-    form.set("duration", String(requestDuration));
-    form.set("resolution", normalizedResolution);
-    form.set("width", String(dimensions.width));
-    form.set("height", String(dimensions.height));
-    form.set("dimensions", pixelSize);
-  }
+  form.set("size", pixelSize);
+  form.set("aspectRatio", normalizedRatio);
+  form.set("ratio", normalizedRatio);
+  form.set("duration", String(requestDuration));
+  form.set("resolution", normalizedResolution);
+  form.set("width", String(dimensions.width));
+  form.set("height", String(dimensions.height));
+  form.set("dimensions", pixelSize);
   for (const file of input.images ?? []) form.append("input_reference", file.blob, file.filename);
   for (const file of input.videos ?? []) form.append("input_video", file.blob, file.filename);
   if (input.mode === "video_extension") form.set("mode", "extend");
@@ -362,7 +351,6 @@ export async function generateVideoWithGrok(params: VideoProviderParams): Promis
     const officialEndpoint = isOfficialGrokEndpoint(params.apiBaseUrl);
     const unifiedEndpoint = isUnifiedGrokEndpoint(params.apiBaseUrl);
     const requestModelName = grokRequestModelName(params.modelName, params.apiBaseUrl);
-    const duoyuanRelay = isDuoyuanGrokRelay(params.apiBaseUrl);
     const requestDuration = documentedGrokDuration(requestModelName, params.duration);
     const jsonTransport = officialEndpoint || unifiedEndpoint;
     const images = jsonTransport ? await assetDataUrls(params.imageAssetIds, params.aspectRatio) : [];
@@ -488,7 +476,7 @@ export async function generateVideoWithGrok(params: VideoProviderParams): Promis
       outputUrl: saved.outputUrl,
       localPath: saved.localPath,
       rawResponse: task,
-      payloadSummary: { endpoint, requestId: id, model: requestModelName, configuredModel: params.modelName, seconds: requestDuration, size: duoyuanRelay ? normalizeVideoResolution(params.resolution) : grokVideoSize(params.aspectRatio, params.resolution), mode, protocol: officialEndpoint ? "xai-official-json" : "relay-multipart" }
+      payloadSummary: { endpoint, requestId: id, model: requestModelName, configuredModel: params.modelName, seconds: requestDuration, size: grokVideoSize(params.aspectRatio, params.resolution), mode, protocol: officialEndpoint ? "xai-official-json" : "relay-multipart" }
     };
   } catch (error) {
     if (error instanceof ProviderError) throw error;

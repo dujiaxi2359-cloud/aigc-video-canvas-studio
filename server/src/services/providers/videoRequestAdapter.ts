@@ -143,7 +143,6 @@ function isOfficialEndpoint(providerId: string, baseUrl: string) {
 function isOpenAiCompatibleVideoEndpoint(baseUrl: string) {
   if (!baseUrl) return false;
   const value = baseUrl.toLowerCase().replace(/\/+$/g, "");
-  if (/ai666\.net|cy88\.ai|runapi\.co|newtoken\.club/.test(value)) return true;
   try {
     const url = new URL(value);
     return /\/(?:v1|v1\/videos|v1\/video\/create|videos|video\/create)$/.test(url.pathname.replace(/\/+$/g, ""));
@@ -156,10 +155,8 @@ function inferApiFamily(channel: VideoChannel, baseUrl: string, modelName: strin
   const value = `${baseUrl} ${modelName}`.toLowerCase();
   if (/apihub\.agnes-ai\.com/.test(baseUrl.toLowerCase()) || capabilities.provider === "agnes" || capabilities.apiFamily === "agnes_video") return "agnes_video";
   if (/open\.bigmodel\.cn/.test(baseUrl.toLowerCase()) || capabilities.provider === "zhipu" || capabilities.apiFamily === "zhipu_video") return "zhipu_video";
-  // RunAPI exposes the unified JSON contract even when a migrated workspace
-  // still carries an older `grok_video`/OpenAI capability snapshot.
-  if (/runapi\.co/.test(value)) return "unified_video_create";
   if (channel === "official") return "official_provider";
+  if (capabilities.apiFamily) return capabilities.apiFamily;
   if (/grok[-_ .]?(?:imagine[-_ .]?video|video|1[-_ .]?5[-_ .]?video)/.test(value)) return "grok_video";
   if (/doubao[-_]?seedance[-_]?1[-_]?5/.test(value)) return "doubao_seedance15";
   if (/kling|可灵/.test(value)) return "aigc_video_json";
@@ -168,12 +165,7 @@ function inferApiFamily(channel: VideoChannel, baseUrl: string, modelName: strin
   if (/omni[-_]?fast[-_]?v2v/.test(value)) return "omni_fast_v2v";
   if (/omni[-_]?fast|omni[-_]?flash/.test(value)) return "omni_fast";
   if (/doubao[-_]?seedance[-_]?2[-_]?0|seedance[-_ .]?2/.test(value)) return "seedance2_native";
-  if (capabilities.apiFamily) return capabilities.apiFamily;
   return "openai_videos";
-}
-
-function knownRelayBase(baseUrl: string) {
-  return /(?:ai\.)?(?:cy88\.ai|ai666\.net)|runapi\.co|newtoken\.club/i.test(baseUrl);
 }
 
 function defaultCreateEndpoint(channel: VideoChannel, baseUrl: string, capabilities: ModelCapabilities, apiFamily: VideoApiFamily) {
@@ -181,12 +173,6 @@ function defaultCreateEndpoint(channel: VideoChannel, baseUrl: string, capabilit
   if (apiFamily === "zhipu_video") return "/videos/generations";
   if (channel === "official") return "";
   const value = baseUrl.toLowerCase();
-  if (/runapi\.co/.test(value)) return "/v1/video/create";
-  if (knownRelayBase(baseUrl)) {
-    if (apiFamily === "seedance2_native") return "/v1/video/generations";
-    if (apiFamily === "unified_video_create") return "/v1/video/create";
-    return "/v1/videos";
-  }
   if (capabilities.createEndpoint) return capabilities.createEndpoint;
   if (capabilities.endpoint) return capabilities.endpoint;
   if (/\/v1\/video\/generations\/?$/.test(value)) return "/v1/video/generations";
@@ -200,12 +186,6 @@ function defaultCreateEndpoint(channel: VideoChannel, baseUrl: string, capabilit
 function defaultPollEndpoint(baseUrl: string, createEndpoint: string, capabilities: ModelCapabilities, apiFamily: VideoApiFamily) {
   if (apiFamily === "agnes_video") return "/agnesapi?video_id={taskId}";
   if (apiFamily === "zhipu_video") return "/async-result/{taskId}";
-  if (/runapi\.co/i.test(baseUrl)) return "/v1/videos/{taskId}";
-  if (knownRelayBase(baseUrl)) {
-    if (apiFamily === "seedance2_native") return "/v1/video/generations/{taskId}";
-    if (apiFamily === "unified_video_create") return "/v1/video/query?id={taskId}";
-    return "/v1/videos/{taskId}";
-  }
   if (capabilities.pollEndpoint) return capabilities.pollEndpoint;
   if (apiFamily === "unified_video_create" || /\/v1\/video\/create\/?$/i.test(createEndpoint)) return "/v1/video/query?id={taskId}";
   if (apiFamily === "seedance2_native") return "/v1/video/generations/{taskId}";
@@ -298,9 +278,7 @@ export function resolveVideoRequestConfig(params: VideoProviderParams, capabilit
       ?? defaultPollEndpoint(params.apiBaseUrl, createEndpoint, effectiveCapabilities, apiFamily);
     const taskIdField = defaultTaskField(apiFamily, effectiveCapabilities);
     const supports = supportedInputs(effectiveCapabilities);
-    const imageTransport = apiFamily === "unified_video_create" && /runapi\.co/i.test(params.apiBaseUrl)
-      ? "url"
-      : defaultImageTransport("proxy", apiFamily, effectiveCapabilities);
+    const imageTransport = effectiveCapabilities.imageTransport ?? defaultImageTransport("proxy", apiFamily, effectiveCapabilities);
     const requestFormat = apiFamily === "unified_video_create" || apiFamily === "agnes_video" || apiFamily === "zhipu_video"
       ? "json"
       : effectiveCapabilities.requestFormat
@@ -349,9 +327,7 @@ export function resolveVideoRequestConfig(params: VideoProviderParams, capabilit
   const finalUrl = createEndpoint ? joinUrl(params.apiBaseUrl, createEndpoint) : params.apiBaseUrl;
   const requestFormat = ["unified_video_create", "agnes_video", "zhipu_video"].includes(apiFamily) ? "json" : effectiveCapabilities.requestFormat
     ?? (apiFamily === "doubao_seedance15" ? "multipart" : channel === "proxy" ? "json" : "multipart");
-  const imageTransport = apiFamily === "unified_video_create" && /runapi\.co/i.test(params.apiBaseUrl)
-    ? "url"
-    : defaultImageTransport(channel, apiFamily, effectiveCapabilities);
+  const imageTransport = effectiveCapabilities.imageTransport ?? defaultImageTransport(channel, apiFamily, effectiveCapabilities);
   const taskIdField = defaultTaskField(apiFamily, effectiveCapabilities);
   return {
     provider,

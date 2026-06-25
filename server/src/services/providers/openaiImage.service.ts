@@ -59,7 +59,7 @@ function humanOpenAIError(message: string) {
     return "OpenAI 兼容图片中转返回了 HTML 页面，不是 JSON 数据。通常是中转地址路径不对、网关/鉴权页、余额页、404/502 页面或线路被 Cloudflare 拦截。请检查该模型的 API Base URL、Key 和中转线路。";
   }
   if (isUnsupportedResponseFormatError(message)) {
-    return "当前图片中转不兼容 gpt-image-2 的图片格式参数，会把 output_format 错误转成旧参数 response_format。系统已尝试自动降级；如果仍失败，请在设置中心更换支持新版图片接口的中转线路。";
+    return "当前 OpenAI-Compatible 图片中转不兼容图片格式参数。系统已尝试自动降级；如果仍失败，请在设置中心检查该模型的 endpointFamily 和格式配置。";
   }
   if (/cloudflare.*524|error code 524|a timeout occurred|origin web server timed out/i.test(message)) {
     return "OpenAI 图片中转上游响应超时，请稍后重试或切换其它图片线路。";
@@ -107,14 +107,6 @@ function fallbackImageSize(size?: unknown) {
   if (size === "1536x2048") return "1024x1365";
   if (size === "2048x2048") return "1024x1024";
   return undefined;
-}
-
-function isGptImage2AllModel(modelName?: string) {
-  return /gpt[-_ .]?image[-_ .]?2[-_ .]?all/i.test(modelName ?? "");
-}
-
-export function openAIImageRequestModel(modelName: string) {
-  return isGptImage2AllModel(modelName) ? "gpt-image-2-all" : modelName;
 }
 
 function assertUsableApiKey(apiKey: string) {
@@ -242,21 +234,17 @@ async function saveOpenAIImage(json: unknown, format: string | undefined, contex
 function applySharedImageParams(body: Record<string, unknown>, params: ImageProviderParams) {
   const n = Math.max(1, params.generateCount || 1);
   body.n = n;
-  if (isGptImage2AllModel(params.modelName)) {
-    body.size = "1024x1024";
-    delete body.quality;
-    delete body.output_format;
-    return;
-  }
   const mappedSize = params.aspectRatio ? aspectRatioToOpenAIImageSize(params.aspectRatio, params.modelName, params.imageSize) : params.imageSize && params.imageSize !== "auto" ? params.imageSize : undefined;
   if (mappedSize) body.size = mappedSize;
   if (params.imageQuality && params.imageQuality !== "auto") body.quality = params.imageQuality;
-  if (params.imageFormat && params.imageFormat !== "auto") body.output_format = params.imageFormat;
+  if (params.imageFormat && params.imageFormat !== "auto") body.response_format = params.imageFormat;
 }
 
 function assertOpenAIImageGenerationBody(body: Record<string, unknown>, params: ImageProviderParams) {
+  const allowed = new Set(["model", "prompt", "size", "quality", "style", "n", "response_format"]);
+  const unknown = Object.keys(body).filter((key) => !allowed.has(key));
   const forbidden = ["image", "images", "image_url", "input_image", "mask", "contents", "parts", "inlineData", "duration", "ratio", "aspect_ratio", "video", "files"];
-  const present = forbidden.filter((key) => body[key] !== undefined);
+  const present = [...unknown, ...forbidden.filter((key) => body[key] !== undefined)];
   if (params.inputMode === "text-to-image" && params.imageAssetIds?.length) present.push("imageAssetIds");
   if (present.length) {
     throw new ProviderError(
@@ -293,7 +281,7 @@ async function fetchOpenAIImageJson(input: {
     baseUrl: input.apiBaseUrl,
     endpoint: config.imageGenerationEndpoint,
     defaultEndpoint: "/v1/images/generations",
-    modelId: openAIImageRequestModel(input.params.modelName),
+    modelId: input.params.modelName,
     queryParams: config.queryParams
   });
   const request = async (body: Record<string, unknown>) => fetch(endpoint, {
@@ -320,10 +308,10 @@ async function fetchOpenAIImageJson(input: {
     const { text, payload } = await readRawResponse(response);
     throwOpenAiCompatibleHttpError({ label: "OpenAI 兼容图片生成", endpoint, status: response.status, payload, text });
   }
-  if (input.body.output_format && isUnsupportedResponseFormatError(message)) {
+  if (input.body.response_format && isUnsupportedResponseFormatError(message)) {
     const fallbackBody = { ...input.body };
-    delete fallbackBody.output_format;
-    console.warn("[OpenAI Image] relay rejected response_format; retrying without output_format", {
+    delete fallbackBody.response_format;
+    console.warn("[OpenAI Image] relay rejected response_format; retrying without response_format", {
       modelName: fallbackBody.model,
       endpoint
     });
@@ -355,7 +343,7 @@ async function fetchOpenAICompatJsonImageEdit(input: {
   });
   const buildBody = async (withDataUrl = false, sizeOverride?: string) => {
     const body: Record<string, unknown> = {
-      model: openAIImageRequestModel(input.params.modelName),
+      model: input.params.modelName,
       prompt: input.params.prompt,
       image: await imageAssetBase64(input.params.imageAssetIds ?? [], withDataUrl)
     };
@@ -491,7 +479,7 @@ export async function generateImageWithOpenAI(params: ImageProviderParams): Prom
 
   if (params.inputMode === "text-to-image") {
     const body: Record<string, unknown> = {
-      model: openAIImageRequestModel(params.modelName),
+      model: params.modelName,
       prompt: params.prompt
     };
     applySharedImageParams(body, params);

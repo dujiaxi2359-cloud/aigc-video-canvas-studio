@@ -31,14 +31,6 @@ function isRunApiEndpoint(apiBaseUrl: string) {
   return /runapi\.co/i.test(apiBaseUrl);
 }
 
-function isCy88Endpoint(apiBaseUrl: string) {
-  return /(?:^|\.)cy88\.ai/i.test(apiBaseUrl);
-}
-
-function isAi666Endpoint(apiBaseUrl: string) {
-  return /(?:^|\.)ai666\.net/i.test(apiBaseUrl);
-}
-
 function isNewTokenEndpoint(apiBaseUrl: string) {
   return /(?:^|\.)newtoken\.club/i.test(apiBaseUrl);
 }
@@ -50,11 +42,6 @@ function cleanEndpoint(value: string) {
 export function veoProxyCreateEndpoint(apiBaseUrl: string) {
   const base = cleanEndpoint(apiBaseUrl);
   if (isRunApiEndpoint(base)) {
-    if (/\/v1\/video\/create$/i.test(base)) return base;
-    if (/\/v1$/i.test(base)) return `${base}/video/create`;
-    return `${base}/v1/video/create`;
-  }
-  if (isCy88Endpoint(base)) {
     if (/\/v1\/video\/create$/i.test(base)) return base;
     if (/\/v1$/i.test(base)) return `${base}/video/create`;
     return `${base}/v1/video/create`;
@@ -92,13 +79,6 @@ export function veoProxyCreateEndpointCandidates(apiBaseUrl: string) {
     ]);
   }
   if (isRunApiEndpoint(apiBaseUrl)) {
-    return unique([
-      primary,
-      `${root}/v1/video/create`,
-      `${root}/v1/videos`
-    ]);
-  }
-  if (isCy88Endpoint(apiBaseUrl)) {
     return unique([
       primary,
       `${root}/v1/video/create`,
@@ -302,7 +282,7 @@ export function buildVeoProxyBody(input: {
   }
 
   if (protocol === "unified-create-query") {
-    if (isAi666Endpoint(input.endpoint) || isCy88Endpoint(input.endpoint)) {
+    if (/\/v1\/video\/create$/i.test(input.endpoint)) {
       const dimensions = relayDimensions(input.requestAspectRatio, input.requestResolution);
       const orientation = input.requestAspectRatio === "9:16" ? "portrait" : "landscape";
       return {
@@ -539,7 +519,7 @@ export async function generateVideoWithVeoProxy(params: VideoProviderParams): Pr
   try {
     const requestAspectRatio = isOmni ? params.aspectRatio : params.aspectRatio ?? "16:9";
     const requestResolution = isOmni ? params.resolution : params.resolution ?? "720p";
-    const useUnifiedPortraitComponents = (isAi666Endpoint(params.apiBaseUrl) || isCy88Endpoint(params.apiBaseUrl))
+    const useUnifiedPortraitComponents = /\/v1\/video\/create$/i.test(params.apiBaseUrl)
       && mode === "reference_images_to_video"
       && requestAspectRatio === "9:16";
     const defaultEndpointCandidates = veoProxyCreateEndpointCandidates(params.apiBaseUrl);

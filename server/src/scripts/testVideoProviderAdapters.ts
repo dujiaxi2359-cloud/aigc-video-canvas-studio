@@ -1,4 +1,4 @@
-import { buildGrokRelayMultipart, grokCreateEndpoint, grokPollEndpoint, grokPollEndpointCandidates, grokRequestModelName, isAi666GrokRelay, isOfficialGrokEndpoint } from "../services/providers/grokVideo.service.js";
+import { buildGrokRelayMultipart, grokCreateEndpoint, grokPollEndpoint, grokPollEndpointCandidates, grokRequestModelName, isOfficialGrokEndpoint } from "../services/providers/grokVideo.service.js";
 import { klingBearerToken, klingCreateEndpoint, klingPollEndpoint, normalizeKlingPrompt } from "../services/providers/klingVideo.service.js";
 import { buildMiniMaxVideoBody, minimaxCreateEndpoint, minimaxCreateEndpointCandidates, minimaxQueryEndpoint, minimaxRetrieveEndpoint } from "../services/providers/minimaxVideo.service.js";
 import { buildOpenAiVideosMultipart, buildProxyBody, buildSeedance15Multipart, isRetryableSeedancePollFailure, relayCreateEndpointCandidates, seedanceAssetUploadShouldFallback, seedanceAuthorizationValues, seedanceCreateEndpoint, seedancePollEndpoint } from "../services/providers/seedanceVideo.service.js";
@@ -115,7 +115,6 @@ assert(
 );
 assert(isOfficialGrokEndpoint("https://api.x.ai/v1"), "xAI endpoint should use the official JSON protocol");
 assert(!isOfficialGrokEndpoint("https://relay.example/v1/videos"), "Relay endpoint should use multipart protocol");
-assert(isAi666GrokRelay("https://ai.ai666.net/v1"), "ai666 must use the documented Grok relay protocol");
 assert(grokCreateEndpoint("https://ai.ai666.net/v1") === "https://ai.ai666.net/v1/videos", "ai666 Grok relay should create through POST /v1/videos");
 assert(grokPollEndpoint("https://ai.ai666.net/v1", "video_1") === "https://ai.ai666.net/v1/videos/video_1", "ai666 Grok relay should poll GET /v1/videos/{task_id}");
 assert(grokRequestModelName("grok-1.5-video-6s", "https://ai.ai666.net/v1") === "grok-1.5-video-6s", "ai666 Grok 1.5 6s should keep the relay-documented model name");
