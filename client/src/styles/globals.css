@@ -8889,6 +8889,59 @@ video:-webkit-full-screen,
   box-shadow: 0 24px 70px rgba(82, 72, 58, 0.18);
 }
 
+:root[data-theme="light"] .studio-account-panel {
+  background:
+    radial-gradient(circle at 18% 0%, rgba(139, 92, 246, 0.06), transparent 34%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(247, 244, 238, 0.9));
+}
+
+:root[data-theme="light"] .studio-account-profile strong,
+:root[data-theme="light"] .studio-account-wallet-top strong {
+  color: rgba(28, 27, 31, 0.94);
+}
+
+:root[data-theme="light"] .studio-account-profile span,
+:root[data-theme="light"] .studio-account-quota small {
+  color: rgba(28, 27, 31, 0.54);
+}
+
+:root[data-theme="light"] .studio-account-wallet {
+  background:
+    radial-gradient(circle at 92% 88%, rgba(183, 139, 44, 0.1), transparent 42%),
+    rgba(250, 247, 240, 0.74);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.78);
+}
+
+:root[data-theme="light"] .studio-account-large-avatar {
+  border-color: rgba(28, 27, 31, 0.12);
+  background:
+    radial-gradient(circle at 32% 24%, rgba(255, 255, 255, 0.62), transparent 16px),
+    linear-gradient(145deg, rgba(78, 73, 88, 0.92), rgba(37, 35, 44, 0.96)) !important;
+  color: rgba(255, 255, 255, 0.92) !important;
+}
+
+:root[data-theme="light"] .studio-account-wallet-brand {
+  background: rgba(28, 27, 31, 0.06);
+  color: rgba(28, 27, 31, 0.72);
+}
+
+:root[data-theme="light"] .studio-account-quota {
+  border-top-color: rgba(28, 27, 31, 0.08);
+}
+
+:root[data-theme="light"] .studio-account-quota span,
+:root[data-theme="light"] .studio-account-quota svg,
+:root[data-theme="light"] .studio-account-wallet-top em,
+:root[data-theme="light"] .studio-account-language-row small {
+  color: #8f6d1f;
+}
+
+:root[data-theme="light"] .studio-account-quota-bar {
+  border-color: rgba(143, 109, 31, 0.22);
+  background: linear-gradient(90deg, #f4df93, #b48c33);
+  box-shadow: 0 8px 18px rgba(143, 109, 31, 0.14);
+}
+
 :root[data-theme="light"] .studio-account-pill {
   border-color: rgba(30, 30, 30, 0.1);
   background:
@@ -8903,6 +8956,11 @@ video:-webkit-full-screen,
 :root[data-theme="light"] .studio-account-row-icon {
   background: rgba(28, 27, 31, 0.06);
   color: rgba(28, 27, 31, 0.7);
+}
+
+:root[data-theme="light"] .studio-account-pill-chevron,
+:root[data-theme="light"] .studio-account-row-arrow {
+  color: rgba(28, 27, 31, 0.48);
 }
 
 :root[data-theme="light"] .studio-account-row,
@@ -9091,9 +9149,45 @@ video:-webkit-full-screen,
 :root[data-theme="light"] .workspace-new-project,
 :root[data-theme="light"] .workspace-project-card {
   border-color: rgba(30, 30, 30, 0.09);
-  background: rgba(255, 255, 255, 0.66);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.86), rgba(248, 246, 240, 0.74));
   color: var(--moon-fg);
   box-shadow: 0 18px 50px rgba(82, 72, 58, 0.1);
+}
+
+:root[data-theme="light"] .workspace-sidebar-title,
+:root[data-theme="light"] .workspace-project-info h3,
+:root[data-theme="light"] .workspace-empty h3,
+:root[data-theme="light"] .workspace-new-project strong {
+  color: rgba(28, 27, 31, 0.92);
+}
+
+:root[data-theme="light"] .workspace-folder-row,
+:root[data-theme="light"] .workspace-folder-more,
+:root[data-theme="light"] .workspace-mini-button,
+:root[data-theme="light"] .workspace-project-more {
+  color: rgba(28, 27, 31, 0.56);
+}
+
+:root[data-theme="light"] .workspace-folder-row:hover,
+:root[data-theme="light"] .workspace-folder-row.is-active,
+:root[data-theme="light"] .workspace-folder-more:hover,
+:root[data-theme="light"] .workspace-mini-button:hover,
+:root[data-theme="light"] .workspace-project-more:hover {
+  background: rgba(28, 27, 31, 0.06);
+  color: rgba(28, 27, 31, 0.92);
+}
+
+:root[data-theme="light"] .workspace-folder-empty,
+:root[data-theme="light"] .workspace-project-info p,
+:root[data-theme="light"] .workspace-new-project small,
+:root[data-theme="light"] .workspace-empty {
+  color: rgba(28, 27, 31, 0.48);
+}
+
+:root[data-theme="light"] .workspace-folder-empty:hover {
+  background: rgba(28, 27, 31, 0.05);
+  color: rgba(28, 27, 31, 0.82);
 }
 
 :root[data-theme="light"] .settings-select,

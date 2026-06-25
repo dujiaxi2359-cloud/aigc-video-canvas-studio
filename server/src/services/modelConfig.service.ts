@@ -67,6 +67,13 @@ function videoRelayProbeFallbackMessage(status: number, endpoint: string) {
   ].join("");
 }
 
+function imageRelayProbeFallbackMessage(status: number, endpoint: string) {
+  return [
+    `图片线路格式有效，但该中转未开放模型列表接口（${endpoint} 返回 HTTP ${status}）。`,
+    "请手动添加上游模型 ID 后保存；生成时会按图片生成/编辑协议调用该线路。Azure deployment 固定端点仍走 Azure 专用路径。"
+  ].join("");
+}
+
 function placeholderApiBaseUrlMessage(apiBaseUrl: string) {
   try {
     const parsed = new URL(apiBaseUrl);
@@ -555,6 +562,9 @@ export async function probeOpenAiCompatibleModels(input: { apiBaseUrl?: string; 
       : text;
     if (category === "video" && validationPath === "/models" && [400, 404, 405].includes(response.status)) {
       return { success: true, message: videoRelayProbeFallbackMessage(response.status, endpoint), models: [] as string[] };
+    }
+    if (category === "image" && validationPath === "/models" && [400, 404, 405].includes(response.status)) {
+      return { success: true, message: imageRelayProbeFallbackMessage(response.status, endpoint), models: [] as string[] };
     }
     return { success: false, message: `验证失败：HTTP ${response.status}${message ? ` · ${message.slice(0, 160)}` : ""}`, models: [] as string[] };
   }
