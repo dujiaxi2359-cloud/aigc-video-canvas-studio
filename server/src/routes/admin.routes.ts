@@ -5,6 +5,13 @@ import { getDb } from "../db/database.js";
 import { createId } from "../utils/id.js";
 import { now } from "../utils/time.js";
 import { maskEncryptedApiKey } from "../services/encryption.service.js";
+import { addHistory } from "../services/history.service.js";
+import { persistGeneratedVideoToCOS, updateCanvasNodeWithGeneratedVideo } from "../services/generatedVideoPersistence.service.js";
+import { saveGenerationTask } from "../services/generationTask.service.js";
+import { runWithRequestContext } from "../services/requestContext.js";
+import { isProviderError, rawErrorMessage } from "../utils/providerErrors.js";
+import { sanitizeUrlForLog } from "../utils/videoResultExtractor.js";
+import type { AuthUser, AuthWorkspace } from "../types/auth.js";
 
 export const adminRouter = Router();
 adminRouter.use(requireLogin, requireAdmin);
@@ -25,6 +32,42 @@ function inviteExpiresAt(input: unknown) {
   return Number.isFinite(numeric) ? numeric : now() + DEFAULT_INVITE_TTL_MS;
 }
 
+function parseJsonObject(input: unknown) {
+  if (!input || typeof input !== "string") return {};
+  try {
+    const parsed = JSON.parse(input);
+    return parsed && typeof parsed === "object" ? parsed as Record<string, unknown> : {};
+  } catch {
+    return {};
+  }
+}
+
+function workspaceFromRow(row: any): AuthWorkspace {
+  return {
+    id: row.id,
+    name: row.name || "Workspace",
+    slug: row.slug || row.id,
+    type: row.type === "team" ? "team" : "personal",
+    role: "owner",
+    planId: row.plan_id || undefined,
+    billingStatus: row.billing_status || "free",
+    credits: Number(row.credits || 0)
+  };
+}
+
+function userFromRow(row: any, fallback: AuthUser): AuthUser {
+  if (!row) return fallback;
+  return {
+    id: row.id,
+    email: row.email,
+    name: row.name || undefined,
+    role: row.role || "user",
+    status: row.status || "active",
+    inviteStatus: row.invite_status || "active",
+    defaultWorkspaceId: row.default_workspace_id || undefined
+  };
+}
+
 adminRouter.get("/overview", async (_req, res) => {
   const db = await getDb();
   const users = await db.all("SELECT id, email, name, role, status, invite_status, last_login_at, created_at FROM users ORDER BY created_at DESC");
@@ -33,11 +76,33 @@ adminRouter.get("/overview", async (_req, res) => {
     LEFT JOIN credit_balances cb ON cb.workspace_id = w.id GROUP BY w.id ORDER BY w.created_at DESC`);
   const invites = await db.all("SELECT * FROM invite_codes ORDER BY created_at DESC");
   const plans = await db.all("SELECT * FROM plans ORDER BY created_at DESC");
-  const failureRows = await db.all<any[]>(`SELECT gh.*, w.name AS workspace_name, u.email AS user_email, mc.provider AS model_provider, mc.model_name AS configured_model_name
+  const failureRows = await db.all<any[]>(`SELECT gh.*, w.name AS workspace_name, u.email AS user_email, mc.provider AS model_provider, mc.model_name AS configured_model_name,
+      gt.id AS task_id,
+      gt.provider_status AS task_provider_status,
+      gt.provider_video_url AS task_provider_video_url,
+      gt.output_url AS task_output_url,
+      gt.cos_key AS task_cos_key,
+      gt.file_size AS task_file_size,
+      gt.mime_type AS task_mime_type,
+      gt.completed_at AS task_completed_at,
+      gt.failed_stage AS task_failed_stage,
+      gt.error_code AS task_error_code,
+      gt.error_message AS task_error_message,
+      gt.result_json AS task_result_json
     FROM generation_history gh
     LEFT JOIN workspaces w ON w.id = gh.workspace_id
     LEFT JOIN users u ON u.id = gh.user_id
     LEFT JOIN model_configs mc ON mc.id = gh.model_config_id
+    LEFT JOIN generation_tasks gt ON gt.id = (
+      SELECT gt2.id FROM generation_tasks gt2
+      WHERE gt2.workspace_id = gh.workspace_id
+        AND (
+          (gh.node_id IS NOT NULL AND gt2.result_json LIKE '%' || gh.node_id || '%')
+          OR (gh.project_id IS NOT NULL AND gt2.result_json LIKE '%' || gh.project_id || '%')
+        )
+      ORDER BY ABS(gt2.updated_at - gh.created_at) ASC
+      LIMIT 1
+    )
     WHERE gh.status = 'error'
     ORDER BY gh.created_at DESC
     LIMIT 80`);
@@ -66,20 +131,226 @@ adminRouter.get("/overview", async (_req, res) => {
     errorCount: Number(row.error_count || 0),
     updatedAt: row.updated_at
   }));
-  const failureLogs = failureRows.map((row) => ({
-    id: row.id,
-    generationType: row.generation_type,
-    workspaceName: row.workspace_name || "Legacy / Unassigned",
-    userEmail: row.user_email || "未知用户",
-    modelConfigId: row.model_config_id,
-    modelDisplayName: row.model_display_name || row.configured_model_name || "未知模型",
-    provider: row.model_provider,
-    inputMode: row.input_mode,
-    prompt: row.prompt,
-    errorMessage: row.error_message,
-    createdAt: row.created_at
-  }));
+  const failureLogs = failureRows.map((row) => {
+    const taskResult = parseJsonObject(row.task_result_json);
+    return {
+      id: row.id,
+      generationType: row.generation_type,
+      workspaceName: row.workspace_name || "Legacy / Unassigned",
+      userEmail: row.user_email || "未知用户",
+      modelConfigId: row.model_config_id,
+      modelDisplayName: row.model_display_name || row.configured_model_name || "未知模型",
+      provider: row.model_provider,
+      inputMode: row.input_mode,
+      prompt: row.prompt,
+      errorMessage: row.task_error_message || row.error_message,
+      createdAt: row.created_at,
+      taskId: row.task_id,
+      providerStatus: row.task_provider_status,
+      providerVideoUrl: row.task_provider_video_url ? sanitizeUrlForLog(row.task_provider_video_url) : undefined,
+      outputUrl: row.task_output_url,
+      cosObjectKey: row.task_cos_key,
+      fileSize: row.task_file_size,
+      mimeType: row.task_mime_type,
+      completedAt: row.task_completed_at,
+      failedStage: row.task_failed_stage,
+      errorCode: row.task_error_code,
+      chain: {
+        createEndpoint: taskResult.createEndpoint,
+        pollEndpoint: taskResult.pollEndpoint,
+        createRawResponse: taskResult.createRawResponse,
+        pollRawResponse: taskResult.pollRawResponse,
+        parsedTaskId: taskResult.providerTaskId || taskResult.parsedTaskId,
+        parsedVideoUrl: taskResult.parsedVideoUrl,
+        providerVideoUrl: taskResult.providerVideoUrl,
+        downloadStatus: taskResult.downloadStatus,
+        cosUploadStatus: taskResult.cosUploadStatus,
+        cosObjectKey: taskResult.cosObjectKey || row.task_cos_key,
+        finalOutputUrl: taskResult.finalOutputUrl || row.task_output_url,
+        failedStage: row.task_failed_stage || taskResult.failedStage,
+        errorCode: row.task_error_code || taskResult.errorCode,
+        errorMessage: row.task_error_message || taskResult.errorMessage || row.error_message,
+        rawResponse: taskResult.rawResponse,
+        rawError: taskResult.rawError
+      }
+    };
+  });
   res.json({ users, workspaces, invites, plans, models, failureLogs });
+});
+
+adminRouter.post("/generation-tasks/:taskId/repair-video", async (req, res) => {
+  const providerVideoUrl = String(req.body?.providerVideoUrl || "").trim();
+  if (!providerVideoUrl) {
+    return res.status(400).json({
+      errorCode: "PROVIDER_VIDEO_URL_REQUIRED",
+      errorMessage: "请输入中转后台已经生成的视频 URL。"
+    });
+  }
+
+  const db = await getDb();
+  const task = await db.get<any>("SELECT * FROM generation_tasks WHERE id = ?", req.params.taskId);
+  if (!task) {
+    return res.status(404).json({ errorCode: "GENERATION_TASK_NOT_FOUND", errorMessage: "没有找到对应生成任务。" });
+  }
+  if (!task.workspace_id) {
+    return res.status(400).json({ errorCode: "TASK_WORKSPACE_MISSING", errorMessage: "该任务缺少工作空间信息，无法转存素材。" });
+  }
+
+  const workspaceRow = await db.get<any>(`SELECT w.*, COALESCE(cb.balance, 0) AS credits FROM workspaces w
+    LEFT JOIN credit_balances cb ON cb.workspace_id = w.id
+    WHERE w.id = ?`, task.workspace_id);
+  if (!workspaceRow) {
+    return res.status(404).json({ errorCode: "WORKSPACE_NOT_FOUND", errorMessage: "没有找到任务所属工作空间。" });
+  }
+
+  const taskUser = task.user_id ? await db.get<any>("SELECT * FROM users WHERE id = ?", task.user_id) : undefined;
+  const context = {
+    user: userFromRow(taskUser, req.auth!.user),
+    workspace: workspaceFromRow(workspaceRow)
+  };
+  const taskResult = parseJsonObject(task.result_json);
+  const projectId = typeof taskResult.projectId === "string" ? taskResult.projectId : undefined;
+  const nodeId = typeof taskResult.nodeId === "string" ? taskResult.nodeId : undefined;
+  const modelId = typeof taskResult.modelId === "string" ? taskResult.modelId : typeof taskResult.modelConfigId === "string" ? taskResult.modelConfigId : undefined;
+  const providerId = typeof taskResult.provider === "string" ? taskResult.provider : undefined;
+
+  try {
+    const repaired = await runWithRequestContext(context, async () => {
+      await saveGenerationTask({
+        id: task.id,
+        status: "processing",
+        providerStatus: "succeeded",
+        providerVideoUrl,
+        stage: "downloading_video",
+        progress: 80,
+        result: {
+          ...taskResult,
+          providerVideoUrl: sanitizeUrlForLog(providerVideoUrl),
+          manualRepair: true
+        }
+      });
+      const persisted = await persistGeneratedVideoToCOS({
+        providerVideoUrl,
+        taskId: task.id,
+        providerId,
+        modelId,
+        nodeId,
+        projectId,
+        prompt: typeof taskResult.prompt === "string" ? taskResult.prompt : undefined,
+        negativePrompt: typeof taskResult.negativePrompt === "string" ? taskResult.negativePrompt : undefined,
+        generationParams: {
+          ...taskResult,
+          manualRepair: true
+        }
+      });
+      await saveGenerationTask({
+        id: task.id,
+        status: "processing",
+        providerStatus: "succeeded",
+        providerVideoUrl,
+        outputUrl: persisted.cosUrl,
+        cosKey: persisted.cosObjectKey,
+        fileSize: persisted.fileSize,
+        mimeType: persisted.mimeType,
+        stage: "cos_uploaded",
+        progress: 92,
+        result: {
+          providerVideoUrl: sanitizeUrlForLog(providerVideoUrl),
+          cosUploadStatus: persisted.cosUploadStatus,
+          cosObjectKey: persisted.cosObjectKey,
+          finalOutputUrl: persisted.cosUrl
+        }
+      });
+      await addHistory({
+        generationType: "video",
+        projectId,
+        nodeId,
+        modelConfigId: typeof taskResult.modelConfigId === "string" ? taskResult.modelConfigId : undefined,
+        modelDisplayName: typeof taskResult.modelDisplayName === "string" ? taskResult.modelDisplayName : modelId || "手动修复视频",
+        inputMode: typeof taskResult.inputMode === "string" ? taskResult.inputMode : undefined,
+        prompt: typeof taskResult.prompt === "string" ? taskResult.prompt : "管理员从中转视频 URL 重新转存",
+        duration: typeof taskResult.duration === "number" ? taskResult.duration : undefined,
+        aspectRatio: typeof taskResult.aspectRatio === "string" ? taskResult.aspectRatio : undefined,
+        resolution: typeof taskResult.resolution === "string" ? taskResult.resolution : undefined,
+        status: "success",
+        outputPath: persisted.localPath,
+        outputUrl: persisted.cosUrl
+      });
+      await saveGenerationTask({
+        id: task.id,
+        status: "processing",
+        providerStatus: "succeeded",
+        providerVideoUrl,
+        outputUrl: persisted.cosUrl,
+        stage: "history_saved",
+        progress: 96
+      });
+      await updateCanvasNodeWithGeneratedVideo({
+        projectId,
+        nodeId,
+        outputUrl: persisted.cosUrl,
+        outputAssetId: persisted.asset.id,
+        downloadableUrl: persisted.asset.downloadUrl ?? persisted.cosUrl
+      });
+      await saveGenerationTask({
+        id: task.id,
+        status: "success",
+        providerStatus: "succeeded",
+        providerVideoUrl,
+        outputUrl: persisted.cosUrl,
+        cosKey: persisted.cosObjectKey,
+        fileSize: persisted.fileSize,
+        mimeType: persisted.mimeType,
+        completedAt: now(),
+        stage: "canvas_updated",
+        progress: 100,
+        result: {
+          providerVideoUrl: sanitizeUrlForLog(providerVideoUrl),
+          cosUploadStatus: persisted.cosUploadStatus,
+          cosObjectKey: persisted.cosObjectKey,
+          finalOutputUrl: persisted.cosUrl,
+          canvasUpdated: true,
+          manualRepair: true
+        }
+      });
+      return persisted;
+    });
+    return res.json({
+      status: "success",
+      taskId: task.id,
+      outputUrl: repaired.cosUrl,
+      cosObjectKey: repaired.cosObjectKey,
+      fileSize: repaired.fileSize,
+      mimeType: repaired.mimeType
+    });
+  } catch (error) {
+    const details = isProviderError(error) && error.details && typeof error.details === "object"
+      ? error.details as Record<string, unknown>
+      : {};
+    await runWithRequestContext(context, async () => saveGenerationTask({
+      id: task.id,
+      status: "error",
+      providerStatus: "failed",
+      providerVideoUrl,
+      stage: "failed",
+      failedStage: typeof details.failedStage === "string" ? details.failedStage : "failed",
+      errorCode: isProviderError(error) ? error.errorCode : "REPAIR_VIDEO_FAILED",
+      errorMessage: isProviderError(error) ? error.message : rawErrorMessage(error),
+      progress: 100,
+      result: {
+        ...details,
+        providerVideoUrl: sanitizeUrlForLog(providerVideoUrl),
+        manualRepair: true,
+        errorMessage: rawErrorMessage(error)
+      }
+    }));
+    return res.status(500).json({
+      errorCode: isProviderError(error) ? error.errorCode : "REPAIR_VIDEO_FAILED",
+      errorMessage: isProviderError(error) ? error.message : rawErrorMessage(error),
+      debugMessage: rawErrorMessage(error),
+      details
+    });
+  }
 });
 
 adminRouter.post("/invite-codes", async (req, res) => {

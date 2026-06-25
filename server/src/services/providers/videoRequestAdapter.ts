@@ -212,6 +212,18 @@ function defaultPollEndpoint(baseUrl: string, createEndpoint: string, capabiliti
   return `${createEndpoint.replace(/\/+$/g, "")}/{taskId}`;
 }
 
+function isStaleOpenAiVideoCreateEndpoint(endpoint: string | undefined, apiFamily: VideoApiFamily) {
+  return Boolean(endpoint)
+    && apiFamily !== "openai_videos"
+    && /^\/v1\/videos(?:\/generations)?\/?$/i.test(endpoint ?? "");
+}
+
+function isStaleOpenAiVideoPollEndpoint(endpoint: string | undefined, apiFamily: VideoApiFamily) {
+  return Boolean(endpoint)
+    && apiFamily !== "openai_videos"
+    && /^\/v1\/videos(?:\/generations)?\/\{taskId\}\/?$/i.test(endpoint ?? "");
+}
+
 function defaultTaskField(apiFamily: VideoApiFamily, capabilities: ModelCapabilities) {
   if (apiFamily === "agnes_video") return capabilities.taskIdField ?? "video_id";
   return capabilities.taskIdField ?? capabilities.idField ?? (apiFamily === "seedance2_native" ? "task_id" : "id");
@@ -256,30 +268,53 @@ export function resolveVideoRequestConfig(params: VideoProviderParams, capabilit
   const providerType = resolveProviderType(effectiveCapabilities, params.apiBaseUrl);
   if (providerType === "openai_compatible") {
     const config = ensureOpenAiCompatibleConfig(effectiveCapabilities, "video");
+    const explicitConfig = effectiveCapabilities.openaiCompatibleConfig;
+    const apiFamily = inferApiFamily("proxy", params.apiBaseUrl, params.modelName, effectiveCapabilities);
+    const defaultVideoCreateEndpoint = defaultCreateEndpoint("proxy", params.apiBaseUrl, effectiveCapabilities, apiFamily);
+    const capabilityCreateEndpoint = isStaleOpenAiVideoCreateEndpoint(effectiveCapabilities.createEndpoint, apiFamily)
+      ? undefined
+      : effectiveCapabilities.createEndpoint;
+    const capabilityEndpoint = isStaleOpenAiVideoCreateEndpoint(effectiveCapabilities.endpoint, apiFamily)
+      ? undefined
+      : effectiveCapabilities.endpoint;
     const createEndpoint = config.videoCreateEndpoint
-      ?? effectiveCapabilities.createEndpoint
-      ?? effectiveCapabilities.endpoint
-      ?? "/v1/videos";
+      && explicitConfig?.videoCreateEndpoint
+      ? config.videoCreateEndpoint
+      : capabilityCreateEndpoint
+      ?? capabilityEndpoint
+      ?? defaultVideoCreateEndpoint;
     const finalUrl = resolveOpenAiCompatibleEndpoint({
       baseUrl: params.apiBaseUrl,
       endpoint: createEndpoint,
-      defaultEndpoint: "/v1/videos",
+      defaultEndpoint: defaultVideoCreateEndpoint,
       modelId: params.modelName,
       queryParams: config.queryParams
     });
-    const pollEndpoint = config.videoPollEndpoint ?? effectiveCapabilities.pollEndpoint ?? "/v1/videos/{taskId}";
-    const taskIdField = effectiveCapabilities.taskIdField ?? effectiveCapabilities.idField ?? "id";
+    const capabilityPollEndpoint = isStaleOpenAiVideoPollEndpoint(effectiveCapabilities.pollEndpoint, apiFamily)
+      ? undefined
+      : effectiveCapabilities.pollEndpoint;
+    const pollEndpoint = explicitConfig?.videoPollEndpoint
+      ?? capabilityPollEndpoint
+      ?? defaultPollEndpoint(params.apiBaseUrl, createEndpoint, effectiveCapabilities, apiFamily);
+    const taskIdField = defaultTaskField(apiFamily, effectiveCapabilities);
     const supports = supportedInputs(effectiveCapabilities);
+    const imageTransport = apiFamily === "unified_video_create" && /runapi\.co/i.test(params.apiBaseUrl)
+      ? "url"
+      : defaultImageTransport("proxy", apiFamily, effectiveCapabilities);
+    const requestFormat = apiFamily === "unified_video_create" || apiFamily === "agnes_video" || apiFamily === "zhipu_video"
+      ? "json"
+      : effectiveCapabilities.requestFormat
+      ?? (apiFamily === "doubao_seedance15" ? "multipart" : "json");
     return {
       provider,
       channel: "proxy",
-      apiFamily: "openai_videos",
+      apiFamily,
       baseUrl: params.apiBaseUrl,
       createEndpoint,
       endpoint: createEndpoint,
       finalUrl,
       authType: effectiveCapabilities.authType ?? (typeof config.authHeader === "string" && /^api-key\s*:/i.test(config.authHeader) ? "api-key" : "bearer"),
-      requestFormat: effectiveCapabilities.requestFormat ?? "json",
+      requestFormat,
       taskMode: "async",
       pollEndpoint,
       pollMethod: config.videoPollMethod ?? "GET",
@@ -295,10 +330,11 @@ export function resolveVideoRequestConfig(params: VideoProviderParams, capabilit
       statusField: effectiveCapabilities.statusField ?? "status",
       resultField: effectiveCapabilities.resultField ?? "result",
       supportedInputs: supports,
-      imageTransport: effectiveCapabilities.imageTransport ?? (supports.some((input) => ["image", "first_frame", "reference_image", "first_last_frame"].includes(input)) ? "base64_json" : "unsupported"),
-      videoTransport: effectiveCapabilities.videoTransport ?? (supports.includes("video") ? "url_or_base64_json" : "unsupported"),
-      imageField: effectiveCapabilities.imageField ?? (params.inputMode === "reference-to-video" ? "images" : "image"),
-      videoField: effectiveCapabilities.videoField ?? "video",
+      imageTransport,
+      videoTransport: effectiveCapabilities.videoTransport ?? (apiFamily === "omni_fast_v2v" ? "url_or_base64_json" : supports.includes("video") ? "url_or_base64_json" : "unsupported"),
+      imageField: effectiveCapabilities.imageField
+        ?? (apiFamily === "omni_fast" ? "first_image_url" : apiFamily === "doubao_seedance15" ? "first_frame_image" : apiFamily === "aigc_video_json" ? "image" : params.inputMode === "reference-to-video" ? "images" : "image"),
+      videoField: effectiveCapabilities.videoField ?? (apiFamily === "omni_fast_v2v" ? "video" : "video"),
       supportedAspectRatios: effectiveCapabilities.supportedAspectRatios ?? effectiveCapabilities.aspectRatios ?? [],
       supportedDurations: effectiveCapabilities.supportedDurations ?? durationValues(effectiveCapabilities),
       supportedResolutions: effectiveCapabilities.supportedResolutions ?? effectiveCapabilities.resolutions ?? []

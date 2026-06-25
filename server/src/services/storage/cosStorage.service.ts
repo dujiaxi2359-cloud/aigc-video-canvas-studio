@@ -71,16 +71,16 @@ export function normalizeStorageFileType(fileType?: string, mimeType?: string): 
 
 export function isCosConfigured() {
   return Boolean(
-    process.env.TENCENT_SECRET_ID &&
-    process.env.TENCENT_SECRET_KEY &&
+    (process.env.TENCENT_COS_SECRET_ID || process.env.TENCENT_SECRET_ID) &&
+    (process.env.TENCENT_COS_SECRET_KEY || process.env.TENCENT_SECRET_KEY) &&
     process.env.TENCENT_COS_BUCKET &&
     process.env.TENCENT_COS_REGION
   );
 }
 
 export function getCosConfig(): CosConfig {
-  const secretId = process.env.TENCENT_SECRET_ID?.trim();
-  const secretKey = process.env.TENCENT_SECRET_KEY?.trim();
+  const secretId = (process.env.TENCENT_COS_SECRET_ID || process.env.TENCENT_SECRET_ID)?.trim();
+  const secretKey = (process.env.TENCENT_COS_SECRET_KEY || process.env.TENCENT_SECRET_KEY)?.trim();
   const bucket = process.env.TENCENT_COS_BUCKET?.trim();
   const region = process.env.TENCENT_COS_REGION?.trim();
   const domain = (process.env.TENCENT_COS_DOMAIN || "").trim().replace(/^https?:\/\//i, "").replace(/\/+$/, "");

@@ -384,12 +384,19 @@ export function normalizeVideoCapabilities(
   }
 
   if (isSeedance2LikeVideoModel(providerId, modelName, capabilities)) {
+    const imageTransport = capabilities.imageTransport === "unsupported" || capabilities.imageTransport === "base64_json"
+      ? "url_or_asset"
+      : capabilities.imageTransport ?? "url_or_asset";
+    const videoTransport = capabilities.videoTransport === "unsupported" || capabilities.videoTransport === "base64_json"
+      ? "url_or_asset"
+      : capabilities.videoTransport ?? "url_or_asset";
     const normalized: ModelCapabilities = {
       ...capabilities,
+      apiFamily: capabilities.apiFamily ?? "seedance2_native",
       inputModes: union(capabilities.inputModes, seedance2InputModes),
       supportedInputs: union(capabilities.supportedInputs, seedance2SupportedInputs),
-      imageTransport: capabilities.imageTransport === "unsupported" ? "url_or_asset" : capabilities.imageTransport ?? "url_or_asset",
-      videoTransport: capabilities.videoTransport === "unsupported" ? "url_or_asset" : capabilities.videoTransport ?? "url_or_asset",
+      imageTransport,
+      videoTransport,
       supportsImageInput: true,
       supportsReferenceImage: true,
       supportsFirstLastFrame: true,
@@ -402,11 +409,18 @@ export function normalizeVideoCapabilities(
       maxReferenceFiles: capabilities.maxReferenceFiles ?? 12
     };
     if (capabilities.channelCapability) {
+      const channelImageTransport = capabilities.channelCapability.imageTransport === "unsupported" || capabilities.channelCapability.imageTransport === "base64_json"
+        ? "url_or_asset"
+        : capabilities.channelCapability.imageTransport ?? "url_or_asset";
+      const channelVideoTransport = capabilities.channelCapability.videoTransport === "unsupported" || capabilities.channelCapability.videoTransport === "base64_json"
+        ? "url_or_asset"
+        : capabilities.channelCapability.videoTransport ?? "url_or_asset";
       normalized.channelCapability = {
         ...capabilities.channelCapability,
+        apiFamily: capabilities.channelCapability.apiFamily ?? "seedance2_native",
         supportedInputs: union(capabilities.channelCapability.supportedInputs, seedance2SupportedInputs),
-        imageTransport: capabilities.channelCapability.imageTransport === "unsupported" ? "url_or_asset" : capabilities.channelCapability.imageTransport ?? "url_or_asset",
-        videoTransport: capabilities.channelCapability.videoTransport === "unsupported" ? "url_or_asset" : capabilities.channelCapability.videoTransport ?? "url_or_asset"
+        imageTransport: channelImageTransport,
+        videoTransport: channelVideoTransport
       };
     }
     return normalized;

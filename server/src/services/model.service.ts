@@ -3,7 +3,9 @@ import path from "node:path";
 import { getDb } from "../db/database.js";
 import { createAsset } from "./asset.service.js";
 import { decryptApiKey } from "./encryption.service.js";
+import { persistGeneratedVideoToCOS, updateCanvasNodeWithGeneratedVideo } from "./generatedVideoPersistence.service.js";
 import { addHistory } from "./history.service.js";
+import { saveGenerationTask } from "./generationTask.service.js";
 import { modelCatalog } from "./modelCatalog.js";
 import { getInternalModelConfig, listModelConfigs } from "./modelConfig.service.js";
 import { calculateAvailableImageOptions, calculateAvailableVideoOptions } from "./modelCapability.service.js";
@@ -38,7 +40,8 @@ import type { ModelCapabilityKind } from "../types/model.js";
 import type { OfficialVideoMode } from "../types/videoModes.js";
 import { legacyInputModeToOfficialMode } from "../types/videoModes.js";
 import type { ProviderGenerateResult } from "./providers/providerTypes.js";
-import { isProviderError, ProviderError } from "../utils/providerErrors.js";
+import { isProviderError, ProviderError, rawErrorMessage } from "../utils/providerErrors.js";
+import { extractProviderTaskId, extractProviderVideoUrl, isProviderSuccessStatus, sanitizeUrlForLog } from "../utils/videoResultExtractor.js";
 import { buildPayloadSummary, logOfficialPayload } from "../utils/generationPayload.js";
 import { metadataToQualityAudit, readGeneratedFileMetadata } from "../utils/mediaMetadata.js";
 import { mapVideoDimensions, normalizeVideoAspectRatio } from "../utils/videoParams.js";
@@ -747,7 +750,11 @@ function videoFallbackApiFamily(config: VideoFallbackCandidateConfig) {
   if (!config.model_name && !config.capabilities_json) return undefined;
   try {
     const configuredCapabilities = config.capabilities_json ? JSON.parse(config.capabilities_json) as ModelCapabilities : { inputModes: [] };
+    const explicitApiFamily = configuredCapabilities.channelCapability?.apiFamily ?? configuredCapabilities.apiFamily;
+    if (explicitApiFamily) return explicitApiFamily;
     const capabilities = normalizeVideoCapabilities(configuredCapabilities, config.provider_id, config.model_name);
+    const normalizedApiFamily = capabilities.channelCapability?.apiFamily ?? capabilities.apiFamily;
+    if (normalizedApiFamily) return normalizedApiFamily;
     return resolveVideoRequestConfig({
       nodeId: "fallback-check",
       modelConfigId: "fallback-check",
@@ -1042,7 +1049,7 @@ async function enrichPayloadSummaryWithOutput(
   preflightSummary: Record<string, unknown>,
   result: ProviderGenerateResult
 ) {
-  const outputMetadata = await readGeneratedFileMetadata(result.localPath);
+  const outputMetadata = result.localPath ? await readGeneratedFileMetadata(result.localPath) : {};
   const outputAudit = metadataToQualityAudit(outputMetadata);
   const providerSummary = result.payloadSummary && typeof result.payloadSummary === "object" ? result.payloadSummary as Record<string, unknown> : {};
   return {
@@ -1055,6 +1062,79 @@ async function enrichPayloadSummaryWithOutput(
       output: outputMetadata
     }
   };
+}
+
+function providerSummary(result: ProviderGenerateResult) {
+  return result.payloadSummary && typeof result.payloadSummary === "object"
+    ? result.payloadSummary as Record<string, unknown>
+    : {};
+}
+
+function videoTaskIdFrom(result: ProviderGenerateResult, request: GenerateVideoRequest) {
+  const summary = providerSummary(result);
+  return String(
+    summary.taskId
+    ?? summary.providerTaskId
+    ?? summary.parsedTaskId
+    ?? extractProviderTaskId(result.rawResponse)
+    ?? request.clientRequestId
+    ?? request.nodeId
+  );
+}
+
+async function markVideoTaskStage(input: {
+  id?: string;
+  status: string;
+  stage: string;
+  progress?: number;
+  providerStatus?: string;
+  providerVideoUrl?: string;
+  outputUrl?: string;
+  cosKey?: string;
+  fileSize?: number;
+  mimeType?: string;
+  completedAt?: number;
+  failedStage?: string;
+  errorCode?: string;
+  errorMessage?: string;
+  result?: Record<string, unknown>;
+}) {
+  if (!input.id) return;
+  await saveGenerationTask({
+    id: input.id,
+    status: input.status,
+    providerStatus: input.providerStatus,
+    providerVideoUrl: input.providerVideoUrl,
+    outputUrl: input.outputUrl,
+    cosKey: input.cosKey,
+    fileSize: input.fileSize,
+    mimeType: input.mimeType,
+    completedAt: input.completedAt,
+    failedStage: input.failedStage,
+    errorCode: input.errorCode,
+    errorMessage: input.errorMessage,
+    progress: input.progress,
+    stage: input.stage,
+    result: input.result
+  });
+}
+
+function ensureProviderVideoUrl(result: ProviderGenerateResult) {
+  const providerVideoUrl = result.outputUrl ?? extractProviderVideoUrl(result.rawResponse);
+  if (!providerVideoUrl && (result.status === "success" || isProviderSuccessStatus(result.rawResponse))) {
+    throw new ProviderError(
+      "PROVIDER_RESULT_EMPTY",
+      "中转任务已成功，但没有解析到视频地址",
+      safeStringify(result.rawResponse),
+      {
+        failedStage: "provider_result_parse",
+        rawResponse: result.rawResponse,
+        pollRawResponse: result.rawResponse,
+        parsedVideoUrl: undefined
+      }
+    );
+  }
+  return providerVideoUrl;
 }
 
 async function enforceVideoAspectRatio(result: ProviderGenerateResult, aspectRatio?: string, resolution?: string): Promise<ProviderGenerateResult> {
@@ -1250,12 +1330,58 @@ export async function generateVideo(input: GenerateVideoRequest) {
 
     let result: ProviderGenerateResult;
     try {
+      await markVideoTaskStage({
+        id: inputForGeneration.clientRequestId ?? inputForGeneration.nodeId,
+        status: "processing",
+        stage: "create_started",
+        progress: 0,
+        result: {
+          provider: providerId,
+          modelId: modelName,
+          capability: "video",
+          nodeId: inputForGeneration.nodeId,
+          projectId: inputForGeneration.projectId,
+          createEndpoint: "provider_adapter"
+        }
+      });
       result = await callVideoProvider({ model, providerParams, capabilities });
+      await markVideoTaskStage({
+        id: videoTaskIdFrom(result, inputForGeneration),
+        status: "processing",
+        stage: "create_success",
+        providerStatus: result.status === "processing" ? "processing" : "succeeded",
+        progress: result.status === "processing" ? 10 : 80,
+        result: {
+          provider: providerId,
+          modelId: modelName,
+          capability: "video",
+          nodeId: inputForGeneration.nodeId,
+          projectId: inputForGeneration.projectId,
+          createRawResponse: result.rawResponse,
+          parsedTaskId: videoTaskIdFrom(result, inputForGeneration)
+        }
+      });
       if (result.status === "processing") {
         const payloadSummary = {
           ...preflightSummary,
           ...(result.payloadSummary && typeof result.payloadSummary === "object" ? result.payloadSummary as Record<string, unknown> : {})
         };
+        const pendingTaskId = videoTaskIdFrom(result, inputForGeneration);
+        await markVideoTaskStage({
+          id: pendingTaskId,
+          status: "processing",
+          stage: "polling",
+          providerStatus: "processing",
+          result: {
+            ...payloadSummary,
+            provider: providerId,
+            modelId: modelName,
+            capability: "video",
+            nodeId: inputForGeneration.nodeId,
+            projectId: inputForGeneration.projectId,
+            createRawResponse: result.rawResponse
+          }
+        });
         await addHistory({
           generationType: "video",
           projectId: inputForGeneration.projectId,
@@ -1289,37 +1415,263 @@ export async function generateVideo(input: GenerateVideoRequest) {
       };
     }
 
-    const asset = await createGeneratedAssetFromProvider(result, `video_${activeInputForGeneration.nodeId}.mp4`, {
-      providerId: activeModel.provider_id ?? "",
-      modelId: activeModel.id,
-      nodeId: activeInputForGeneration.nodeId,
-      projectId: activeInputForGeneration.projectId,
-      prompt: activeInputForGeneration.prompt,
-      negativePrompt: activeInputForGeneration.negativePrompt
+    const taskId = videoTaskIdFrom(result, activeInputForGeneration);
+    await markVideoTaskStage({
+      id: taskId,
+      status: "processing",
+      stage: "provider_succeeded",
+      providerStatus: "succeeded",
+      progress: 85,
+      result: {
+        provider: activeModel.provider_id ?? "",
+        modelId: activeModel.model_name ?? activeModel.id,
+        capability: "video",
+        nodeId: activeInputForGeneration.nodeId,
+        projectId: activeInputForGeneration.projectId,
+        pollRawResponse: result.rawResponse,
+        parsedTaskId: taskId
+      }
+    });
+    const providerVideoUrl = ensureProviderVideoUrl(result);
+    await markVideoTaskStage({
+      id: taskId,
+      status: "processing",
+      stage: "provider_result_parsed",
+      providerStatus: "succeeded",
+      providerVideoUrl,
+      progress: 88,
+      result: {
+        parsedTaskId: taskId,
+        parsedVideoUrl: providerVideoUrl ? sanitizeUrlForLog(providerVideoUrl) : undefined,
+        providerVideoUrl: providerVideoUrl ? sanitizeUrlForLog(providerVideoUrl) : undefined
+      }
+    });
+    let asset;
+    if (result.localPath) {
+      await markVideoTaskStage({
+        id: taskId,
+        status: "processing",
+        stage: "upload_to_cos",
+        providerStatus: "succeeded",
+        providerVideoUrl,
+        progress: 92
+      });
+      try {
+        asset = await createGeneratedAssetFromProvider(result, `video_${activeInputForGeneration.nodeId}.mp4`, {
+          providerId: activeModel.provider_id ?? "",
+          modelId: activeModel.id,
+          nodeId: activeInputForGeneration.nodeId,
+          projectId: activeInputForGeneration.projectId,
+          prompt: activeInputForGeneration.prompt,
+          negativePrompt: activeInputForGeneration.negativePrompt
+        });
+      } catch (assetError) {
+        throw new ProviderError(
+          "COS_UPLOAD_FAILED",
+          "视频已生成，但保存到素材库或腾讯云 COS 失败。",
+          rawErrorMessage(assetError),
+          {
+            failedStage: "upload_to_cos",
+            providerVideoUrl: sanitizeUrlForLog(providerVideoUrl),
+            errorMessage: rawErrorMessage(assetError)
+          }
+        );
+      }
+    } else if (providerVideoUrl) {
+      await markVideoTaskStage({
+        id: taskId,
+        status: "processing",
+        stage: "downloading_video",
+        providerStatus: "succeeded",
+        providerVideoUrl,
+        progress: 90
+      });
+      const persisted = await persistGeneratedVideoToCOS({
+        providerVideoUrl,
+        taskId,
+        userId: undefined,
+        workspaceId: undefined,
+        providerId: activeModel.provider_id ?? "",
+        modelId: activeModel.id,
+        nodeId: activeInputForGeneration.nodeId,
+        projectId: activeInputForGeneration.projectId,
+        prompt: activeInputForGeneration.prompt,
+        negativePrompt: activeInputForGeneration.negativePrompt,
+        generationParams: providerSummary(result)
+      });
+      asset = persisted.asset;
+      result = {
+        ...result,
+        outputUrl: persisted.cosUrl,
+        localPath: persisted.localPath,
+        payloadSummary: {
+          ...providerSummary(result),
+          providerVideoUrl: sanitizeUrlForLog(providerVideoUrl),
+          cosObjectKey: persisted.cosObjectKey,
+          fileSize: persisted.fileSize,
+          mimeType: persisted.mimeType
+        }
+      };
+      await markVideoTaskStage({
+        id: taskId,
+        status: "processing",
+        stage: "cos_uploaded",
+        providerStatus: "succeeded",
+        providerVideoUrl,
+        outputUrl: persisted.cosUrl,
+        cosKey: persisted.cosObjectKey,
+        fileSize: persisted.fileSize,
+        mimeType: persisted.mimeType,
+        progress: 96,
+        result: {
+          providerVideoUrl: sanitizeUrlForLog(providerVideoUrl),
+          cosUploadStatus: persisted.cosUploadStatus,
+          cosObjectKey: persisted.cosObjectKey,
+          finalOutputUrl: persisted.cosUrl
+        }
+      });
+    }
+    if (!asset) {
+      throw new ProviderError(
+        "COS_UPLOAD_FAILED",
+        "视频已生成，但没有成功创建可保存的视频资产。",
+        undefined,
+        { failedStage: "upload_to_cos", providerVideoUrl: sanitizeUrlForLog(providerVideoUrl) }
+      );
+    }
+    const finalOutputUrl = asset.url ?? result.outputUrl;
+    const finalLocalPath = asset.localPath ?? result.localPath;
+    result = { ...result, outputUrl: finalOutputUrl, localPath: finalLocalPath };
+    await markVideoTaskStage({
+      id: taskId,
+      status: "processing",
+      stage: "cos_uploaded",
+      providerStatus: "succeeded",
+      providerVideoUrl,
+      outputUrl: finalOutputUrl,
+      cosKey: asset.storageKey,
+      fileSize: asset.size,
+      mimeType: asset.mimeType,
+      progress: 96
     });
     const payloadSummary = await enrichPayloadSummaryWithOutput(preflightSummary, result);
-    await addHistory({
-      generationType: "video",
-      projectId: activeInputForGeneration.projectId,
-      nodeId: activeInputForGeneration.nodeId,
-      modelConfigId: activeModel.id,
-      modelDisplayName: activeModel.display_name,
-      inputMode: activeInputForGeneration.inputMode,
-      prompt: activeInputForGeneration.prompt,
-      duration: activeInputForGeneration.duration,
-      aspectRatio: activeInputForGeneration.aspectRatio,
-      resolution: activeInputForGeneration.resolution,
-      status: "success",
-      outputPath: asset?.localPath ?? result.localPath,
-      outputUrl: asset?.url ?? result.outputUrl
+    try {
+      await addHistory({
+        generationType: "video",
+        projectId: activeInputForGeneration.projectId,
+        nodeId: activeInputForGeneration.nodeId,
+        modelConfigId: activeModel.id,
+        modelDisplayName: activeModel.display_name,
+        inputMode: activeInputForGeneration.inputMode,
+        prompt: activeInputForGeneration.prompt,
+        duration: activeInputForGeneration.duration,
+        aspectRatio: activeInputForGeneration.aspectRatio,
+        resolution: activeInputForGeneration.resolution,
+        status: "success",
+        outputPath: finalLocalPath,
+        outputUrl: finalOutputUrl
+      });
+    } catch (historyError) {
+      throw new ProviderError(
+        "HISTORY_SAVE_FAILED",
+        "视频已转存，但生成历史写入失败。",
+        rawErrorMessage(historyError),
+        {
+          failedStage: "history_save",
+          providerVideoUrl: sanitizeUrlForLog(providerVideoUrl),
+          cosObjectKey: asset.storageKey,
+          finalOutputUrl,
+          errorMessage: rawErrorMessage(historyError)
+        }
+      );
+    }
+    await markVideoTaskStage({
+      id: taskId,
+      status: "processing",
+      stage: "history_saved",
+      providerStatus: "succeeded",
+      providerVideoUrl,
+      outputUrl: finalOutputUrl,
+      cosKey: asset.storageKey,
+      fileSize: asset.size,
+      mimeType: asset.mimeType,
+      progress: 98
     });
-    return { status: "success" as const, outputAssetId: asset?.id, outputUrl: asset?.url ?? result.outputUrl, payloadSummary };
+    try {
+      await updateCanvasNodeWithGeneratedVideo({
+        projectId: activeInputForGeneration.projectId,
+        nodeId: activeInputForGeneration.nodeId,
+        outputUrl: finalOutputUrl,
+        outputAssetId: asset.id,
+        downloadableUrl: asset.downloadUrl ?? finalOutputUrl
+      });
+    } catch (canvasError) {
+      throw new ProviderError(
+        "CANVAS_UPDATE_FAILED",
+        "视频已转存并写入历史，但画布节点状态同步失败。",
+        rawErrorMessage(canvasError),
+        {
+          failedStage: "canvas_update",
+          providerVideoUrl: sanitizeUrlForLog(providerVideoUrl),
+          cosObjectKey: asset.storageKey,
+          finalOutputUrl,
+          errorMessage: rawErrorMessage(canvasError)
+        }
+      );
+    }
+    const completedAt = Date.now();
+    await markVideoTaskStage({
+      id: taskId,
+      status: "success",
+      stage: "canvas_updated",
+      providerStatus: "succeeded",
+      providerVideoUrl,
+      outputUrl: finalOutputUrl,
+      cosKey: asset.storageKey,
+      fileSize: asset.size,
+      mimeType: asset.mimeType,
+      completedAt,
+      progress: 100,
+      result: {
+        provider: activeModel.provider_id ?? "",
+        modelId: activeModel.model_name ?? activeModel.id,
+        capability: "video",
+        parsedTaskId: taskId,
+        parsedVideoUrl: sanitizeUrlForLog(providerVideoUrl),
+        providerVideoUrl: sanitizeUrlForLog(providerVideoUrl),
+        cosUploadStatus: "success",
+        cosObjectKey: asset.storageKey,
+        finalOutputUrl,
+        canvasUpdated: true
+      }
+    });
+    return { status: "success" as const, outputAssetId: asset.id, outputUrl: finalOutputUrl, payloadSummary };
   } catch (error) {
     const meta = providerErrorMeta(model.provider_id, error);
+    const errorDetails = isProviderError(error) && error.details && typeof error.details === "object"
+      ? error.details as Record<string, unknown>
+      : {};
+    const failedStage = typeof errorDetails.failedStage === "string" ? errorDetails.failedStage : "failed";
+    const failedTaskId = String(errorDetails.parsedTaskId ?? errorDetails.taskId ?? input.clientRequestId ?? input.nodeId);
     if (hasSubmittedRemoteVideoTask(error)) {
-      const details = isProviderError(error) && error.details && typeof error.details === "object"
-        ? error.details as Record<string, unknown>
-        : {};
+      const details = errorDetails;
+      await markVideoTaskStage({
+        id: failedTaskId,
+        status: "processing",
+        stage: "polling",
+        providerStatus: "processing",
+        progress: 35,
+        result: {
+          ...details,
+          provider: model.provider_id ?? "",
+          modelId: model.model_name ?? model.id,
+          capability: "video",
+          nodeId: input.nodeId,
+          projectId: input.projectId,
+          parsedTaskId: failedTaskId,
+          pendingAfterPollInterruption: true
+        }
+      });
       await addHistory({
         generationType: "video",
         projectId: input.projectId,
@@ -1343,6 +1695,30 @@ export async function generateVideo(input: GenerateVideoRequest) {
         }
       };
     }
+    await markVideoTaskStage({
+      id: failedTaskId,
+      status: "error",
+      stage: "failed",
+      providerStatus: typeof errorDetails.providerStatus === "string" ? errorDetails.providerStatus : "failed",
+      failedStage,
+      errorCode: meta.errorCode,
+      errorMessage: meta.errorMessage,
+      providerVideoUrl: typeof errorDetails.providerVideoUrl === "string" ? errorDetails.providerVideoUrl : undefined,
+      outputUrl: typeof errorDetails.finalOutputUrl === "string" ? errorDetails.finalOutputUrl : undefined,
+      progress: 100,
+      result: {
+        ...errorDetails,
+        provider: model.provider_id ?? "",
+        modelId: model.model_name ?? model.id,
+        capability: "video",
+        nodeId: input.nodeId,
+        projectId: input.projectId,
+        failedStage,
+        errorCode: meta.errorCode,
+        errorMessage: meta.errorMessage,
+        rawError: meta.debugMessage
+      }
+    });
     await addHistory({
       generationType: "video",
       projectId: input.projectId,
@@ -1355,7 +1731,7 @@ export async function generateVideo(input: GenerateVideoRequest) {
       aspectRatio: input.aspectRatio,
       resolution: input.resolution,
       status: "error",
-      errorMessage: meta.errorMessage
+      errorMessage: `${meta.errorMessage}${failedStage !== "failed" ? `（阶段：${failedStage}）` : ""}${meta.errorCode ? ` [${meta.errorCode}]` : ""}`
     });
     return errorResponse(meta.errorMessage, meta.errorCode, meta.debugMessage, meta.payloadSummary);
   }
