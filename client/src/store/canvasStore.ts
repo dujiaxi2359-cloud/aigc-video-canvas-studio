@@ -19,6 +19,7 @@ const defaults: Record<WorkflowNodeType, unknown> = {
   image: { title: "图片素材" },
   imageGenerate: { title: "图片生成", prompt: "", inputMode: "text-to-image", aspectRatio: "auto", generateCount: 1, status: "idle" },
   video: { title: "视频节点", prompt: "", inputMode: "text-to-video", videoMode: "text_to_video", generateCount: 1, status: "idle" },
+  director_3d: { title: "3D 导演台", description: "在 3D 空间中搭建场景、导入图片或参考图，并进行多视角截图。", status: "idle", screenshots: [] },
   audio: { title: "音频节点" },
   script: {
     title: "剧本生成器",
@@ -33,6 +34,7 @@ const nodeWidths: Record<WorkflowNodeType, number> = {
   image: 440,
   imageGenerate: 500,
   video: 500,
+  director_3d: 430,
   audio: 320,
   script: 320,
   compose: 320
@@ -140,7 +142,7 @@ function applyConnectionDefaults(nodes: Node[], sourceId?: string | null, target
   if (!sourceId || !targetId) return nodes;
   const source = nodes.find((node) => node.id === sourceId);
   const target = nodes.find((node) => node.id === targetId);
-  const isImageSource = source?.type === "image" || source?.type === "imageAsset" || source?.type === "imageGenerate";
+  const isImageSource = source?.type === "image" || source?.type === "imageAsset" || source?.type === "imageGenerate" || source?.type === "director_3d";
   if (!isImageSource || target?.type !== "video") return nodes;
   const data = (target.data ?? {}) as Record<string, unknown>;
   const currentMode = String(data.videoMode ?? "text_to_video");
@@ -171,6 +173,7 @@ function ratioFromAsset(asset: { width?: number; height?: number; aspectRatio?: 
 function nodeHeight(node: Node) {
   const type = node.type as WorkflowNodeType | undefined;
   if (type === "video") return 520;
+  if (type === "director_3d") return 380;
   if (type === "imageGenerate") return 460;
   if (type === "image") {
     const data = (node.data ?? {}) as { aspectRatio?: string; width?: number; height?: number };

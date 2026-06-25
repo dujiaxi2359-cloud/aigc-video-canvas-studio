@@ -1,7 +1,7 @@
 import type { ImageInputMode, VideoInputMode } from "./model";
 import type { OfficialVideoMode } from "./videoModes";
 
-export type WorkflowNodeType = "text" | "textGenerate" | "image" | "imageGenerate" | "video" | "audio" | "script" | "compose";
+export type WorkflowNodeType = "text" | "textGenerate" | "image" | "imageGenerate" | "video" | "audio" | "script" | "compose" | "director_3d";
 
 export type NodeReference = { sourceNodeId: string; sourceNodeType: string; hint?: string };
 export type GenerationPayloadSummary = Record<string, unknown>;
@@ -50,6 +50,78 @@ export type ImageGenerateNodeData = {
   qualityMode?: "full_quality" | "balanced" | "fast";
   payloadSummary?: GenerationPayloadSummary;
   referencedInputs?: Array<{ sourceNodeId: string; sourceNodeType: string }>;
+};
+export type DirectorVector3 = { x: number; y: number; z: number };
+export type DirectorSceneObjectType = "character" | "geometry" | "image_plane" | "product_placeholder";
+export type DirectorSceneObject = {
+  id: string;
+  type: DirectorSceneObjectType;
+  subtype?: string;
+  name: string;
+  position: DirectorVector3;
+  rotation: DirectorVector3;
+  scale: DirectorVector3;
+  material?: { color?: string; opacity?: number };
+  assetId?: string;
+  assetUrl?: string;
+  visible: boolean;
+  locked?: boolean;
+  labelVisible?: boolean;
+};
+export type DirectorCamera = {
+  id: string;
+  name: string;
+  position: DirectorVector3;
+  target: DirectorVector3;
+  fov: number;
+  aspectRatio: string;
+  thumbnailUrl?: string;
+};
+export type DirectorSceneSettings = {
+  gridVisible: boolean;
+  groundVisible: boolean;
+  groundOpacity: number;
+  skyColor: string;
+  sceneScale: number;
+  snapToGrid: boolean;
+  labelVisible: boolean;
+};
+export type DirectorScreenshot = {
+  id: string;
+  projectId?: string;
+  nodeId: string;
+  cameraId?: string;
+  aspectRatio: string;
+  imageUrl: string;
+  cosKey?: string;
+  assetId?: string;
+  width: number;
+  height: number;
+  createdAt: number;
+};
+export type DirectorScene = {
+  id: string;
+  projectId?: string;
+  nodeId: string;
+  objects: DirectorSceneObject[];
+  cameras: DirectorCamera[];
+  background?: { type: "color" | "image"; color?: string; imageUrl?: string };
+  sceneSettings: DirectorSceneSettings;
+  screenshots: DirectorScreenshot[];
+  createdAt: number;
+  updatedAt: number;
+};
+export type Director3DNodeData = {
+  title: string;
+  description: string;
+  status: "idle" | "editing" | "screenshotting" | "succeeded" | "failed";
+  scene?: DirectorScene;
+  screenshots?: DirectorScreenshot[];
+  outputAssetId?: string;
+  outputUrl?: string;
+  thumbnailUrl?: string;
+  aspectRatio?: string;
+  errorMessage?: string;
 };
 export type AudioNodeData = { title: string; assetId?: string; url?: string; duration?: number };
 export type VideoNodeData = {

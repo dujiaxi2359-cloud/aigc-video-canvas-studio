@@ -10239,3 +10239,84 @@ video:-webkit-full-screen,
 :root[data-theme="light"] .settings-workspace :is(input, textarea)::placeholder {
   color: #7b7280 !important;
 }
+
+.director-node-card {
+  position: relative;
+  overflow: hidden;
+  border-radius: 16px;
+  border: 1px solid rgba(125, 211, 252, 0.14);
+  background: radial-gradient(circle at 22% 12%, rgba(103, 232, 249, 0.16), transparent 30%), linear-gradient(145deg, rgba(9, 15, 31, 0.96), rgba(17, 24, 39, 0.9));
+  padding: 10px;
+}
+.director-node-preview { position: relative; display: grid; min-height: 190px; place-items: center; overflow: hidden; border-radius: 14px; border: 1px solid rgba(255,255,255,0.08); background: radial-gradient(circle at 50% 15%, rgba(168,85,247,0.18), transparent 38%), #050816; }
+.director-node-preview::before { content: ""; position: absolute; inset: 0; background-image: linear-gradient(rgba(56,189,248,0.14) 1px, transparent 1px), linear-gradient(90deg, rgba(56,189,248,0.12) 1px, transparent 1px); background-size: 28px 28px; transform: perspective(500px) rotateX(58deg) translateY(42px) scale(1.4); transform-origin: bottom; opacity: .52; }
+.director-node-preview img { position: relative; z-index: 2; width: 100%; height: 100%; max-height: 210px; object-fit: cover; }
+.director-node-empty { position: relative; z-index: 2; display: grid; gap: 8px; place-items: center; color: rgba(224,242,254,0.9); }
+.director-node-empty span { display: flex; align-items: center; gap: 10px; color: #67e8f9; filter: drop-shadow(0 0 18px rgba(103,232,249,0.28)); }
+.director-node-orbit { position: absolute; z-index: 1; width: 160px; height: 160px; border: 1px solid rgba(167,139,250,0.32); border-radius: 999px; transform: rotateX(64deg) rotateZ(-18deg); box-shadow: 0 0 34px rgba(103,232,249,0.14); }
+.director-node-copy { position: relative; z-index: 2; padding: 10px 2px 4px; }
+.director-node-copy div { display: flex; align-items: center; gap: 6px; font-size: 12px; color: rgba(125,211,252,0.9); }
+.director-node-copy p { margin: 6px 0 0; color: rgba(241,245,249,0.78); font-size: 13px; line-height: 1.45; }
+.director-node-meta { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+.director-node-meta span { display: inline-flex; align-items: center; gap: 5px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.08); background: rgba(255,255,255,0.055); padding: 5px 8px; color: rgba(226,232,240,0.66); font-size: 11px; }
+.director-node-error { margin-top: 8px; border-radius: 10px; background: rgba(248,113,113,0.12); padding: 7px 9px; color: #fecaca; font-size: 12px; }
+.director3d-overlay { position: fixed; inset: 0; z-index: 10000; background: #030712; color: #eef7ff; }
+.director3d-loading { display: grid; height: 100%; place-items: center; color: rgba(226,232,240,.76); gap: 10px; }
+.director3d-shell { display: grid; grid-template-columns: 268px minmax(0,1fr) 320px; grid-template-rows: 62px minmax(0,1fr); width: 100vw; height: 100vh; background: radial-gradient(circle at 50% 0%, rgba(59,130,246,.18), transparent 34%), #030712; }
+.director3d-topbar { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: 16px; border-bottom: 1px solid rgba(148,163,184,.16); background: rgba(3,7,18,.84); padding: 10px 16px; backdrop-filter: blur(20px); }
+.director3d-title { display: flex; align-items: center; gap: 11px; min-width: 0; }
+.director3d-title > span { display: grid; width: 38px; height: 38px; place-items: center; border-radius: 14px; border: 1px solid rgba(125,211,252,.25); background: linear-gradient(135deg, rgba(34,211,238,.18), rgba(168,85,247,.16)); color: #67e8f9; }
+.director3d-title strong { display: block; font-size: 15px; }
+.director3d-title small { display: block; color: rgba(203,213,225,.52); font-size: 11px; }
+.director3d-topbar-actions { display: flex; align-items: center; gap: 8px; }
+.director3d-topbar-actions button, .director3d-select, .director3d-bottom-toolbar button, .director3d-inspector button, .director3d-mini-actions button, .director3d-dialog-options button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 34px; border-radius: 999px; border: 1px solid rgba(255,255,255,.1); background: rgba(255,255,255,.06); padding: 0 12px; color: rgba(241,245,249,.78); font-size: 12px; transition: .18s ease; }
+.director3d-topbar-actions button:hover, .director3d-bottom-toolbar button:hover, .director3d-inspector button:hover, .director3d-mini-actions button:hover { border-color: rgba(125,211,252,.32); color: #fff; background: rgba(125,211,252,.1); }
+.director3d-topbar-actions button.is-active, .director3d-bottom-toolbar button.is-active, .director3d-dialog-options button.is-active { border-color: rgba(103,232,249,.48); background: rgba(8,145,178,.22); color: #cffafe; box-shadow: inset 0 0 18px rgba(103,232,249,.08); }
+.director3d-close { border-color: rgba(248,113,113,.28) !important; color: #fecaca !important; }
+.director3d-select { position: relative; padding-right: 8px; }
+.director3d-select select, .director3d-aspect select { appearance: none; border: 0; background: transparent; color: inherit; outline: none; }
+.director3d-sidebar { min-height: 0; overflow: auto; border-color: rgba(148,163,184,.14); background: linear-gradient(180deg, rgba(15,23,42,.86), rgba(2,6,23,.9)); padding: 14px; }
+.director3d-leftbar { border-right: 1px solid rgba(148,163,184,.14); }
+.director3d-rightbar { border-left: 1px solid rgba(148,163,184,.14); }
+.director3d-search, .director3d-text-field input, .director3d-text-field select, .director3d-number-field input { width: 100%; border: 1px solid rgba(255,255,255,.09); border-radius: 12px; background: rgba(255,255,255,.055); padding: 9px 10px; color: rgba(241,245,249,.9); outline: none; }
+.director3d-section { margin-top: 14px; }
+.director3d-section > strong, .director3d-imported strong, .director3d-field-group strong, .director3d-mini-actions strong { display: block; margin-bottom: 7px; color: rgba(203,213,225,.62); font-size: 11px; font-weight: 600; }
+.director3d-section button { display: flex; align-items: center; gap: 8px; width: 100%; border: 0; border-radius: 11px; background: transparent; padding: 8px 9px; color: rgba(226,232,240,.68); text-align: left; }
+.director3d-section button:hover, .director3d-section button.is-active { background: rgba(125,211,252,.1); color: #e0f2fe; }
+.director3d-imported { margin-top: 16px; border-radius: 14px; border: 1px dashed rgba(125,211,252,.18); padding: 10px; color: rgba(203,213,225,.56); }
+.director3d-imported span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+.director3d-imported small { color: rgba(148,163,184,.5); }
+.director3d-viewport-wrap { position: relative; min-width: 0; min-height: 0; overflow: hidden; background: radial-gradient(circle at 50% 42%, rgba(30,64,175,.18), transparent 35%), #050816; }
+.director3d-busy { position: absolute; left: 18px; bottom: 18px; max-width: 360px; border-radius: 999px; border: 1px solid rgba(125,211,252,.18); background: rgba(2,6,23,.58); padding: 7px 11px; color: rgba(226,232,240,.58); font-size: 11px; backdrop-filter: blur(14px); pointer-events: none; }
+.director3d-bottom-toolbar { position: absolute; left: 50%; bottom: 18px; display: flex; max-width: calc(100% - 390px); transform: translateX(-50%); align-items: center; gap: 6px; overflow-x: auto; border: 1px solid rgba(255,255,255,.1); border-radius: 999px; background: rgba(2,6,23,.7); padding: 7px; box-shadow: 0 22px 70px rgba(0,0,0,.42); backdrop-filter: blur(20px); }
+.director3d-aspect { display: inline-flex; min-height: 34px; align-items: center; border-radius: 999px; border: 1px solid rgba(255,255,255,.1); background: rgba(255,255,255,.06); padding: 0 10px; color: rgba(241,245,249,.78); font-size: 12px; }
+.director3d-label { display: inline-flex; border-radius: 999px; border: 1px solid rgba(125,211,252,.24); background: rgba(2,6,23,.7); padding: 3px 8px; color: rgba(224,242,254,.82); font-size: 11px; white-space: nowrap; backdrop-filter: blur(10px); }
+.director3d-label.is-selected { border-color: rgba(167,139,250,.52); color: #fff; box-shadow: 0 0 18px rgba(103,232,249,.18); }
+.director3d-inspector h3 { margin: 0 0 12px; font-size: 14px; }
+.director3d-text-field, .director3d-number-field, .director3d-color-field, .director3d-check { display: grid; gap: 6px; margin-bottom: 10px; color: rgba(203,213,225,.7); font-size: 11px; }
+.director3d-color-field { grid-template-columns: 1fr 44px; align-items: center; }
+.director3d-color-field input { width: 42px; height: 34px; border: 1px solid rgba(255,255,255,.1); border-radius: 10px; background: transparent; padding: 2px; }
+.director3d-vector-grid { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 7px; }
+.director3d-check { display: flex; align-items: center; gap: 8px; }
+.director3d-check input { accent-color: #22d3ee; }
+.director3d-shot-preview { display: grid; height: 112px; place-items: center; margin: 10px 0; border-radius: 14px; border: 1px dashed rgba(125,211,252,.2); color: rgba(203,213,225,.45); background: linear-gradient(135deg, rgba(15,23,42,.65), rgba(30,41,59,.35)); font-size: 12px; }
+.director3d-inspector button { width: 100%; margin-top: 8px; }
+.director3d-inspector button.is-primary { border-color: rgba(103,232,249,.48); background: #67e8f9; color: #082f49; font-weight: 700; }
+.director3d-inspector button.is-danger { border-color: rgba(248,113,113,.28); color: #fecaca; }
+.director3d-mini-actions { display: grid; gap: 6px; margin-top: 16px; }
+.director3d-mini-actions button { justify-content: flex-start; border-radius: 12px; }
+.director3d-dialog-backdrop { position: fixed; inset: 0; z-index: 10020; display: grid; place-items: center; background: rgba(2,6,23,.68); backdrop-filter: blur(14px); }
+.director3d-dialog { width: min(560px, calc(100vw - 40px)); border-radius: 24px; border: 1px solid rgba(255,255,255,.12); background: linear-gradient(160deg, rgba(15,23,42,.96), rgba(3,7,18,.96)); padding: 18px; box-shadow: 0 30px 90px rgba(0,0,0,.52); }
+.director3d-dialog-head { display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; }
+.director3d-dialog-head strong { display: block; font-size: 16px; }
+.director3d-dialog-head span { display: block; margin-top: 4px; color: rgba(203,213,225,.58); font-size: 12px; }
+.director3d-dialog-head button { border: 0; background: transparent; color: rgba(226,232,240,.7); }
+.director3d-dropzone { display: grid; place-items: center; gap: 8px; min-height: 190px; margin-top: 16px; border: 1px dashed rgba(103,232,249,.34); border-radius: 20px; background: radial-gradient(circle at 50% 0, rgba(34,211,238,.12), transparent 50%), rgba(255,255,255,.04); color: rgba(224,242,254,.88); text-align: center; cursor: pointer; }
+.director3d-dropzone input { display: none; }
+.director3d-dropzone span { max-width: 420px; color: rgba(203,213,225,.58); font-size: 12px; }
+.director3d-dropzone.is-dragging { border-color: rgba(167,139,250,.8); background: rgba(125,211,252,.1); }
+.director3d-dialog-options { display: flex; gap: 8px; margin-top: 14px; }
+.director3d-dialog-options button:disabled { opacity: .45; cursor: not-allowed; }
+.director3d-dialog-note { margin: 14px 0 0; color: rgba(253,230,138,.8); font-size: 12px; }
+.director3d-history-placeholder { margin-top: 12px; border-radius: 14px; background: rgba(255,255,255,.04); padding: 10px 12px; color: rgba(203,213,225,.48); font-size: 12px; }
+@media (max-width: 1180px) { .director3d-shell { grid-template-columns: 228px minmax(0,1fr) 280px; } .director3d-topbar-actions button span, .director3d-bottom-toolbar button span { display: none; } }

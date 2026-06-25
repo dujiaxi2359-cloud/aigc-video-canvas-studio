@@ -6,6 +6,7 @@ import { VideoNode } from "../nodes/VideoNode";
 import { AudioNode } from "../nodes/AudioNode";
 import { ScriptNode } from "../nodes/ScriptNode";
 import { ComposeNode } from "../nodes/ComposeNode";
+import { Director3DNode } from "../nodes/Director3DNode";
 
 export const nodeTypes = {
   text: TextNode,
@@ -15,5 +16,6 @@ export const nodeTypes = {
   video: VideoNode,
   audio: AudioNode,
   script: ScriptNode,
-  compose: ComposeNode
+  compose: ComposeNode,
+  director_3d: Director3DNode
 };

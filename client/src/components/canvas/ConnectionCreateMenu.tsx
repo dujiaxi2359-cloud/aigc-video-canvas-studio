@@ -1,4 +1,4 @@
-import { Clapperboard, FileText, Film, Image, Music, ScrollText, Sparkles } from "lucide-react";
+import { Clapperboard, FileText, Film, Image, Layers3, Music, ScrollText, Sparkles } from "lucide-react";
 import type { WorkflowNodeType } from "../../types/node";
 
 export type ConnectionCreateMenuState = {
@@ -14,20 +14,22 @@ const meta: Record<WorkflowNodeType, { label: string; icon: React.ElementType }>
   image: { label: "图片素材", icon: Image },
   imageGenerate: { label: "图片生成", icon: Image },
   video: { label: "视频生成", icon: Film },
+  director_3d: { label: "3D 导演台", icon: Layers3 },
   audio: { label: "音频", icon: Music },
   script: { label: "脚本", icon: ScrollText },
   compose: { label: "视频合成", icon: Clapperboard }
 };
 
 const options: Record<WorkflowNodeType, { recommended: WorkflowNodeType[]; more: WorkflowNodeType[] }> = {
-  text: { recommended: ["textGenerate", "imageGenerate", "video", "script"], more: ["compose", "image", "audio", "text"] },
-  textGenerate: { recommended: ["imageGenerate", "video", "script", "compose"], more: ["text", "image", "audio"] },
-  image: { recommended: ["textGenerate", "imageGenerate", "video", "compose"], more: ["script", "audio", "image", "text"] },
-  imageGenerate: { recommended: ["video", "textGenerate", "imageGenerate", "compose"], more: ["script", "audio", "image", "text"] },
-  video: { recommended: ["compose", "textGenerate", "video"], more: ["imageGenerate", "audio", "script", "image", "text"] },
-  script: { recommended: ["textGenerate", "video", "imageGenerate", "compose"], more: ["text", "image", "audio"] },
-  audio: { recommended: ["textGenerate", "compose", "video"], more: ["script", "imageGenerate", "text"] },
-  compose: { recommended: ["textGenerate", "video", "compose"], more: ["imageGenerate", "image", "audio", "script", "text"] }
+  text: { recommended: ["textGenerate", "imageGenerate", "video", "script"], more: ["director_3d", "compose", "image", "audio", "text"] },
+  textGenerate: { recommended: ["imageGenerate", "video", "script", "compose"], more: ["director_3d", "text", "image", "audio"] },
+  image: { recommended: ["director_3d", "textGenerate", "imageGenerate", "video"], more: ["compose", "script", "audio", "image", "text"] },
+  imageGenerate: { recommended: ["director_3d", "video", "textGenerate", "imageGenerate"], more: ["compose", "script", "audio", "image", "text"] },
+  director_3d: { recommended: ["imageGenerate", "video", "image"], more: ["textGenerate", "compose", "script", "audio", "text"] },
+  video: { recommended: ["compose", "textGenerate", "video"], more: ["director_3d", "imageGenerate", "audio", "script", "image", "text"] },
+  script: { recommended: ["textGenerate", "video", "imageGenerate", "compose"], more: ["director_3d", "text", "image", "audio"] },
+  audio: { recommended: ["textGenerate", "compose", "video"], more: ["script", "imageGenerate", "director_3d", "text"] },
+  compose: { recommended: ["textGenerate", "video", "compose"], more: ["director_3d", "imageGenerate", "image", "audio", "script", "text"] }
 };
 
 function MenuGroup({ title, items, onSelect }: { title: string; items: WorkflowNodeType[]; onSelect: (type: WorkflowNodeType) => void }) {

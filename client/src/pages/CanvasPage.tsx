@@ -100,7 +100,7 @@ export function CanvasPage({ onNavigate }: { onNavigate: (page: Page, projectId?
     };
     const quickAdd = (event: Event) => {
       const type = (event as CustomEvent<string>).detail;
-      if (["text", "image", "video", "imageGenerate"].includes(type)) addNode(type as "text" | "image" | "video" | "imageGenerate");
+      if (["text", "image", "video", "imageGenerate", "director_3d"].includes(type)) addNode(type as "text" | "image" | "video" | "imageGenerate" | "director_3d");
     };
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;

@@ -1,5 +1,5 @@
 import { useEffect, type ElementType } from "react";
-import { Clapperboard, FileText, Film, Image, Music, ScrollText, Sparkles, Upload } from "lucide-react";
+import { Clapperboard, FileText, Film, Image, Layers3, Music, ScrollText, Sparkles, Upload } from "lucide-react";
 import { useCanvasStore } from "../../store/canvasStore";
 import type { WorkflowNodeType } from "../../types/node";
 
@@ -9,6 +9,7 @@ const items: Array<{ type: WorkflowNodeType; label: string; description: string;
   { type: "video", label: "视频", description: "文生、图生与参考生视频", icon: Film, group: "创作节点" },
   { type: "audio", label: "音频", description: "配乐与旁白", icon: Music, group: "创作节点" },
   { type: "textGenerate", label: "创意工作台", description: "提示词、脚本与视觉反推", icon: Sparkles, group: "辅助工具" },
+  { type: "director_3d", label: "3D 导演台", description: "搭建 3D 场景并多视角截图", icon: Layers3, group: "辅助工具" },
   { type: "script", label: "分镜脚本", description: "镜头规划与 Shot Prompt", icon: ScrollText, group: "辅助工具" },
   { type: "compose", label: "视频合成", description: "视频、音频与字幕", icon: Clapperboard, group: "辅助工具" },
   { type: "image", label: "上传素材", description: "从本地添加图片素材", icon: Upload, group: "添加资源" }
