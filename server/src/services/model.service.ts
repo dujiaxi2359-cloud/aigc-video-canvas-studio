@@ -3,7 +3,7 @@ import path from "node:path";
 import { getDb } from "../db/database.js";
 import { createAsset } from "./asset.service.js";
 import { decryptApiKey } from "./encryption.service.js";
-import { persistGeneratedVideoToCOS, updateCanvasNodeWithGeneratedVideo } from "./generatedVideoPersistence.service.js";
+import { persistGeneratedVideoToCOS, updateCanvasNodeWithGeneratedVideo, updateCanvasNodeWithGenerationFailure } from "./generatedVideoPersistence.service.js";
 import { addHistory } from "./history.service.js";
 import { saveGenerationTask } from "./generationTask.service.js";
 import { modelCatalog } from "./modelCatalog.js";
@@ -802,6 +802,40 @@ function upstreamModelName(model: ActiveModelConfig, capabilities: ModelCapabili
   return capabilities?.upstreamModelId?.trim() || fallback?.trim() || model.model_name || model.id;
 }
 
+function assertOutboundImageModelRoute(input: {
+  route: ReturnType<typeof selectedImageRouting>;
+  requestBodyModel: string;
+  configuredUpstreamModelId?: string;
+  endpoint?: string;
+}) {
+  const selectedModelId = input.route.selectedModelId;
+  const explicitUpstream = input.configuredUpstreamModelId?.trim();
+  const expectedModel = explicitUpstream || input.route.actualModelId;
+  if (!input.requestBodyModel || input.requestBodyModel !== expectedModel) {
+    throw new ProviderError(
+      "MODEL_ROUTING_MISMATCH",
+      "实际发送给中转的模型名与用户选择模型不一致。",
+      undefined,
+      {
+        ...input.route,
+        selectedEndpointFamily: input.route.actualEndpointFamily,
+        configuredUpstreamModelId: explicitUpstream,
+        requestBodyModel: input.requestBodyModel,
+        expectedModel,
+        endpoint: input.endpoint
+      }
+    );
+  }
+  if (selectedModelId && selectedModelId !== input.route.actualModelConfigId && selectedModelId !== input.route.actualModelId) {
+    throw new ProviderError(
+      "MODEL_ROUTING_MISMATCH",
+      "实际调用模型与用户选择模型不一致。",
+      undefined,
+      { ...input.route, requestBodyModel: input.requestBodyModel }
+    );
+  }
+}
+
 function assertSelectedVideoRouting(route: ReturnType<typeof selectedVideoRouting>) {
   if (route.autoModelSelection) {
     throw new ProviderError(
@@ -918,6 +952,13 @@ export function hasSubmittedRemoteVideoTask(error: unknown) {
   const record = details as Record<string, unknown>;
   return [record.proxyTaskId, record.taskId, record.requestId, record.id]
     .some((value) => typeof value === "string" && value.length > 0);
+}
+
+function isTerminalSubmittedVideoError(error: unknown) {
+  const text = isProviderError(error)
+    ? `${error.errorCode}\n${error.message}\n${error.debugMessage ?? ""}\n${safeStringify(error.details)}`
+    : rawErrorMessage(error);
+  return /MODEL_ACCESS_DENIED|API_KEY_INVALID|PROVIDER_ACCOUNT_UNAVAILABLE|PROVIDER_CHANNEL_UNAVAILABLE|UPSTREAM_CHANNEL_UNAVAILABLE|UPSTREAM_QUOTA_EXHAUSTED|This token has no access|no access to model|model.*no access|unauthorized|forbidden|permission|access denied|invalid api key|incorrect api key|可用渠道不存在|无可用渠道|没有.*权限|无权限|未开通/i.test(text);
 }
 
 async function callVideoProvider(input: {
@@ -1324,7 +1365,6 @@ export async function generateVideo(input: GenerateVideoRequest) {
       capabilities,
       qualityMode: inputForGeneration.qualityMode ?? "full_quality"
     };
-
     let activeModel = model;
     let activeInputForGeneration = inputForGeneration;
     let preflightSummary = buildPayloadSummary({
@@ -1704,7 +1744,7 @@ export async function generateVideo(input: GenerateVideoRequest) {
       : {};
     const failedStage = typeof errorDetails.failedStage === "string" ? errorDetails.failedStage : "failed";
     const failedTaskId = String(errorDetails.parsedTaskId ?? errorDetails.taskId ?? input.clientRequestId ?? input.nodeId);
-    if (hasSubmittedRemoteVideoTask(error)) {
+    if (hasSubmittedRemoteVideoTask(error) && !isTerminalSubmittedVideoError(error)) {
       const details = errorDetails;
       await markVideoTaskStage({
         id: failedTaskId,
@@ -1773,6 +1813,13 @@ export async function generateVideo(input: GenerateVideoRequest) {
         rawError: meta.debugMessage
       }
     });
+    await updateCanvasNodeWithGenerationFailure({
+      projectId: input.projectId,
+      nodeId: input.nodeId,
+      errorMessage: meta.errorMessage,
+      errorCode: meta.errorCode,
+      failedStage
+    }).catch((canvasError) => console.warn("[video failure canvas update failed]", rawErrorMessage(canvasError)));
     await addHistory({
       generationType: "video",
       projectId: input.projectId,
@@ -1869,6 +1916,12 @@ export async function generateImage(input: GenerateImageRequest) {
       capabilities,
       qualityMode: inputForGeneration.qualityMode ?? "full_quality"
     };
+    assertOutboundImageModelRoute({
+      route: imageRoute,
+      requestBodyModel: providerParams.modelName,
+      configuredUpstreamModelId: capabilities.upstreamModelId,
+      endpoint: capabilities.openaiCompatibleConfig?.imageGenerationEndpoint
+    });
 
     let activeModel = model;
     let activeCatalogItem = catalogItem;
@@ -1906,6 +1959,8 @@ export async function generateImage(input: GenerateImageRequest) {
         upstreamModelId: imageRoute.upstreamModelId,
         actualCapability: imageRoute.actualCapability,
         actualEndpointFamily: imageRoute.actualEndpointFamily,
+        configuredUpstreamModelId: capabilities.upstreamModelId,
+        requestBodyModel: providerParams.modelName,
         endpointStrategy: imageRoute.endpointStrategy
       }
     });

@@ -41,9 +41,9 @@ async function responseJson(response: Response, endpoint: string) {
   }
 }
 
-function openAIImageProviderError(message: string) {
+function openAIImageProviderError(message: string, details?: Record<string, unknown>) {
   const errorMessage = humanOpenAIError(message);
-  return new ProviderError(classifyOpenAiCompatibleProviderErrorCode(message), errorMessage, message);
+  return new ProviderError(classifyOpenAiCompatibleProviderErrorCode(message), errorMessage, message, details);
 }
 
 function humanOpenAIError(message: string) {
@@ -319,7 +319,11 @@ async function fetchOpenAIImageJson(input: {
     throwOpenAiCompatibleHttpError({ label: "OpenAI 兼容图片生成", endpoint, status: response.status, payload, text });
   }
 
-  throw openAIImageProviderError(message);
+  throw openAIImageProviderError(message, {
+    endpoint,
+    requestBodyModel: input.body.model,
+    requestBodyKeys: Object.keys(input.body)
+  });
 }
 
 async function fetchOpenAICompatJsonImageEdit(input: {
@@ -372,7 +376,11 @@ async function fetchOpenAICompatJsonImageEdit(input: {
     message = await responseError(response);
   }
 
-  throw openAIImageProviderError(message);
+  throw openAIImageProviderError(message, {
+    endpoint,
+    requestBodyModel: input.params.modelName,
+    requestBodyKeys: Object.keys(body)
+  });
 }
 
 function buildImageEditForm(params: ImageProviderParams, options: { omitOutputFormat?: boolean; sizeOverride?: string } = {}) {
@@ -448,7 +456,11 @@ async function fetchOpenAIImageEditJson(input: {
     throwOpenAiCompatibleHttpError({ label: "OpenAI 兼容图片编辑", endpoint, status: response.status, payload, text });
   }
 
-  throw openAIImageProviderError(message);
+  throw openAIImageProviderError(message, {
+    endpoint,
+    requestBodyModel: input.params.modelName,
+    requestBodyKeys: ["model", "prompt", "image", "size", "quality", "output_format", "n"]
+  });
 }
 
 export async function generateImageWithOpenAI(params: ImageProviderParams): Promise<ProviderGenerateResult> {

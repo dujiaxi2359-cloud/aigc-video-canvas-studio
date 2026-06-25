@@ -253,3 +253,45 @@ export async function updateCanvasNodeWithGeneratedVideo(input: {
   await db.run("UPDATE projects SET nodes_json = ?, updated_at = ? WHERE id = ? AND workspace_id = ?", JSON.stringify(nextNodes), now(), input.projectId, workspace.id);
   return { updated: true };
 }
+
+export async function updateCanvasNodeWithGenerationFailure(input: {
+  projectId?: string;
+  nodeId?: string;
+  errorMessage: string;
+  errorCode?: string;
+  failedStage?: string;
+}) {
+  if (!input.projectId || !input.nodeId) return { updated: false };
+  const db = await getDb();
+  const { workspace } = requireRequestContext();
+  const project = await db.get<{ id: string; nodes_json: string }>(
+    "SELECT id, nodes_json FROM projects WHERE id = ? AND workspace_id = ?",
+    input.projectId,
+    workspace.id
+  );
+  if (!project) return { updated: false };
+
+  let didUpdate = false;
+  const nodes = JSON.parse(project.nodes_json) as Array<Record<string, unknown>>;
+  const nextNodes = nodes.map((node) => {
+    if (node.id !== input.nodeId) return node;
+    didUpdate = true;
+    const data = (node.data && typeof node.data === "object" ? node.data as Record<string, unknown> : {});
+    return {
+      ...node,
+      data: {
+        ...data,
+        status: "error",
+        generationStatus: "failed",
+        loading: false,
+        failedStage: input.failedStage,
+        errorCode: input.errorCode,
+        errorMessage: input.errorMessage
+      }
+    };
+  });
+  if (!didUpdate) return { updated: false };
+
+  await db.run("UPDATE projects SET nodes_json = ?, updated_at = ? WHERE id = ? AND workspace_id = ?", JSON.stringify(nextNodes), now(), input.projectId, workspace.id);
+  return { updated: true };
+}

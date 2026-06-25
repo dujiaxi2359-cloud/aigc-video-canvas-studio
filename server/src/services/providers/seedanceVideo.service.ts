@@ -1021,6 +1021,7 @@ function seedanceTaskFetchPending(payload: Record<string, unknown>) {
 
 export function isRetryableSeedancePollFailure(response: Response, payload: Record<string, unknown>) {
   const text = JSON.stringify(payload);
+  if (modelAccessDenied(payload) || response.status === 401 || response.status === 403) return false;
   if (/panic detected|assignment to entry in nil map|nil map|please contact us/i.test(text)) return true;
   const payloadStatus = Number(payload.status_code ?? payload.statusCode ?? payload.code_status ?? 0);
   const status = response.ok && payloadStatus ? payloadStatus : response.status;
@@ -1676,6 +1677,24 @@ export async function generateVideoWithSeedance(params: SeedanceProviderParams):
           }
         });
         if (!pollResponse.ok) {
+          if (modelAccessDenied(task) || pollResponse.status === 401 || pollResponse.status === 403) {
+            throw new ProviderError(
+              "MODEL_ACCESS_DENIED",
+              `当前中转 API Key 的套餐、分组或上游渠道没有模型「${params.modelName}」的轮询/结果读取权限。请在中转后台开通该模型，或换用已授权的 API Key。`,
+              preview(task),
+              {
+                failedStage: "polling",
+                taskId: id,
+                parsedTaskId: id,
+                pollEndpoint: pollResult.endpoint,
+                model: params.modelName,
+                provider: params.providerId,
+                apiBaseUrl: params.videoRequestConfig?.baseUrl ?? params.apiBaseUrl,
+                upstreamStatus: pollResponse.status,
+                rawResponse: task
+              }
+            );
+          }
           await saveGenerationTask({
             id,
             status: "processing",
