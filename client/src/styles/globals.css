@@ -8845,6 +8845,157 @@ video:-webkit-full-screen,
   color: rgba(28, 27, 31, 0.58) !important;
 }
 
+:root[data-theme="light"] .workspace-shell {
+  color: var(--moon-fg);
+}
+
+:root[data-theme="light"] .workspace-sidebar {
+  border-color: rgba(36, 34, 42, 0.1);
+  background: rgba(255, 255, 255, 0.78);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.92), 0 22px 58px rgba(72, 68, 82, 0.11);
+}
+
+:root[data-theme="light"] .workspace-sidebar-title {
+  color: rgba(28, 27, 31, 0.84);
+}
+
+:root[data-theme="light"] .workspace-folder-row {
+  color: rgba(28, 27, 31, 0.58);
+}
+
+:root[data-theme="light"] .workspace-folder-row:hover,
+:root[data-theme="light"] .workspace-folder-row.is-active {
+  background: rgba(28, 27, 31, 0.07);
+  color: rgba(28, 27, 31, 0.9);
+}
+
+:root[data-theme="light"] .workspace-mini-button,
+:root[data-theme="light"] .workspace-folder-more {
+  color: rgba(28, 27, 31, 0.48);
+}
+
+:root[data-theme="light"] .workspace-mini-button:hover,
+:root[data-theme="light"] .workspace-folder-more:hover {
+  background: rgba(28, 27, 31, 0.07);
+  color: rgba(28, 27, 31, 0.88);
+}
+
+:root[data-theme="light"] .workspace-folder-empty {
+  color: rgba(28, 27, 31, 0.42);
+}
+
+:root[data-theme="light"] .workspace-folder-empty:hover {
+  background: rgba(28, 27, 31, 0.045);
+  color: rgba(28, 27, 31, 0.78);
+}
+
+:root[data-theme="light"] .workspace-search,
+:root[data-theme="light"] .workspace-sort,
+:root[data-theme="light"] .workspace-tool-button,
+:root[data-theme="light"] .workspace-view-toggle {
+  border-color: rgba(36, 34, 42, 0.1);
+  background: rgba(255, 255, 255, 0.68);
+  color: rgba(28, 27, 31, 0.58);
+  box-shadow: 0 10px 28px rgba(72, 68, 82, 0.07);
+}
+
+:root[data-theme="light"] .workspace-search input {
+  color: rgba(28, 27, 31, 0.92);
+}
+
+:root[data-theme="light"] .workspace-search input::placeholder {
+  color: rgba(28, 27, 31, 0.4);
+}
+
+:root[data-theme="light"] .workspace-view-toggle button {
+  color: rgba(28, 27, 31, 0.45);
+}
+
+:root[data-theme="light"] .workspace-view-toggle button.is-active,
+:root[data-theme="light"] .workspace-view-toggle button:hover {
+  background: rgba(28, 27, 31, 0.08);
+  color: rgba(28, 27, 31, 0.9);
+}
+
+:root[data-theme="light"] .workspace-new-project,
+:root[data-theme="light"] .workspace-project-card {
+  border-color: rgba(36, 34, 42, 0.1);
+  background: rgba(255, 255, 255, 0.74);
+  color: rgba(28, 27, 31, 0.92);
+  box-shadow: 0 24px 58px rgba(72, 68, 82, 0.1), inset 0 1px 0 rgba(255,255,255,.88);
+}
+
+:root[data-theme="light"] .workspace-project-card:hover,
+:root[data-theme="light"] .workspace-new-project:hover {
+  border-color: rgba(139, 92, 246, 0.22);
+  background: rgba(255, 255, 255, 0.88);
+  box-shadow: 0 26px 68px rgba(72, 68, 82, 0.14), 0 0 0 1px rgba(139, 92, 246, 0.08);
+}
+
+:root[data-theme="light"] .workspace-new-project span {
+  background: rgba(28, 27, 31, 0.94);
+  color: white;
+  box-shadow: 0 16px 34px rgba(72, 68, 82, 0.16);
+}
+
+:root[data-theme="light"] .workspace-new-project small,
+:root[data-theme="light"] .workspace-project-info p {
+  color: rgba(28, 27, 31, 0.48);
+}
+
+:root[data-theme="light"] .workspace-project-more {
+  color: rgba(28, 27, 31, 0.46);
+}
+
+:root[data-theme="light"] .workspace-project-more:hover {
+  background: rgba(28, 27, 31, 0.07);
+  color: rgba(28, 27, 31, 0.88);
+}
+
+:root[data-theme="light"] .workspace-context-menu {
+  border-color: rgba(36, 34, 42, 0.1);
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 22px 58px rgba(72, 68, 82, 0.18);
+}
+
+:root[data-theme="light"] .workspace-context-menu button {
+  color: rgba(28, 27, 31, 0.62);
+}
+
+:root[data-theme="light"] .workspace-context-menu button:hover {
+  background: rgba(28, 27, 31, 0.07);
+  color: rgba(28, 27, 31, 0.9);
+}
+
+:root[data-theme="light"] .workspace-context-menu button.is-danger {
+  color: #b4233a;
+}
+
+:root[data-theme="light"] .workspace-dialog {
+  border-color: rgba(36, 34, 42, 0.1);
+  background: rgba(255, 255, 255, 0.96);
+  color: rgba(28, 27, 31, 0.92);
+  box-shadow: 0 30px 88px rgba(72, 68, 82, 0.18);
+}
+
+:root[data-theme="light"] .workspace-dialog-option {
+  color: rgba(28, 27, 31, 0.62);
+}
+
+:root[data-theme="light"] .workspace-dialog-option:hover {
+  background: rgba(28, 27, 31, 0.07);
+  color: rgba(28, 27, 31, 0.92);
+}
+
+:root[data-theme="light"] .workspace-empty {
+  border-color: rgba(36, 34, 42, 0.12);
+  color: rgba(28, 27, 31, 0.48);
+}
+
+:root[data-theme="light"] .workspace-empty h3 {
+  color: rgba(28, 27, 31, 0.86);
+}
+
 :root[data-theme="light"] .studio-home-nav nav button:hover,
 :root[data-theme="light"] .studio-home-nav nav button[class*="bg-white"] {
   background: rgba(28, 27, 31, 0.06) !important;
