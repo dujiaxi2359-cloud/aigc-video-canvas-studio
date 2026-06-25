@@ -7,6 +7,13 @@ import { aspectRatioToOpenAIImageSize } from "../../utils/imageAspectRatio.js";
 import { extractImagePayload, summarizeImageResponseShape } from "../../utils/imageResponseExtractor.js";
 import { ProviderError } from "../../utils/providerErrors.js";
 import type { ImageProviderParams, ProviderGenerateResult } from "./providerTypes.js";
+import {
+  ensureOpenAiCompatibleConfig,
+  openAiCompatibleHeaders,
+  readRawResponse,
+  resolveOpenAiCompatibleEndpoint,
+  throwOpenAiCompatibleHttpError
+} from "./openaiCompatibleProtocol.js";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -122,15 +129,11 @@ function isOfficialOpenAIBase(apiBaseUrl: string) {
   return host === "api.openai.com";
 }
 
-function isCy88ImageRelay(apiBaseUrl: string) {
-  const host = apiBaseHost(apiBaseUrl);
-  return host === "ai.cy88.ai" || host.endsWith(".cy88.ai") || host === "ai.ai666.net" || host.endsWith(".ai666.net");
-}
-
-function shouldUseJsonImageGenerationForEdit(apiBaseUrl: string, modelName: string) {
+function shouldUseJsonImageGenerationForEdit(apiBaseUrl: string, modelName: string, capabilities?: ImageProviderParams["capabilities"]) {
   if (isOfficialOpenAIBase(apiBaseUrl)) return false;
-  if (isCy88ImageRelay(apiBaseUrl)) return /gpt-image-2|grok-4-2-image|jimen|doubao-seedream/i.test(modelName);
-  return /grok-4-2-image/i.test(modelName);
+  const config = capabilities?.openaiCompatibleConfig;
+  if (config?.imageGenerationEndpoint && config.imageGenerationEndpoint === config.imageEditEndpoint) return true;
+  return /gpt-image-2|grok-4-2-image|jimen|doubao-seedream/i.test(modelName);
 }
 
 function asRecord(value: unknown): JsonRecord | undefined {
@@ -248,19 +251,25 @@ async function imageAssetBase64(assetIds: string[], withDataUrl = false) {
 async function fetchOpenAIImageJson(input: {
   apiBaseUrl: string;
   apiKey: string;
+  params: ImageProviderParams;
   body: Record<string, unknown>;
 }) {
-  const request = async (body: Record<string, unknown>) => fetch(`${input.apiBaseUrl}/images/generations`, {
+  const config = ensureOpenAiCompatibleConfig(input.params.capabilities ?? { inputModes: ["text-to-image"] }, "image");
+  const endpoint = resolveOpenAiCompatibleEndpoint({
+    baseUrl: input.apiBaseUrl,
+    endpoint: config.imageGenerationEndpoint,
+    defaultEndpoint: "/v1/images/generations",
+    modelId: input.params.modelName,
+    queryParams: config.queryParams
+  });
+  const request = async (body: Record<string, unknown>) => fetch(endpoint, {
     method: "POST",
-    headers: {
-      Authorization: `Bearer ${input.apiKey}`,
-      "Content-Type": "application/json"
-    },
+    headers: openAiCompatibleHeaders({ apiKey: input.apiKey, config }),
     body: JSON.stringify(body)
   });
 
   let response = await request(input.body);
-  if (response.ok) return responseJson(response, "/images/generations");
+  if (response.ok) return responseJson(response, endpoint);
 
   const message = await responseError(response);
   const fallbackSize = fallbackImageSize(input.body.size);
@@ -268,24 +277,26 @@ async function fetchOpenAIImageJson(input: {
     const fallbackBody: Record<string, unknown> = { ...input.body, size: fallbackSize };
     console.warn("[OpenAI Image] relay rejected high-resolution size; retrying with compatible size", {
       modelName: fallbackBody.model,
-      endpoint: "/images/generations",
+      endpoint,
       rejectedSize: input.body.size,
       fallbackSize
     });
     response = await request(fallbackBody);
-    if (response.ok) return responseJson(response, "/images/generations");
-    throw new Error(humanOpenAIError(await responseError(response)));
+    if (response.ok) return responseJson(response, endpoint);
+    const { text, payload } = await readRawResponse(response);
+    throwOpenAiCompatibleHttpError({ label: "OpenAI 兼容图片生成", endpoint, status: response.status, payload, text });
   }
   if (input.body.output_format && isUnsupportedResponseFormatError(message)) {
     const fallbackBody = { ...input.body };
     delete fallbackBody.output_format;
     console.warn("[OpenAI Image] relay rejected response_format; retrying without output_format", {
       modelName: fallbackBody.model,
-      endpoint: "/images/generations"
+      endpoint
     });
     response = await request(fallbackBody);
-    if (response.ok) return responseJson(response, "/images/generations");
-    throw new Error(humanOpenAIError(await responseError(response)));
+    if (response.ok) return responseJson(response, endpoint);
+    const { text, payload } = await readRawResponse(response);
+    throwOpenAiCompatibleHttpError({ label: "OpenAI 兼容图片生成", endpoint, status: response.status, payload, text });
   }
 
   throw new Error(humanOpenAIError(message));
@@ -296,7 +307,14 @@ async function fetchOpenAICompatJsonImageEdit(input: {
   apiKey: string;
   params: ImageProviderParams;
 }) {
-  const endpoint = `${input.apiBaseUrl}/images/generations`;
+  const config = ensureOpenAiCompatibleConfig(input.params.capabilities ?? { inputModes: ["image-edit"] }, "image");
+  const endpoint = resolveOpenAiCompatibleEndpoint({
+    baseUrl: input.apiBaseUrl,
+    endpoint: config.imageGenerationEndpoint,
+    defaultEndpoint: "/v1/images/generations",
+    modelId: input.params.modelName,
+    queryParams: config.queryParams
+  });
   const buildBody = async (withDataUrl = false, sizeOverride?: string) => {
     const body: Record<string, unknown> = {
       model: input.params.modelName,
@@ -309,16 +327,13 @@ async function fetchOpenAICompatJsonImageEdit(input: {
   };
   const request = async (body: Record<string, unknown>) => fetch(endpoint, {
     method: "POST",
-    headers: {
-      Authorization: `Bearer ${input.apiKey}`,
-      "Content-Type": "application/json"
-    },
+    headers: openAiCompatibleHeaders({ apiKey: input.apiKey, config }),
     body: JSON.stringify(body)
   });
 
   let body = await buildBody(false);
   let response = await request(body);
-  if (response.ok) return responseJson(response, "/images/generations");
+  if (response.ok) return responseJson(response, endpoint);
 
   let message = await responseError(response);
   const requestedSize = input.params.aspectRatio ? aspectRatioToOpenAIImageSize(input.params.aspectRatio, input.params.modelName, input.params.imageSize) : input.params.imageSize;
@@ -326,14 +341,14 @@ async function fetchOpenAICompatJsonImageEdit(input: {
   if (fallbackSize && isUnsupportedSizeError(message)) {
     body = await buildBody(false, fallbackSize);
     response = await request(body);
-    if (response.ok) return responseJson(response, "/images/generations");
+    if (response.ok) return responseJson(response, endpoint);
     message = await responseError(response);
   }
 
   if (/image|base64|invalid|unsupported|format/i.test(message)) {
     const dataUrlBody = await buildBody(true, fallbackSize);
     response = await request(dataUrlBody);
-    if (response.ok) return responseJson(response, "/images/generations");
+    if (response.ok) return responseJson(response, endpoint);
     message = await responseError(response);
   }
 
@@ -366,18 +381,26 @@ async function fetchOpenAIImageEditJson(input: {
   apiKey: string;
   params: ImageProviderParams;
 }) {
+  const config = ensureOpenAiCompatibleConfig(input.params.capabilities ?? { inputModes: ["image-edit"] }, "image");
+  const endpoint = resolveOpenAiCompatibleEndpoint({
+    baseUrl: input.apiBaseUrl,
+    endpoint: config.imageEditEndpoint,
+    defaultEndpoint: "/v1/images/edits",
+    modelId: input.params.modelName,
+    queryParams: config.queryParams
+  });
   const request = async (omitOutputFormat = false, sizeOverride?: string) => {
     const form = buildImageEditForm(input.params, { omitOutputFormat, sizeOverride });
     await appendImageEditAssets(form, input.params.imageAssetIds ?? []);
-    return fetch(`${input.apiBaseUrl}/images/edits`, {
+    return fetch(endpoint, {
       method: "POST",
-      headers: { Authorization: `Bearer ${input.apiKey}` },
+      headers: openAiCompatibleHeaders({ apiKey: input.apiKey, config, includeContentType: false }),
       body: form
     });
   };
 
   let response = await request(false);
-  if (response.ok) return responseJson(response, "/images/edits");
+  if (response.ok) return responseJson(response, endpoint);
 
   const message = await responseError(response);
   const requestedSize = input.params.aspectRatio ? aspectRatioToOpenAIImageSize(input.params.aspectRatio, input.params.modelName, input.params.imageSize) : input.params.imageSize;
@@ -385,22 +408,24 @@ async function fetchOpenAIImageEditJson(input: {
   if (fallbackSize && isUnsupportedSizeError(message)) {
     console.warn("[OpenAI Image] relay rejected high-resolution edit size; retrying with compatible size", {
       modelName: input.params.modelName,
-      endpoint: "/images/edits",
+      endpoint,
       rejectedSize: requestedSize,
       fallbackSize
     });
     response = await request(false, fallbackSize);
-    if (response.ok) return responseJson(response, "/images/edits");
-    throw new Error(humanOpenAIError(await responseError(response)));
+    if (response.ok) return responseJson(response, endpoint);
+    const { text, payload } = await readRawResponse(response);
+    throwOpenAiCompatibleHttpError({ label: "OpenAI 兼容图片编辑", endpoint, status: response.status, payload, text });
   }
   if (input.params.imageFormat && input.params.imageFormat !== "auto" && isUnsupportedResponseFormatError(message)) {
     console.warn("[OpenAI Image] relay rejected response_format; retrying edit without output_format", {
       modelName: input.params.modelName,
-      endpoint: "/images/edits"
+      endpoint
     });
     response = await request(true);
-    if (response.ok) return responseJson(response, "/images/edits");
-    throw new Error(humanOpenAIError(await responseError(response)));
+    if (response.ok) return responseJson(response, endpoint);
+    const { text, payload } = await readRawResponse(response);
+    throwOpenAiCompatibleHttpError({ label: "OpenAI 兼容图片编辑", endpoint, status: response.status, payload, text });
   }
 
   throw new Error(humanOpenAIError(message));
@@ -425,7 +450,7 @@ export async function generateImageWithOpenAI(params: ImageProviderParams): Prom
     };
     applySharedImageParams(body, params);
 
-    return saveOpenAIImage(await fetchOpenAIImageJson({ apiBaseUrl, apiKey: params.apiKey, body }), params.imageFormat, {
+    return saveOpenAIImage(await fetchOpenAIImageJson({ apiBaseUrl, apiKey: params.apiKey, params, body }), params.imageFormat, {
       endpoint: "/images/generations",
       modelName: params.modelName,
       nodeId: params.nodeId
@@ -436,7 +461,7 @@ export async function generateImageWithOpenAI(params: ImageProviderParams): Prom
     throw new ProviderError("MISSING_INPUT_ASSET", "OpenAI 图片编辑需要连接至少一张图片素材。");
   }
 
-  if (shouldUseJsonImageGenerationForEdit(apiBaseUrl, params.modelName)) {
+  if (shouldUseJsonImageGenerationForEdit(apiBaseUrl, params.modelName, params.capabilities)) {
     return saveOpenAIImage(await fetchOpenAICompatJsonImageEdit({ apiBaseUrl, apiKey: params.apiKey, params }), params.imageFormat, {
       endpoint: "/images/generations",
       modelName: params.modelName,

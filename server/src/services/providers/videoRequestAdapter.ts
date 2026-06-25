@@ -3,6 +3,11 @@ import type { ModelCapabilities } from "../../types/model.js";
 import { legacyInputModeToOfficialMode } from "../../types/videoModes.js";
 import type { VideoProviderParams } from "./providerTypes.js";
 import { normalizeVideoCapabilities } from "../videoCapabilityNormalization.js";
+import {
+  ensureOpenAiCompatibleConfig,
+  resolveOpenAiCompatibleEndpoint,
+  resolveProviderType
+} from "./openaiCompatibleProtocol.js";
 
 export type VideoProviderName = "doubao" | "veo" | "kling" | "sora" | "wan" | "minimax" | "agnes" | "zhipu" | "custom";
 export type VideoChannel = "official" | "proxy" | "legacy_custom";
@@ -36,6 +41,14 @@ export type VideoRequestConfig = {
   requestFormat: VideoRequestFormat;
   taskMode: "async";
   pollEndpoint: string;
+  pollMethod?: "GET" | "POST";
+  pollBodyKey?: "id" | "task_id" | "taskId" | "video_id" | "job_id";
+  pollIdLocation?: "path" | "query" | "body";
+  pollHeaders?: Record<string, string>;
+  pollInterval?: number;
+  maxPollAttempts?: number;
+  pollTimeout?: number;
+  fallbackMode?: "openai_first_then_unified";
   idField: string;
   taskIdField: string;
   statusField: string;
@@ -240,6 +253,57 @@ export function resolveVideoRequestConfig(params: VideoProviderParams, capabilit
   const configuredCapabilities = { ...normalizedCapabilities, ...normalizedCapabilities.channelCapability } as ModelCapabilities;
   const effectiveCapabilities = normalizeVideoCapabilities(configuredCapabilities, params.providerId, params.modelName);
   const provider = effectiveCapabilities.provider ?? inferProvider(params.providerId ?? "", params.modelName);
+  const providerType = resolveProviderType(effectiveCapabilities, params.apiBaseUrl);
+  if (providerType === "openai_compatible") {
+    const config = ensureOpenAiCompatibleConfig(effectiveCapabilities, "video");
+    const createEndpoint = config.videoCreateEndpoint
+      ?? effectiveCapabilities.createEndpoint
+      ?? effectiveCapabilities.endpoint
+      ?? "/v1/videos";
+    const finalUrl = resolveOpenAiCompatibleEndpoint({
+      baseUrl: params.apiBaseUrl,
+      endpoint: createEndpoint,
+      defaultEndpoint: "/v1/videos",
+      modelId: params.modelName,
+      queryParams: config.queryParams
+    });
+    const pollEndpoint = config.videoPollEndpoint ?? effectiveCapabilities.pollEndpoint ?? "/v1/videos/{taskId}";
+    const taskIdField = effectiveCapabilities.taskIdField ?? effectiveCapabilities.idField ?? "id";
+    const supports = supportedInputs(effectiveCapabilities);
+    return {
+      provider,
+      channel: "proxy",
+      apiFamily: "openai_videos",
+      baseUrl: params.apiBaseUrl,
+      createEndpoint,
+      endpoint: createEndpoint,
+      finalUrl,
+      authType: effectiveCapabilities.authType ?? (typeof config.authHeader === "string" && /^api-key\s*:/i.test(config.authHeader) ? "api-key" : "bearer"),
+      requestFormat: effectiveCapabilities.requestFormat ?? "json",
+      taskMode: "async",
+      pollEndpoint,
+      pollMethod: config.videoPollMethod ?? "GET",
+      pollBodyKey: config.videoPollBodyKey ?? "task_id",
+      pollIdLocation: config.videoPollIdLocation ?? "path",
+      pollHeaders: config.videoPollHeaders,
+      pollInterval: config.pollInterval,
+      maxPollAttempts: config.maxPollAttempts,
+      pollTimeout: config.pollTimeout,
+      fallbackMode: config.fallbackMode ?? "openai_first_then_unified",
+      idField: effectiveCapabilities.idField ?? taskIdField,
+      taskIdField,
+      statusField: effectiveCapabilities.statusField ?? "status",
+      resultField: effectiveCapabilities.resultField ?? "result",
+      supportedInputs: supports,
+      imageTransport: effectiveCapabilities.imageTransport ?? (supports.some((input) => ["image", "first_frame", "reference_image", "first_last_frame"].includes(input)) ? "base64_json" : "unsupported"),
+      videoTransport: effectiveCapabilities.videoTransport ?? (supports.includes("video") ? "url_or_base64_json" : "unsupported"),
+      imageField: effectiveCapabilities.imageField ?? (params.inputMode === "reference-to-video" ? "images" : "image"),
+      videoField: effectiveCapabilities.videoField ?? "video",
+      supportedAspectRatios: effectiveCapabilities.supportedAspectRatios ?? effectiveCapabilities.aspectRatios ?? [],
+      supportedDurations: effectiveCapabilities.supportedDurations ?? durationValues(effectiveCapabilities),
+      supportedResolutions: effectiveCapabilities.supportedResolutions ?? effectiveCapabilities.resolutions ?? []
+    };
+  }
   const officialEndpoint = isOfficialEndpoint(params.providerId ?? "", params.apiBaseUrl);
   const proxyEndpoint = isOpenAiCompatibleVideoEndpoint(params.apiBaseUrl);
   const forcedChannel = effectiveCapabilities.channel;
@@ -265,6 +329,14 @@ export function resolveVideoRequestConfig(params: VideoProviderParams, capabilit
     requestFormat,
     taskMode: "async",
     pollEndpoint: defaultPollEndpoint(params.apiBaseUrl, createEndpoint, effectiveCapabilities, apiFamily),
+    pollMethod: effectiveCapabilities.openaiCompatibleConfig?.videoPollMethod,
+    pollBodyKey: effectiveCapabilities.openaiCompatibleConfig?.videoPollBodyKey,
+    pollIdLocation: effectiveCapabilities.openaiCompatibleConfig?.videoPollIdLocation,
+    pollHeaders: effectiveCapabilities.openaiCompatibleConfig?.videoPollHeaders,
+    pollInterval: effectiveCapabilities.openaiCompatibleConfig?.pollInterval,
+    maxPollAttempts: effectiveCapabilities.openaiCompatibleConfig?.maxPollAttempts,
+    pollTimeout: effectiveCapabilities.openaiCompatibleConfig?.pollTimeout,
+    fallbackMode: effectiveCapabilities.openaiCompatibleConfig?.fallbackMode,
     idField: effectiveCapabilities.idField ?? taskIdField,
     taskIdField,
     statusField: effectiveCapabilities.statusField ?? "status",

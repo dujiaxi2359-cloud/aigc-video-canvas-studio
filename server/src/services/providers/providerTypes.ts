@@ -1,4 +1,5 @@
 import type { GenerateImageRequest, GenerateTextRequest, GenerateVideoRequest } from "../model.service.js";
+import type { ModelCapabilities } from "../../types/model.js";
 
 export type ProviderGenerateResult = {
   status: "success" | "error" | "processing";
@@ -19,6 +20,7 @@ export type BaseProviderParams = {
   modelName: string;
   providerId?: string;
   catalogModelId?: string;
+  capabilities?: ModelCapabilities;
   qualityMode?: "full_quality" | "balanced" | "fast";
 };
 

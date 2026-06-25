@@ -330,7 +330,7 @@ function zhipuVideoCapabilitiesFor(modelName: string): ModelCapabilities {
 
 function videoCapabilitiesForChannel(modelName: string, baseUrl: string): ModelCapabilities {
   const capabilities = videoCapabilitiesFor(modelName);
-  if (/(?:ai666\.net|cy88\.ai)/i.test(baseUrl) && /^grok-(?:video-3|1\.5-video)/i.test(modelName)) {
+  if (!isOfficialApiRoute(baseUrl) && /^grok-(?:video-3|1\.5-video)/i.test(modelName)) {
     return {
       ...capabilities,
       channel: "proxy",
@@ -615,6 +615,89 @@ function isOfficialApiRoute(value?: string) {
     || host === "api.minimaxi.com"
     || host === "open.bigmodel.cn"
     || host === "apihub.agnes-ai.com";
+}
+
+function capabilityKindsFor(capabilities: ModelCapabilities, category: ModelCategory) {
+  if (capabilities.capabilityKinds?.length) return capabilities.capabilityKinds;
+  if (capabilities.capability) return [capabilities.capability];
+  if (category === "text") return ["text" as const];
+  if (category === "image") {
+    const modes = capabilities.inputModes ?? [];
+    const kinds = new Set<NonNullable<ModelCapabilities["capability"]>>();
+    if (modes.includes("text-to-image")) kinds.add("image_generation");
+    if (modes.some((mode) => mode === "image-to-image" || mode === "image-edit")) kinds.add("image_edit");
+    if (!kinds.size) kinds.add("image_generation");
+    return Array.from(kinds);
+  }
+  if (category === "video") {
+    const modes = capabilities.inputModes ?? [];
+    const kinds = new Set<NonNullable<ModelCapabilities["capability"]>>();
+    if (modes.includes("text-to-video")) kinds.add("text_to_video");
+    if (modes.includes("image-to-video") || modes.includes("first-last-frame")) kinds.add("image_to_video");
+    if (modes.includes("reference-to-video") || capabilities.supportsReferenceImage || capabilities.supportsMultiImageInput) kinds.add("reference_to_video");
+    if (modes.includes("video-to-video") || capabilities.supportsVideoInput) kinds.add("video_to_video");
+    if (!kinds.size) kinds.add("text_to_video");
+    return Array.from(kinds);
+  }
+  return [] as NonNullable<ModelCapabilities["capability"]>[];
+}
+
+function azureImageEndpointConfig(baseUrl: string): ModelCapabilities["openaiCompatibleConfig"] | undefined {
+  if (!/\/openai\/deployments\/[^/]+\/images\/(?:generations|edits)(?:\?|$)/i.test(baseUrl)) return undefined;
+  const imageEditEndpoint = baseUrl.replace(/\/images\/generations/i, "/images/edits");
+  return {
+    imageGenerationEndpoint: baseUrl,
+    imageEditEndpoint,
+    authHeader: "api-key: {apiKey}"
+  };
+}
+
+function openAiCompatibleConfigFor(category: ModelCategory, baseUrl: string): ModelCapabilities["openaiCompatibleConfig"] {
+  const azureImageConfig = category === "image" ? azureImageEndpointConfig(baseUrl) : undefined;
+  if (azureImageConfig) return azureImageConfig;
+  if (category === "text") {
+    return {
+      chatEndpoint: "/v1/chat/completions",
+      authHeader: "Authorization: Bearer {apiKey}"
+    };
+  }
+  if (category === "image") {
+    return {
+      imageGenerationEndpoint: "/v1/images/generations",
+      imageEditEndpoint: "/v1/images/edits",
+      authHeader: "Authorization: Bearer {apiKey}"
+    };
+  }
+  return {
+    videoCreateEndpoint: "/v1/videos",
+    videoPollEndpoint: "/v1/videos/{taskId}",
+    videoPollMethod: "GET",
+    videoPollBodyKey: "task_id",
+    videoPollIdLocation: "path",
+    fallbackMode: "openai_first_then_unified",
+    authHeader: "Authorization: Bearer {apiKey}",
+    pollInterval: 3000,
+    maxPollAttempts: 120,
+    pollTimeout: 600000
+  };
+}
+
+function withRuntimeProtocol(capabilities: ModelCapabilities, category: ModelCategory, baseUrl: string, modelName: string): ModelCapabilities {
+  const official = isOfficialApiRoute(baseUrl);
+  const capabilityKinds = capabilityKindsFor(capabilities, category);
+  return {
+    ...capabilities,
+    providerType: official ? "official" : "openai_compatible",
+    capability: capabilities.capability ?? capabilityKinds[0],
+    capabilityKinds,
+    modelStatus: modelName.trim() && baseUrl.trim() ? "ready" : "need_config",
+    openaiCompatibleConfig: official
+      ? undefined
+      : {
+          ...openAiCompatibleConfigFor(category, baseUrl),
+          ...capabilities.openaiCompatibleConfig
+        }
+  };
 }
 
 function relayProviderLabel(baseUrl: string) {
@@ -1117,10 +1200,14 @@ export function ModelConfigCenter() {
         const normalizedBaseUrl = normalizeBaseUrl(apiBaseUrl);
         const inferred = inferModel(modelName, normalizedBaseUrl);
         const official = officialTemplateFor(modelName);
+        const category = inferred.category as ModelCategory;
+        const baseCapabilities = inferred.category === "video" && isOfficialApiRoute(normalizedBaseUrl)
+          ? mergeOfficialAndChannelCapabilities(official, modelName, normalizedBaseUrl)
+          : inferred.capabilities;
         return {
           providerId: inferred.providerId,
           provider: inferred.provider,
-          category: inferred.category,
+          category,
           displayName: inferred.displayName,
           apiBaseUrl: normalizedBaseUrl,
           requiresApiBaseUrl: true,
@@ -1128,9 +1215,7 @@ export function ModelConfigCenter() {
           modelName,
           modelType: inferred.modelType as ModelType,
           enabled: true,
-          capabilities: inferred.category === "video" && isOfficialApiRoute(normalizedBaseUrl)
-            ? mergeOfficialAndChannelCapabilities(official, modelName, normalizedBaseUrl)
-            : inferred.capabilities
+          capabilities: withRuntimeProtocol(baseCapabilities, category, normalizedBaseUrl, modelName)
         } satisfies Partial<ModelConfig> & { apiKey?: string };
       });
       const result = await saveModelConfigsBulk(payloads, false);

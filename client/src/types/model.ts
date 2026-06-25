@@ -30,7 +30,45 @@ export type ModelType =
   | "audio"
   | "tts";
 
+export type ProviderType = "official" | "openai_compatible";
+
+export type ModelCapabilityKind =
+  | "text"
+  | "image_generation"
+  | "image_edit"
+  | "text_to_video"
+  | "image_to_video"
+  | "reference_to_video"
+  | "video_to_video";
+
+export type ModelRuntimeStatus = "ready" | "need_config" | "failed" | "unsupported";
+export type OpenAiCompatibleFallbackMode = "openai_first_then_unified";
+
+export type OpenAiCompatibleConfig = {
+  chatEndpoint?: string;
+  imageGenerationEndpoint?: string;
+  imageEditEndpoint?: string;
+  videoCreateEndpoint?: string;
+  videoPollEndpoint?: string;
+  videoPollMethod?: "GET" | "POST";
+  videoPollBodyKey?: "id" | "task_id" | "taskId" | "video_id" | "job_id";
+  videoPollIdLocation?: "path" | "query" | "body";
+  videoPollHeaders?: Record<string, string>;
+  authHeader?: string | Record<string, string>;
+  queryParams?: Record<string, string | number | boolean | undefined>;
+  requestTimeout?: number;
+  pollInterval?: number;
+  maxPollAttempts?: number;
+  pollTimeout?: number;
+  fallbackMode?: OpenAiCompatibleFallbackMode;
+};
+
 export type ModelCapabilities = {
+  providerType?: ProviderType;
+  capability?: ModelCapabilityKind;
+  capabilityKinds?: ModelCapabilityKind[];
+  modelStatus?: ModelRuntimeStatus;
+  openaiCompatibleConfig?: OpenAiCompatibleConfig;
   capabilitySource?: "official" | "upstream" | "legacy_inferred";
   upstreamModelId?: string;
   modelCapability?: {

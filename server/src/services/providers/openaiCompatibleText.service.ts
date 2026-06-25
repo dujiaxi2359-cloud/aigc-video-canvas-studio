@@ -1,4 +1,11 @@
 import type { ProviderGenerateResult, TextProviderParams } from "./providerTypes.js";
+import {
+  ensureOpenAiCompatibleConfig,
+  openAiCompatibleHeaders,
+  readRawResponse,
+  resolveOpenAiCompatibleEndpoint,
+  throwOpenAiCompatibleHttpError
+} from "./openaiCompatibleProtocol.js";
 
 function systemPromptForTask(taskType?: string, override?: string) {
   if (override) return override;
@@ -21,25 +28,18 @@ function collectText(value: unknown): string[] {
   return [];
 }
 
-async function readProviderError(response: Response) {
-  const text = await response.text();
-  try {
-    const json = JSON.parse(text) as { error?: { message?: string }; message?: string };
-    return json.error?.message ?? json.message ?? text;
-  } catch {
-    return text;
-  }
-}
-
 export async function generateTextWithOpenAICompatible(params: TextProviderParams): Promise<ProviderGenerateResult> {
-  const root = (params.apiBaseUrl || "https://api.openai.com/v1").replace(/\/$/, "");
-  const endpoint = /\/chat\/completions$/i.test(root) ? root : `${root}/chat/completions`;
+  const config = ensureOpenAiCompatibleConfig(params.capabilities ?? { inputModes: ["text"] }, "text");
+  const endpoint = resolveOpenAiCompatibleEndpoint({
+    baseUrl: params.apiBaseUrl || "https://api.openai.com/v1",
+    endpoint: config.chatEndpoint,
+    defaultEndpoint: "/v1/chat/completions",
+    modelId: params.modelName,
+    queryParams: config.queryParams
+  });
   const response = await fetch(endpoint, {
     method: "POST",
-    headers: {
-      Authorization: `Bearer ${params.apiKey}`,
-      "Content-Type": "application/json"
-    },
+    headers: openAiCompatibleHeaders({ apiKey: params.apiKey, config }),
     body: JSON.stringify({
       model: params.modelName,
       messages: [
@@ -51,8 +51,8 @@ export async function generateTextWithOpenAICompatible(params: TextProviderParam
   });
 
   if (!response.ok) {
-    const message = await readProviderError(response);
-    throw new Error(`文本推理 API 调用失败：${message}`);
+    const { text, payload } = await readRawResponse(response);
+    throwOpenAiCompatibleHttpError({ label: "文本推理 API 调用", endpoint, status: response.status, payload, text });
   }
 
   const json = await response.json() as { choices?: Array<{ message?: { content?: string }; text?: string }> };

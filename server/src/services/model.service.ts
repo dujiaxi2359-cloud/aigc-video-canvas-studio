@@ -28,11 +28,13 @@ import { generateImageWithZhipu } from "./providers/zhipuImage.service.js";
 import { isZhipuOfficialEndpoint } from "./providers/zhipuProtocol.js";
 import { isQwenImageEditModel, normalizeImageCapabilities, qwenTextModelForEdit } from "./imageCapabilityNormalization.js";
 import { channelSupportsImage, resolveVideoRequestConfig, shouldUseProxyVideoAdapter, validateVideoRequestConfig } from "./providers/videoRequestAdapter.js";
+import { deriveCapabilityKinds, resolveProviderType } from "./providers/openaiCompatibleProtocol.js";
 import { resolveProviderApiBaseUrl } from "./providers/providerBaseUrl.js";
 import { isGrokLikeVideoModel, isVeoLikeVideoModel, normalizeVideoCapabilities } from "./videoCapabilityNormalization.js";
 import { ensureVideoAspectRatio } from "./assets/ensureVideoAspectRatio.service.js";
 import { ensureImageAspectRatio } from "./assets/ensureImageAspectRatio.service.js";
 import type { ImageInputMode, ModelCapabilities, ModelCatalogItem, VideoNodeContext } from "../types/model.js";
+import type { ModelCapabilityKind } from "../types/model.js";
 import type { OfficialVideoMode } from "../types/videoModes.js";
 import { legacyInputModeToOfficialMode } from "../types/videoModes.js";
 import type { ProviderGenerateResult } from "./providers/providerTypes.js";
@@ -304,6 +306,54 @@ function apiBaseUrlFor(model: ActiveModelConfig) {
   return resolveProviderApiBaseUrl(model.provider_id, model.api_base_url);
 }
 
+function categoryCapability(input: { type: "text" | "image" | "video"; inputMode?: string }): ModelCapabilityKind {
+  if (input.type === "text") return "text";
+  if (input.type === "image") return input.inputMode === "text-to-image" ? "image_generation" : "image_edit";
+  if (input.inputMode === "text-to-video") return "text_to_video";
+  if (input.inputMode === "video-to-video") return "video_to_video";
+  if (input.inputMode === "reference-to-video") return "reference_to_video";
+  return "image_to_video";
+}
+
+function assertModelRuntimeReady(input: {
+  model: ActiveModelConfig;
+  apiKey: string;
+  capabilities: ModelCapabilities;
+  type: "text" | "image" | "video";
+  inputMode?: string;
+}) {
+  const apiBaseUrl = apiBaseUrlFor(input.model);
+  const providerType = resolveProviderType(input.capabilities, apiBaseUrl);
+  const required = categoryCapability({ type: input.type, inputMode: input.inputMode });
+  const capabilityKinds = deriveCapabilityKinds(input.capabilities);
+  if (!providerType) throw new ProviderError("PROVIDER_ERROR", "模型 providerType 未配置，请在设置中心重新保存该模型。");
+  if (!apiBaseUrl?.trim()) throw new ProviderError("PROVIDER_ERROR", "模型 Base URL 未配置，禁止生成。");
+  if (!input.apiKey?.trim()) throw new ProviderError("API_KEY_MISSING", "请先在设置中心配置该模型 API Key。");
+  if (!input.model.model_name?.trim() || input.model.model_name === "mock-model") {
+    throw new ProviderError("PROVIDER_ERROR", "模型 modelId 未配置，请先保存真实上游模型 ID。");
+  }
+  if (input.capabilities.modelStatus && input.capabilities.modelStatus !== "ready") {
+    throw new ProviderError("PROVIDER_ERROR", `模型状态为 ${input.capabilities.modelStatus}，请先完成配置后再生成。`, undefined, {
+      modelStatus: input.capabilities.modelStatus,
+      model: input.model.model_name
+    });
+  }
+  if (!capabilityKinds.size) {
+    throw new ProviderError("MODEL_MODE_UNSUPPORTED", "模型 capability 未配置，禁止生成。请在设置中心为该模型选择文本、图片或视频能力。", undefined, {
+      model: input.model.model_name,
+      providerType
+    });
+  }
+  if (!capabilityKinds.has(required)) {
+    throw new ProviderError("MODEL_MODE_UNSUPPORTED", `能力不匹配：当前节点需要 ${required}，但模型只配置了 ${Array.from(capabilityKinds).join(", ")}。`, undefined, {
+      model: input.model.model_name,
+      providerType,
+      requiredCapability: required,
+      configuredCapabilities: Array.from(capabilityKinds)
+    });
+  }
+}
+
 function validateVideoRequest(capabilities: ModelCapabilities, input: GenerateVideoRequest, providerId?: string, modelName?: string) {
   const effectiveCapabilities = normalizeVideoCapabilities(capabilities, providerId, modelName);
   const options = calculateAvailableVideoOptions(effectiveCapabilities, {
@@ -542,6 +592,7 @@ async function callImageProvider(input: {
     modelName: string;
     providerId: string;
     catalogModelId?: string;
+    capabilities?: ModelCapabilities;
     qualityMode: "full_quality" | "balanced" | "fast";
   };
 }) {
@@ -556,6 +607,10 @@ async function callImageProvider(input: {
   }
   if (isMidjourneyImageModel({ providerId, modelName, displayName: model.display_name, apiBaseUrl: providerParams.apiBaseUrl })) {
     return generateImageWithMidjourney(providerParams);
+  }
+  const providerType = resolveProviderType(providerParams.capabilities, providerParams.apiBaseUrl);
+  if (providerType === "openai_compatible") {
+    return generateImageWithOpenAI(providerParams);
   }
   switch (providerId) {
     case "openai":
@@ -607,6 +662,7 @@ async function tryImageFallback(input: {
         modelName,
         providerId,
         catalogModelId: useCatalogCapabilities ? catalogItem?.id : undefined,
+        capabilities,
         qualityMode: candidateRequest.qualityMode ?? "full_quality"
       };
       const preflightSummary = buildPayloadSummary({
@@ -767,8 +823,19 @@ async function callVideoProvider(input: {
 }) {
   const { model, providerParams, capabilities } = input;
   const providerId = model.provider_id ?? "";
+  const providerType = resolveProviderType(capabilities, providerParams.apiBaseUrl);
   await assertSelectedVideoChannelSupportsAssets(model, providerParams, capabilities);
   const videoRequestConfig = validateVideoRequestConfig(providerParams, capabilities);
+  if (providerType === "openai_compatible") {
+    return generateVideoWithSeedance({
+      ...providerParams,
+      apiBaseUrl: videoRequestConfig.finalUrl,
+      imageTransport: videoRequestConfig.imageTransport,
+      videoTransport: videoRequestConfig.videoTransport,
+      videoRequestConfig,
+      capabilities
+    });
+  }
   if (
     providerId === "google"
     && videoRequestConfig.apiFamily !== "omni_fast"
@@ -851,6 +918,7 @@ async function tryVideoFallback(input: {
         apiBaseUrl: apiBaseUrlFor(candidate),
         modelName,
         providerId,
+        capabilities,
         qualityMode: candidateRequest.qualityMode ?? "full_quality"
       };
       const preflightSummary = buildPayloadSummary({
@@ -1073,19 +1141,21 @@ async function enforceImageAspectRatio(result: ProviderGenerateResult, aspectRat
 export async function generateText(input: GenerateTextRequest) {
   const { model, apiKey, catalogItem, forceMock } = await getGenerationContext(input.modelConfigId, "text");
   logGenerate({ type: "text", model, catalogItem, apiKey, inputMode: "text" });
+  const capabilities = JSON.parse(model.capabilities_json) as ModelCapabilities;
 
   try {
     if (forceMock) {
       return { status: "success" as const, outputText: `Mock 文本结果：${input.inputText}` };
     }
-    if (!apiKey) throw new Error("请先在设置中心配置该模型 API Key");
+    assertModelRuntimeReady({ model, apiKey, capabilities, type: "text", inputMode: "text" });
     const providerParams = {
       ...input,
       apiKey,
       apiBaseUrl: apiBaseUrlFor(model),
       modelName: model.model_name,
       providerId: model.provider_id,
-      catalogModelId: catalogItem?.id
+      catalogModelId: catalogItem?.id,
+      capabilities
     };
 
     if (model.provider_id === "deepseek") return await generateTextWithDeepSeek(providerParams);
@@ -1135,7 +1205,7 @@ export async function generateVideo(input: GenerateVideoRequest) {
       return { status: "success" as const, outputAssetId: asset.id, outputUrl: asset.url };
     }
 
-    if (!apiKey) throw new Error("请先在设置中心配置该模型 API Key");
+    assertModelRuntimeReady({ model, apiKey, capabilities, type: "video", inputMode: inputForGeneration.inputMode });
     const providerId = model.provider_id ?? "";
     const modelName = model.model_name ?? "";
     const officialVideoMode = inputForGeneration.videoMode ?? legacyInputModeToOfficialMode(inputForGeneration.inputMode, providerId);
@@ -1146,6 +1216,7 @@ export async function generateVideo(input: GenerateVideoRequest) {
       apiBaseUrl: apiBaseUrlFor(model),
       modelName,
       providerId,
+      capabilities,
       qualityMode: inputForGeneration.qualityMode ?? "full_quality"
     };
 
@@ -1337,9 +1408,9 @@ export async function generateImage(input: GenerateImageRequest) {
       return { status: "success" as const, outputAssetId: asset.id, outputUrl: asset.url };
     }
 
-    if (!apiKey) throw new Error("请先在设置中心配置该模型 API Key");
     const providerId = model.provider_id ?? "";
     const modelName = runtime.modelName;
+    assertModelRuntimeReady({ model, apiKey, capabilities, type: "image", inputMode: inputForGeneration.inputMode });
     if (useCatalogCapabilities) {
       assertFullQualityModel({ qualityMode: inputForGeneration.qualityMode, providerId, catalogModelId: catalogItem?.id, modelName });
       validateAgainstOfficial({
@@ -1357,6 +1428,7 @@ export async function generateImage(input: GenerateImageRequest) {
       modelName,
       providerId,
       catalogModelId: useCatalogCapabilities ? catalogItem?.id : undefined,
+      capabilities,
       qualityMode: inputForGeneration.qualityMode ?? "full_quality"
     };
 

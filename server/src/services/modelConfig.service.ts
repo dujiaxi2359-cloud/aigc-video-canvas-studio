@@ -7,7 +7,7 @@ import { inferImageModelType, inferImageProvider, normalizeImageCapabilities } f
 import { normalizeVideoCapabilities } from "./videoCapabilityNormalization.js";
 import { grsaiImageModels, isGrsaiImageEndpoint, normalizeGrsaiImageBaseUrl } from "./providers/grsaiImageProtocol.js";
 import { isZhipuOfficialEndpoint, normalizeZhipuBaseUrl, zhipuImageModels, zhipuVideoModels } from "./providers/zhipuProtocol.js";
-import type { ModelCapabilities, ModelConfig } from "../types/model.js";
+import type { ModelCapabilities, ModelCapabilityKind, ModelConfig } from "../types/model.js";
 import { requireRequestContext } from "./requestContext.js";
 
 type ModelConfigRow = {
@@ -60,6 +60,31 @@ function endpointFrom(baseUrl: string, path: string) {
   return `${trimmedBase}${normalizedPath}`;
 }
 
+function modelProbeEndpoints(baseUrl: string, validationPath: string) {
+  const first = endpointFrom(baseUrl, validationPath);
+  if (validationPath !== "/models") return [first];
+  const trimmedBase = baseUrl.trim().replace(/\/+$/, "");
+  const endpoints = new Set<string>([first]);
+  try {
+    const url = new URL(trimmedBase);
+    const pathWithoutVersion = url.pathname.replace(/\/(?:api\/)?v\d+(?:beta)?$/i, "").replace(/\/+$/, "");
+    url.pathname = `${pathWithoutVersion}/models`.replace(/\/{2,}/g, "/");
+    url.search = "";
+    url.hash = "";
+    endpoints.add(url.toString());
+    const v1 = new URL(trimmedBase);
+    const rootPath = v1.pathname.replace(/\/(?:api\/)?v\d+(?:beta)?$/i, "").replace(/\/+$/, "");
+    v1.pathname = `${rootPath}/v1/models`.replace(/\/{2,}/g, "/");
+    v1.search = "";
+    v1.hash = "";
+    endpoints.add(v1.toString());
+  } catch {
+    endpoints.add(`${trimmedBase.replace(/\/(?:api\/)?v\d+(?:beta)?$/i, "")}/models`);
+    endpoints.add(`${trimmedBase.replace(/\/(?:api\/)?v\d+(?:beta)?$/i, "")}/v1/models`);
+  }
+  return Array.from(endpoints);
+}
+
 function videoRelayProbeFallbackMessage(status: number, endpoint: string) {
   return [
     `视频线路格式有效，但该中转未开放模型列表接口（${endpoint} 返回 HTTP ${status}）。`,
@@ -70,7 +95,7 @@ function videoRelayProbeFallbackMessage(status: number, endpoint: string) {
 function imageRelayProbeFallbackMessage(status: number, endpoint: string) {
   return [
     `图片线路格式有效，但该中转未开放模型列表接口（${endpoint} 返回 HTTP ${status}）。`,
-    "请手动添加上游模型 ID 后保存；生成时会按图片生成/编辑协议调用该线路。Azure deployment 固定端点仍走 Azure 专用路径。"
+    "请手动添加上游模型 ID 后保存；生成时会按 OpenAI-Compatible 图片生成/编辑协议调用该线路。Azure 只通过 endpoint/header/query 配置适配，不再走独立业务 adapter。"
   ].join("");
 }
 
@@ -97,8 +122,6 @@ function isKnownOfficialApiBaseUrl(apiBaseUrl: string) {
   try {
     const hostname = new URL(apiBaseUrl).hostname.toLowerCase();
     return hostname === "api.openai.com"
-      || hostname.endsWith(".openai.azure.com")
-      || hostname.endsWith(".cognitiveservices.azure.com")
       || hostname.endsWith(".volces.com")
       || hostname.endsWith(".volcengineapi.com")
       || hostname.endsWith(".googleapis.com")
@@ -112,6 +135,92 @@ function isKnownOfficialApiBaseUrl(apiBaseUrl: string) {
   } catch {
     return false;
   }
+}
+
+function providerTypeFor(apiBaseUrl: string) {
+  return isKnownOfficialApiBaseUrl(apiBaseUrl) ? "official" as const : "openai_compatible" as const;
+}
+
+function capabilityKindsFor(capabilities: ModelCapabilities, category: ModelConfig["category"]) {
+  if (capabilities.capabilityKinds?.length) return capabilities.capabilityKinds;
+  if (capabilities.capability) return [capabilities.capability];
+  if (category === "text") return ["text" as ModelCapabilityKind];
+  if (category === "image") {
+    const modes = capabilities.inputModes ?? [];
+    const kinds = new Set<ModelCapabilityKind>();
+    if (modes.includes("text-to-image")) kinds.add("image_generation");
+    if (modes.some((mode) => mode === "image-to-image" || mode === "image-edit")) kinds.add("image_edit");
+    if (!kinds.size) kinds.add("image_generation");
+    return Array.from(kinds);
+  }
+  if (category === "video") {
+    const modes = capabilities.inputModes ?? [];
+    const kinds = new Set<ModelCapabilityKind>();
+    if (modes.includes("text-to-video")) kinds.add("text_to_video");
+    if (modes.includes("image-to-video") || modes.includes("first-last-frame")) kinds.add("image_to_video");
+    if (modes.includes("reference-to-video") || capabilities.supportsReferenceImage || capabilities.supportsMultiImageInput) kinds.add("reference_to_video");
+    if (modes.includes("video-to-video") || capabilities.supportsVideoInput) kinds.add("video_to_video");
+    if (!kinds.size) kinds.add("text_to_video");
+    return Array.from(kinds);
+  }
+  return [] as ModelCapabilityKind[];
+}
+
+function azureImageEndpointConfig(apiBaseUrl: string): ModelCapabilities["openaiCompatibleConfig"] | undefined {
+  if (!/\/openai\/deployments\/[^/]+\/images\/(?:generations|edits)(?:\?|$)/i.test(apiBaseUrl)) return undefined;
+  return {
+    imageGenerationEndpoint: apiBaseUrl,
+    imageEditEndpoint: apiBaseUrl.replace(/\/images\/generations/i, "/images/edits"),
+    authHeader: "api-key: {apiKey}"
+  };
+}
+
+function defaultOpenAiCompatibleConfig(category: ModelConfig["category"], apiBaseUrl: string): ModelCapabilities["openaiCompatibleConfig"] {
+  const azureImageConfig = category === "image" ? azureImageEndpointConfig(apiBaseUrl) : undefined;
+  if (azureImageConfig) return azureImageConfig;
+  if (category === "text") {
+    return { chatEndpoint: "/v1/chat/completions", authHeader: "Authorization: Bearer {apiKey}" };
+  }
+  if (category === "image") {
+    return {
+      imageGenerationEndpoint: "/v1/images/generations",
+      imageEditEndpoint: "/v1/images/edits",
+      authHeader: "Authorization: Bearer {apiKey}"
+    };
+  }
+  if (category === "video") {
+    return {
+      videoCreateEndpoint: "/v1/videos",
+      videoPollEndpoint: "/v1/videos/{taskId}",
+      videoPollMethod: "GET",
+      videoPollBodyKey: "task_id",
+      videoPollIdLocation: "path",
+      authHeader: "Authorization: Bearer {apiKey}",
+      pollInterval: 3000,
+      maxPollAttempts: 120,
+      pollTimeout: 600000,
+      fallbackMode: "openai_first_then_unified"
+    };
+  }
+  return undefined;
+}
+
+function withRuntimeProtocolCapabilities(capabilities: ModelCapabilities, category: ModelConfig["category"], apiBaseUrl: string, modelName: string): ModelCapabilities {
+  const providerType = providerTypeFor(apiBaseUrl);
+  const capabilityKinds = capabilityKindsFor(capabilities, category);
+  return {
+    ...capabilities,
+    providerType,
+    capability: capabilities.capability ?? capabilityKinds[0],
+    capabilityKinds,
+    modelStatus: modelName.trim() && apiBaseUrl.trim() ? "ready" : "need_config",
+    openaiCompatibleConfig: providerType === "official"
+      ? undefined
+      : {
+          ...defaultOpenAiCompatibleConfig(category, apiBaseUrl),
+          ...capabilities.openaiCompatibleConfig
+        }
+  };
 }
 
 function allowsRelayModelProbeFallback(status: number, apiBaseUrl: string) {
@@ -262,7 +371,14 @@ function normalizeModelConfigInput(input: Partial<ModelConfig> & { apiKey?: stri
 
   if (category === "image") {
     if (baseCapabilities.capabilitySource === "upstream" || baseCapabilities.capabilitySource === "official") {
-      return { ...input, apiBaseUrl, providerId, provider, category: "image" as const, capabilities: baseCapabilities };
+      return {
+        ...input,
+        apiBaseUrl,
+        providerId,
+        provider,
+        category: "image" as const,
+        capabilities: withRuntimeProtocolCapabilities(baseCapabilities, "image", apiBaseUrl, modelName)
+      };
     }
     const inferred = inferImageProvider({ providerId, provider, modelName, displayName });
     const nextProviderId = inferred.providerId;
@@ -275,37 +391,45 @@ function normalizeModelConfigInput(input: Partial<ModelConfig> & { apiKey?: stri
       provider: nextProvider,
       category: "image" as const,
       modelType: inferImageModelType({ providerId: nextProviderId, provider: nextProvider, modelName, displayName, capabilities }),
-      capabilities
+      capabilities: withRuntimeProtocolCapabilities(capabilities, "image", apiBaseUrl, modelName)
     };
   }
 
   if (category === "video") {
+    const capabilities = baseCapabilities.capabilitySource === "upstream" || baseCapabilities.capabilitySource === "official"
+      ? baseCapabilities
+      : normalizeVideoCapabilities(baseCapabilities, providerId, modelName);
     return {
       ...input,
       apiBaseUrl,
       providerId,
       provider,
       category: "video" as const,
-      capabilities: baseCapabilities.capabilitySource === "upstream" || baseCapabilities.capabilitySource === "official"
-        ? baseCapabilities
-        : normalizeVideoCapabilities(baseCapabilities, providerId, modelName)
+      capabilities: withRuntimeProtocolCapabilities(capabilities, "video", apiBaseUrl, modelName)
     };
   }
 
   if (category === "text") {
     if (baseCapabilities.capabilitySource === "upstream" || baseCapabilities.capabilitySource === "official") {
-      return { ...input, apiBaseUrl, category: "text" as const, modelType: "text" as const, capabilities: baseCapabilities };
+      return {
+        ...input,
+        apiBaseUrl,
+        category: "text" as const,
+        modelType: "text" as const,
+        capabilities: withRuntimeProtocolCapabilities(baseCapabilities, "text", apiBaseUrl, modelName)
+      };
     }
+    const capabilities = withTextModelCapability(baseCapabilities, modelName);
     return {
       ...input,
       apiBaseUrl,
       category: "text" as const,
       modelType: "text" as const,
-      capabilities: withTextModelCapability(baseCapabilities, modelName)
+      capabilities: withRuntimeProtocolCapabilities(capabilities, "text", apiBaseUrl, modelName)
     };
   }
 
-  return { ...input, apiBaseUrl, capabilities: baseCapabilities };
+  return { ...input, apiBaseUrl, capabilities: withRuntimeProtocolCapabilities(baseCapabilities, category, apiBaseUrl, modelName) };
 }
 
 export async function listModelConfigs() {
@@ -571,38 +695,51 @@ export async function probeOpenAiCompatibleModels(input: { apiBaseUrl?: string; 
       models: deployment ? [deployment] : []
     };
   }
-  const endpoint = endpointFrom(apiBaseUrl, validationPath);
-  let response: Response;
-  try {
-    response = await fetch(endpoint, {
-      method: "GET",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        Accept: "application/json"
-      }
-    });
-  } catch (error) {
-    const detail = error instanceof Error ? error.message : String(error);
-    return {
-      success: false,
-      message: `无法连接到上游接口：${endpoint}。请确认 Base URL 是真实中转地址、网络可访问，且不是文档占位符。${detail ? `(${detail})` : ""}`,
-      models: [] as string[]
-    };
-  }
-  const text = await response.text();
-  const contentType = response.headers.get("content-type")?.toLowerCase() ?? "";
-  if (contentType.includes("text/html") || /^\s*<!doctype html/i.test(text) || /^\s*<html[\s>]/i.test(text)) {
-    return {
-      success: false,
-      message: `验证失败：${endpoint} 返回的是网页 HTML，不是 API JSON。请填写真实 API Base URL；火山方舟应使用 https://ark.cn-beijing.volces.com/api/v3。`,
-      models: [] as string[]
-    };
-  }
+  const endpoints = modelProbeEndpoints(apiBaseUrl, validationPath);
+  let response: Response | undefined;
+  let endpoint = endpoints[0]!;
+  let text = "";
   let payload: unknown = {};
-  try {
-    payload = text ? JSON.parse(text) : {};
-  } catch {
-    payload = text;
+  let lastNetworkError = "";
+  for (const candidate of endpoints) {
+    endpoint = candidate;
+    try {
+      response = await fetch(endpoint, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          Accept: "application/json"
+        }
+      });
+    } catch (error) {
+      lastNetworkError = error instanceof Error ? error.message : String(error);
+      continue;
+    }
+    text = await response.text();
+    const contentType = response.headers.get("content-type")?.toLowerCase() ?? "";
+    if (contentType.includes("text/html") || /^\s*<!doctype html/i.test(text) || /^\s*<html[\s>]/i.test(text)) {
+      payload = text;
+      if (candidate !== endpoints[endpoints.length - 1]) continue;
+      return {
+        success: false,
+        message: `验证失败：${endpoint} 返回的是网页 HTML，不是 API JSON。请填写真实 API Base URL；火山方舟应使用 https://ark.cn-beijing.volces.com/api/v3。`,
+        models: [] as string[]
+      };
+    }
+    try {
+      payload = text ? JSON.parse(text) : {};
+    } catch {
+      payload = text;
+    }
+    if (response.ok) break;
+    if (candidate !== endpoints[endpoints.length - 1]) continue;
+  }
+  if (!response) {
+    return {
+      success: false,
+      message: `无法连接到上游接口：${endpoints.join("、")}。请确认 Base URL 是真实中转地址、网络可访问，且不是文档占位符。${lastNetworkError ? `(${lastNetworkError})` : ""}`,
+      models: [] as string[]
+    };
   }
   if (!response.ok) {
     const message = payloadErrorMessage(payload, text);
@@ -612,7 +749,7 @@ export async function probeOpenAiCompatibleModels(input: { apiBaseUrl?: string; 
     if (category === "image" && validationPath === "/models" && allowsRelayModelProbeFallback(response.status, apiBaseUrl)) {
       return { success: true, message: imageRelayProbeFallbackMessage(response.status, endpoint), models: [] as string[] };
     }
-    return { success: false, message: `验证失败：HTTP ${response.status}${message ? ` · ${message.slice(0, 160)}` : ""}`, models: [] as string[] };
+    return { success: false, message: `验证失败：HTTP ${response.status}${message ? ` · ${message.slice(0, 240)}` : ""}`, models: [] as string[] };
   }
 
   const zhipuOfficial = isZhipuOfficialEndpoint(apiBaseUrl);

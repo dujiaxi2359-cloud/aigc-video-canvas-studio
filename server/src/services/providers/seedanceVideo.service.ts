@@ -10,6 +10,7 @@ import { prepareVideoFrameForAspectRatio } from "../assets/prepareVideoFrame.ser
 import { resolveRemoteAsset } from "../assets/resolveRemoteAsset.service.js";
 import { saveGenerationTask } from "../generationTask.service.js";
 import type { ProviderGenerateResult, VideoProviderParams } from "./providerTypes.js";
+import { ensureOpenAiCompatibleConfig, openAiCompatibleHeaders } from "./openaiCompatibleProtocol.js";
 import { joinUrl, type VideoApiFamily, type VideoImageTransport, type VideoRequestConfig, type VideoTransport } from "./videoRequestAdapter.js";
 
 function sleep(ms: number) {
@@ -197,7 +198,7 @@ function protocolCreateEndpointCandidates(params: SeedanceProviderParams) {
   const root = relayEndpointRoot(baseUrl);
   const configured = params.videoRequestConfig?.finalUrl;
   const endpoints: (string | undefined)[] = [];
-  if (endpointMatchesProtocol(configured, apiFamily)) endpoints.push(configured);
+  if (endpointMatchesProtocol(configured, apiFamily) || (apiFamily === "openai_videos" && configured)) endpoints.push(configured);
 
   if (apiFamily === "seedance2_native") {
     endpoints.push(joinUrl(root, "/v1/video/generations"), joinUrl(root, "/video/generations"));
@@ -572,6 +573,19 @@ function configuredTaskId(payload: Record<string, unknown>, config?: VideoReques
   return taskId(payload);
 }
 
+function configuredPollUrl(payload: Record<string, unknown>) {
+  return findStringByKeys(payload, [
+    "poll_url",
+    "pollUrl",
+    "status_url",
+    "statusUrl",
+    "result_url",
+    "resultUrl",
+    "query_url",
+    "queryUrl"
+  ]);
+}
+
 function normalizeStatus(value: unknown) {
   return typeof value === "string" ? value.trim().toLowerCase() : "";
 }
@@ -607,8 +621,8 @@ function configuredStatus(payload: Record<string, unknown>, config?: VideoReques
   return nestedStatus(payload, preferred);
 }
 
-const completedStatuses = new Set(["completed", "succeeded", "success", "done", "finished", "succeed"]);
-const failedStatuses = new Set(["failed", "failure", "error", "cancelled", "canceled", "fail"]);
+const completedStatuses = new Set(["completed", "complete", "succeeded", "success", "done", "finished", "succeed"]);
+const failedStatuses = new Set(["failed", "failure", "error", "cancelled", "canceled", "timeout", "fail"]);
 
 function isCompletedStatus(status: string) {
   return completedStatuses.has(status.toLowerCase());
@@ -651,7 +665,7 @@ function configuredResult(payload: Record<string, unknown>, config?: VideoReques
 function errorMessage(payload: Record<string, unknown>) {
   const message = findStringByKeys(payload, ["message", "error_message", "errorMessage", "detail", "reason"]);
   const error = record(payload.error);
-  return String(message ?? error.message ?? payload.error ?? "未知错误");
+  return String(message ?? error.message ?? payload.error ?? "上游未返回错误信息");
 }
 
 function decodedErrorText(value: unknown, depth = 0): string {
@@ -822,7 +836,8 @@ function materializePollEndpoint(config: VideoRequestConfig | undefined, createE
   const encoded = encodeURIComponent(taskIdValue);
   const template = config.pollEndpoint || "";
   if (!template) return seedancePollEndpoint(createEndpoint, taskIdValue);
-  const replaced = template.replace(/\{taskId\}/g, encoded);
+  const hasPlaceholder = /\{(?:taskId|id)\}/.test(template);
+  const replaced = template.replace(/\{taskId\}/g, encoded).replace(/\{id\}/g, encoded);
   if (config.apiFamily === "agnes_video") {
     const base = new URL(config.baseUrl);
     return new URL(replaced, `${base.origin}/`).toString();
@@ -833,6 +848,10 @@ function materializePollEndpoint(config: VideoRequestConfig | undefined, createE
   url.search = query;
   if (config.apiFamily === "unified_video_create" && !url.searchParams.has("id")) {
     url.searchParams.set("id", taskIdValue);
+  }
+  if (!hasPlaceholder && (config.pollMethod ?? "GET") === "GET") {
+    const key = config.pollBodyKey ?? "id";
+    if (!url.searchParams.has(key)) url.searchParams.set(key, taskIdValue);
   }
   return url.toString();
 }
@@ -889,12 +908,17 @@ type PollResult = {
 function pollHeaders(params: SeedanceProviderParams, json = false) {
   return compactObject({
     ...authHeaders(params),
+    ...(params.videoRequestConfig?.pollHeaders ?? {}),
     Accept: "application/json",
     "Content-Type": json ? "application/json" : undefined
   }) as Record<string, string>;
 }
 
 function authHeaders(params: SeedanceProviderParams): Record<string, string> {
+  if (params.videoRequestConfig?.channel === "proxy") {
+    const config = ensureOpenAiCompatibleConfig(params.capabilities ?? { inputModes: ["text-to-video"] }, "video");
+    return openAiCompatibleHeaders({ apiKey: params.apiKey, config, includeContentType: false });
+  }
   const authType = params.videoRequestConfig?.authType ?? "bearer";
   if (authType === "none") return {};
   if (authType === "api-key") return { "api-key": params.apiKey };
@@ -939,11 +963,19 @@ function genericPollAttempts(params: SeedanceProviderParams, pollEndpoint: strin
   const root = relayEndpointRoot(baseUrl);
   const encoded = encodeURIComponent(taskIdValue);
   const queryEndpoint = joinUrl(root, "/v1/video/query");
+  const pollMethod = params.videoRequestConfig?.pollMethod ?? "GET";
+  const pollBodyKey = params.videoRequestConfig?.pollBodyKey ?? "task_id";
+  const configuredAttempt = pollMethod === "POST"
+    ? {
+        endpoint: pollEndpoint,
+        init: { method: "POST", headers: pollHeaders(params, true), body: JSON.stringify({ [pollBodyKey]: taskIdValue }) }
+      }
+    : {
+        endpoint: pollEndpoint,
+        init: { method: "GET", headers: pollHeaders(params) }
+      };
   return [
-    {
-      endpoint: pollEndpoint,
-      init: { method: "GET", headers: pollHeaders(params) }
-    },
+    configuredAttempt,
     {
       endpoint: joinUrl(root, `/v1/videos/${encoded}`),
       init: { method: "GET", headers: pollHeaders(params) }
@@ -1471,9 +1503,9 @@ export async function generateVideoWithSeedance(params: SeedanceProviderParams):
             if (modelAccessDenied(task)) {
               throw new ProviderError(
                 "MODEL_ACCESS_DENIED",
-                `当前 cy88 API Key 的套餐或 auto 分组没有模型「${params.modelName}」的调用权限。请在 cy88 开通该模型，或换用已授权的 API Key。`,
+                `当前中转 API Key 的套餐、分组或上游渠道没有模型「${params.modelName}」的调用权限。请在中转后台开通该模型，或换用已授权的 API Key。`,
                 preview(task),
-                { endpoint, model: params.modelName, provider: "cy88", upstreamStatus: response.status }
+                { endpoint, model: params.modelName, provider: params.providerId, apiBaseUrl: params.videoRequestConfig?.baseUrl ?? params.apiBaseUrl, upstreamStatus: response.status, rawResponse: task }
               );
             }
             if (seedanceInvalidAssetResource(task) && requestBody.source === "seedance_asset" && fallbackBody) {
@@ -1502,7 +1534,7 @@ export async function generateVideoWithSeedance(params: SeedanceProviderParams):
           remoteUrl = videoUrl(configuredResult(task, params.videoRequestConfig));
           id = configuredTaskId(task, params.videoRequestConfig);
           if (remoteUrl || id) break;
-          createError = new ProviderError("PROVIDER_ERROR", `${routeLabel}没有返回 task_id 或视频地址。`, preview(task), { endpoint, response: task });
+          createError = new ProviderError("PROVIDER_RESULT_EMPTY", "视频创建接口已返回，但没有解析到 taskId 或 videoUrl。", preview(task), { endpoint, response: task });
           break;
         }
         if (remoteUrl || id) break;
@@ -1512,11 +1544,20 @@ export async function generateVideoWithSeedance(params: SeedanceProviderParams):
 
     if (createError && !remoteUrl && !id) throw createError;
     if (!remoteUrl && !id) {
-      throw new ProviderError("PROVIDER_ERROR", `${routeLabel}没有返回 task_id 或视频地址。`, preview(task), { endpoint, response: task });
+      throw new ProviderError("PROVIDER_RESULT_EMPTY", "视频创建接口已返回，但没有解析到 taskId 或 videoUrl。", preview(task), { endpoint, response: task });
     }
 
     if (id) {
-      const pollEndpoint = materializePollEndpoint(params.videoRequestConfig, endpoint, id);
+      const responsePollEndpoint = configuredPollUrl(task);
+      const pollEndpoint = responsePollEndpoint || materializePollEndpoint(params.videoRequestConfig, endpoint, id);
+      if (!pollEndpoint) {
+        throw new ProviderError(
+          "VIDEO_POLL_ENDPOINT_MISSING",
+          "视频任务已创建，但当前中转未配置轮询接口，请在模型配置中心补充 video_poll_endpoint。",
+          preview(task),
+          { endpoint, taskId: id, response: task }
+        );
+      }
       await saveGenerationTask({
         id,
         status: configuredStatus(task, params.videoRequestConfig) || "submitted",
@@ -1536,9 +1577,13 @@ export async function generateVideoWithSeedance(params: SeedanceProviderParams):
         }
       });
       const startedAt = Date.now();
-      const timeoutMs = isRunApiVideoCreate(params) ? 30 * 60 * 1000 : 20 * 60 * 1000;
+      const pollIntervalMs = Math.max(1000, params.videoRequestConfig?.pollInterval ?? 3000);
+      const maxPollAttempts = Math.max(1, params.videoRequestConfig?.maxPollAttempts ?? 120);
+      const timeoutMs = params.videoRequestConfig?.pollTimeout
+        ?? Math.max(pollIntervalMs * maxPollAttempts, isRunApiVideoCreate(params) ? 30 * 60 * 1000 : 20 * 60 * 1000);
       const completedWithoutUrlGraceMs = 2 * 60 * 1000;
       let completedSeenAt: number | undefined;
+      let pollCount = 0;
       while (!remoteUrl) {
         const status = configuredStatus(task, params.videoRequestConfig);
         if (isFailedStatus(status)) {
@@ -1548,7 +1593,7 @@ export async function generateVideoWithSeedance(params: SeedanceProviderParams):
         }
         if (isCompletedStatus(status)) completedSeenAt ??= Date.now();
         if (completedSeenAt && Date.now() - completedSeenAt > completedWithoutUrlGraceMs) break;
-        if (Date.now() - startedAt > timeoutMs) {
+        if (Date.now() - startedAt > timeoutMs || pollCount >= maxPollAttempts) {
           const minutes = Math.round(timeoutMs / 60_000);
           const pendingMessage = `${routeLabel}任务已提交，超过 ${minutes} 分钟仍在排队/生成中，请稍后查看任务结果。`;
           await saveGenerationTask({
@@ -1581,7 +1626,8 @@ export async function generateVideoWithSeedance(params: SeedanceProviderParams):
             }
           };
         }
-        await sleep(5000);
+        await sleep(pollIntervalMs);
+        pollCount += 1;
         let pollResult: PollResult;
         try {
           pollResult = await fetchPollTask(params, pollEndpoint, id);
