@@ -599,6 +599,27 @@ const repairedCy88SeedanceConfig = resolveVideoRequestConfig({
 assert(repairedCy88SeedanceConfig.apiFamily === "seedance2_native", "Known Seedance 2 relay IDs must override stale OpenAI protocol metadata");
 assert(repairedCy88SeedanceConfig.finalUrl === "https://ai.cy88.ai/v1/video/generations", "cy88 Seedance 2 should create through /v1/video/generations");
 assert(repairedCy88SeedanceConfig.pollEndpoint === "/v1/video/generations/{taskId}", "cy88 Seedance 2 should use its native poll endpoint");
+const ctaigwSeedanceConfig = resolveVideoRequestConfig({
+  providerId: "seedance",
+  modelName: "seedance-2.0",
+  apiBaseUrl: "https://ai.ctaigw.cn/v1",
+  apiKey: "sk-test-key",
+  prompt: "test",
+  nodeId: "node",
+  modelConfigId: "model",
+  inputMode: "text-to-video",
+  duration: 6,
+  aspectRatio: "9:16",
+  resolution: "720P",
+  generateCount: 1
+}, {
+  inputModes: ["text-to-video"],
+  channel: "proxy"
+});
+assert(ctaigwSeedanceConfig.channel === "proxy", "ctaigw /v1 relay should stay on proxy channel");
+assert(ctaigwSeedanceConfig.apiFamily === "seedance2_native", "ctaigw seedance-2.0 should use the documented Doubao native family");
+assert(ctaigwSeedanceConfig.finalUrl === "https://ai.ctaigw.cn/v1/video/generations", "ctaigw Seedance 2.0 should create through /v1/video/generations");
+assert(ctaigwSeedanceConfig.pollEndpoint === "/v1/video/generations/{taskId}", "ctaigw Seedance 2.0 should poll the native task endpoint");
 
 const seedance15Config = resolveVideoRequestConfig({
   providerId: "seedance",

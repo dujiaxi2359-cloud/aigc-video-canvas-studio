@@ -93,6 +93,54 @@ function placeholderApiBaseUrlMessage(apiBaseUrl: string) {
   return "";
 }
 
+function isKnownOfficialApiBaseUrl(apiBaseUrl: string) {
+  try {
+    const hostname = new URL(apiBaseUrl).hostname.toLowerCase();
+    return hostname === "api.openai.com"
+      || hostname.endsWith(".openai.azure.com")
+      || hostname.endsWith(".cognitiveservices.azure.com")
+      || hostname.endsWith(".volces.com")
+      || hostname.endsWith(".volcengineapi.com")
+      || hostname.endsWith(".googleapis.com")
+      || hostname.endsWith(".aliyuncs.com")
+      || hostname.endsWith(".klingai.com")
+      || hostname.endsWith(".minimax.io")
+      || hostname.endsWith(".minimaxi.com")
+      || hostname.endsWith(".bigmodel.cn")
+      || hostname.endsWith(".agnes-ai.com")
+      || hostname === "api.x.ai";
+  } catch {
+    return false;
+  }
+}
+
+function allowsRelayModelProbeFallback(status: number, apiBaseUrl: string) {
+  if ([400, 404, 405].includes(status)) return true;
+  return status === 403 && !isKnownOfficialApiBaseUrl(apiBaseUrl);
+}
+
+function payloadErrorMessage(payload: unknown, fallback: string) {
+  if (!payload || typeof payload !== "object") return String(payload || fallback);
+  const record = payload as Record<string, unknown>;
+  const direct = record.error_message ?? record.message ?? record.error;
+  if (typeof direct === "string") return direct;
+  if (direct && typeof direct === "object") {
+    const nested = direct as Record<string, unknown>;
+    const nestedMessage = nested.message ?? nested.error_message ?? nested.code;
+    if (typeof nestedMessage === "string") return nestedMessage;
+    try {
+      return JSON.stringify(direct);
+    } catch {
+      return fallback;
+    }
+  }
+  try {
+    return JSON.stringify(payload);
+  } catch {
+    return fallback;
+  }
+}
+
 function isAzureImageEndpoint(apiBaseUrl: string) {
   return /\/openai\/deployments\/[^/]+\/images\/(?:generations|edits)(?:\?|$)/i.test(apiBaseUrl)
     || /\/openai\/deployments\/[^/]+$/i.test(apiBaseUrl);
@@ -557,13 +605,11 @@ export async function probeOpenAiCompatibleModels(input: { apiBaseUrl?: string; 
     payload = text;
   }
   if (!response.ok) {
-    const message = typeof payload === "object" && payload
-      ? String((payload as Record<string, unknown>).error_message ?? (payload as Record<string, unknown>).message ?? (payload as Record<string, unknown>).error ?? text)
-      : text;
-    if (category === "video" && validationPath === "/models" && [400, 404, 405].includes(response.status)) {
+    const message = payloadErrorMessage(payload, text);
+    if (category === "video" && validationPath === "/models" && allowsRelayModelProbeFallback(response.status, apiBaseUrl)) {
       return { success: true, message: videoRelayProbeFallbackMessage(response.status, endpoint), models: [] as string[] };
     }
-    if (category === "image" && validationPath === "/models" && [400, 404, 405].includes(response.status)) {
+    if (category === "image" && validationPath === "/models" && allowsRelayModelProbeFallback(response.status, apiBaseUrl)) {
       return { success: true, message: imageRelayProbeFallbackMessage(response.status, endpoint), models: [] as string[] };
     }
     return { success: false, message: `验证失败：HTTP ${response.status}${message ? ` · ${message.slice(0, 160)}` : ""}`, models: [] as string[] };

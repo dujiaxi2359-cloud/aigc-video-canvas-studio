@@ -14,6 +14,7 @@
     "test:veo-operation-parser": "node ../node_modules/tsx/dist/cli.mjs src/scripts/testVeoOperationParser.ts",
     "test:video-provider-adapters": "node ../node_modules/tsx/dist/cli.mjs src/scripts/testVideoProviderAdapters.ts",
     "test:azure-gpt-image-config": "node ../node_modules/tsx/dist/cli.mjs src/scripts/testAzureGptImageConfig.ts",
+    "test:model-config-probe": "node ../node_modules/tsx/dist/cli.mjs src/scripts/testModelConfigProbe.ts",
     "test:image-asset-compat": "node ../node_modules/tsx/dist/cli.mjs src/scripts/testImageAssetCompat.ts",
     "test:image-response-extractor": "node ../node_modules/tsx/dist/cli.mjs src/scripts/testImageResponseExtractor.ts",
     "test:midjourney-image-adapter": "node ../node_modules/tsx/dist/cli.mjs src/scripts/testMidjourneyImageAdapter.ts",
