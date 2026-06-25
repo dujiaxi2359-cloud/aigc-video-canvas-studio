@@ -17,7 +17,7 @@ async function responseError(response: Response) {
   const text = await response.text();
   try {
     const json = JSON.parse(text) as { error?: { message?: string; type?: string; code?: string }; message?: string };
-    return json.error?.message ?? json.message ?? text;
+    return json.error?.message ?? json.error?.code ?? json.error?.type ?? json.message ?? text;
   } catch {
     return text;
   }
@@ -56,6 +56,9 @@ function humanOpenAIError(message: string) {
   }
   if (/please wait and try again later|try again later|temporarily unavailable|service busy|fully loaded/i.test(message)) {
     return "OpenAI 图片中转暂时繁忙，请稍后重试或切换其它图片线路。";
+  }
+  if (/^(openai_error|upstream_error|provider_error)$/i.test(message.trim())) {
+    return `OpenAI 图片中转上游返回通用错误（${message.trim()}），中转没有给出更具体原因。通常是该线路上游临时失败、模型通道异常或素材转发失败；请稍后重试，或切换其它图片线路。`;
   }
   if (/无可用渠道|可用渠道不存在|所有分组.*模型|当前分组.*模型|no available channel/i.test(message)) {
     return `中转当前分组没有该模型的可用渠道：${message}`;
@@ -104,6 +107,30 @@ function imageExtension(format?: string) {
   if (format === "jpeg") return ".jpg";
   if (format === "webp") return ".webp";
   return ".png";
+}
+
+function apiBaseHost(apiBaseUrl: string) {
+  try {
+    return new URL(apiBaseUrl).hostname.toLowerCase();
+  } catch {
+    return "";
+  }
+}
+
+function isOfficialOpenAIBase(apiBaseUrl: string) {
+  const host = apiBaseHost(apiBaseUrl);
+  return host === "api.openai.com";
+}
+
+function isCy88ImageRelay(apiBaseUrl: string) {
+  const host = apiBaseHost(apiBaseUrl);
+  return host === "ai.cy88.ai" || host.endsWith(".cy88.ai") || host === "ai.ai666.net" || host.endsWith(".ai666.net");
+}
+
+function shouldUseJsonImageGenerationForEdit(apiBaseUrl: string, modelName: string) {
+  if (isOfficialOpenAIBase(apiBaseUrl)) return false;
+  if (isCy88ImageRelay(apiBaseUrl)) return /gpt-image-2|grok-4-2-image|jimen|doubao-seedream/i.test(modelName);
+  return /grok-4-2-image/i.test(modelName);
 }
 
 function asRecord(value: unknown): JsonRecord | undefined {
@@ -204,6 +231,20 @@ function applySharedImageParams(body: Record<string, unknown>, params: ImageProv
   if (params.imageFormat && params.imageFormat !== "auto") body.output_format = params.imageFormat;
 }
 
+async function imageAssetBase64(assetIds: string[], withDataUrl = false) {
+  const images: string[] = [];
+  for (const assetId of assetIds.slice(0, 16)) {
+    const asset = await ensureAssetLocalFile(await getAsset(assetId), "OpenAI 图片中转引用的图片素材");
+    const base64 = fs.readFileSync(asset.localPath).toString("base64");
+    if (withDataUrl) {
+      images.push(`data:${asset.mimeType || "image/png"};base64,${base64}`);
+    } else {
+      images.push(base64);
+    }
+  }
+  return images;
+}
+
 async function fetchOpenAIImageJson(input: {
   apiBaseUrl: string;
   apiKey: string;
@@ -245,6 +286,55 @@ async function fetchOpenAIImageJson(input: {
     response = await request(fallbackBody);
     if (response.ok) return responseJson(response, "/images/generations");
     throw new Error(humanOpenAIError(await responseError(response)));
+  }
+
+  throw new Error(humanOpenAIError(message));
+}
+
+async function fetchOpenAICompatJsonImageEdit(input: {
+  apiBaseUrl: string;
+  apiKey: string;
+  params: ImageProviderParams;
+}) {
+  const endpoint = `${input.apiBaseUrl}/images/generations`;
+  const buildBody = async (withDataUrl = false, sizeOverride?: string) => {
+    const body: Record<string, unknown> = {
+      model: input.params.modelName,
+      prompt: input.params.prompt,
+      image: await imageAssetBase64(input.params.imageAssetIds ?? [], withDataUrl)
+    };
+    applySharedImageParams(body, input.params);
+    if (sizeOverride) body.size = sizeOverride;
+    return body;
+  };
+  const request = async (body: Record<string, unknown>) => fetch(endpoint, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${input.apiKey}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(body)
+  });
+
+  let body = await buildBody(false);
+  let response = await request(body);
+  if (response.ok) return responseJson(response, "/images/generations");
+
+  let message = await responseError(response);
+  const requestedSize = input.params.aspectRatio ? aspectRatioToOpenAIImageSize(input.params.aspectRatio, input.params.modelName, input.params.imageSize) : input.params.imageSize;
+  const fallbackSize = fallbackImageSize(requestedSize);
+  if (fallbackSize && isUnsupportedSizeError(message)) {
+    body = await buildBody(false, fallbackSize);
+    response = await request(body);
+    if (response.ok) return responseJson(response, "/images/generations");
+    message = await responseError(response);
+  }
+
+  if (/image|base64|invalid|unsupported|format/i.test(message)) {
+    const dataUrlBody = await buildBody(true, fallbackSize);
+    response = await request(dataUrlBody);
+    if (response.ok) return responseJson(response, "/images/generations");
+    message = await responseError(response);
   }
 
   throw new Error(humanOpenAIError(message));
@@ -344,6 +434,14 @@ export async function generateImageWithOpenAI(params: ImageProviderParams): Prom
 
   if (!params.imageAssetIds?.length) {
     throw new ProviderError("MISSING_INPUT_ASSET", "OpenAI 图片编辑需要连接至少一张图片素材。");
+  }
+
+  if (shouldUseJsonImageGenerationForEdit(apiBaseUrl, params.modelName)) {
+    return saveOpenAIImage(await fetchOpenAICompatJsonImageEdit({ apiBaseUrl, apiKey: params.apiKey, params }), params.imageFormat, {
+      endpoint: "/images/generations",
+      modelName: params.modelName,
+      nodeId: params.nodeId
+    });
   }
 
   return saveOpenAIImage(await fetchOpenAIImageEditJson({ apiBaseUrl, apiKey: params.apiKey, params }), params.imageFormat, {

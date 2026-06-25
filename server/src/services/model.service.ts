@@ -500,7 +500,7 @@ function effectiveImageRuntime(input: {
 
 function isRetryableImageRelayError(error: unknown) {
   const text = error instanceof Error ? error.message : safeStringify(error);
-  return /OpenAI 兼容图片中转返回|Cloudflare|OPENAI_COMPAT_NON_JSON_RESPONSE|HTML 页面|上游响应超时|upstream request failed|upstream_error|temporarily unavailable|service busy|fully loaded|method not allowed|not found|unsupported (?:endpoint|route|path)|error code 524|a timeout occurred|404|405|502|503|504/i.test(text);
+  return /OpenAI 兼容图片中转返回|Cloudflare|OPENAI_COMPAT_NON_JSON_RESPONSE|HTML 页面|上游响应超时|upstream request failed|openai_error|upstream_error|provider_error|暂时繁忙|temporarily unavailable|service busy|fully loaded|method not allowed|not found|unsupported (?:endpoint|route|path)|error code 524|a timeout occurred|404|405|502|503|504/i.test(text);
 }
 
 function imageProviderPriority(providerId?: string) {
