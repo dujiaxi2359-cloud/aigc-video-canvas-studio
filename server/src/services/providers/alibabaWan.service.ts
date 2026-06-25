@@ -241,7 +241,7 @@ async function publicAssetUrl(assetId: string, params: VideoProviderParams, inde
       wasCompressed: resolved.wasCompressed
     };
   }
-  throw new ProviderError("PUBLIC_URL_REQUIRED", "当前阿里 Wan 模型需要可访问素材 URL，请配置 OSS 临时上传或 BACKEND_PUBLIC_BASE_URL。");
+  throw new ProviderError("PUBLIC_URL_REQUIRED", "当前阿里 Wan 模型需要可访问素材 URL，请确认腾讯 COS 配置可用或配置 BACKEND_PUBLIC_BASE_URL。");
 }
 
 async function publicVideoUrl(assetId: string) {
@@ -261,7 +261,7 @@ async function publicVideoUrl(assetId: string) {
     }
   );
   if (resolved.url) return resolved.url;
-  throw new ProviderError("PUBLIC_URL_REQUIRED", "当前阿里视频模型需要可访问的视频 URL，请配置 OSS 临时上传或 BACKEND_PUBLIC_BASE_URL。");
+  throw new ProviderError("PUBLIC_URL_REQUIRED", "当前阿里视频模型需要可访问的视频 URL，请确认腾讯 COS 配置可用或配置 BACKEND_PUBLIC_BASE_URL。");
 }
 
 export function buildWanBody(params: VideoProviderParams, imageUrls: string[], videoUrls: string[], audioUrls: string[]) {

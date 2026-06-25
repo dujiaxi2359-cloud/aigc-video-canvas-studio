@@ -6,7 +6,6 @@ import { Select } from "../common/Select";
 import {
   diagnosticsApi,
   type NetworkDiagnosticResult,
-  type OssHealthResult,
   type ProxySettingsResult,
   type ShareInfoResult
 } from "../../services/diagnosticsApi";
@@ -25,10 +24,8 @@ export function NetworkDiagnosticsPanel() {
   const [providerId, setProviderId] = useState("google");
   const [apiBaseUrl, setApiBaseUrl] = useState("");
   const [testing, setTesting] = useState(false);
-  const [testingOss, setTestingOss] = useState(false);
   const [copyStatus, setCopyStatus] = useState("");
   const [result, setResult] = useState<NetworkDiagnosticResult | null>(null);
-  const [ossResult, setOssResult] = useState<OssHealthResult | null>(null);
   const [proxySettings, setProxySettings] = useState<ProxySettingsResult | null>(null);
   const [shareInfo, setShareInfo] = useState<ShareInfoResult | null>(null);
 
@@ -55,22 +52,6 @@ export function NetworkDiagnosticsPanel() {
     }
   }
 
-  async function testOss() {
-    setTestingOss(true);
-    setOssResult(null);
-    try {
-      setOssResult(await diagnosticsApi.ossHealth());
-    } catch (error) {
-      setOssResult({
-        ok: false,
-        code: "OSS_HEALTH_FAILED",
-        message: error instanceof Error ? error.message : "OSS 检测失败，请检查后端配置。"
-      });
-    } finally {
-      setTestingOss(false);
-    }
-  }
-
   async function copyShareUrl() {
     try {
       const info = shareInfo ?? (await diagnosticsApi.shareInfo());
@@ -94,9 +75,6 @@ export function NetworkDiagnosticsPanel() {
         <div className="flex flex-wrap items-center justify-end gap-2">
           <Button variant="secondary" onClick={copyShareUrl}>
             <Copy size={14} /> 复制内网访问地址
-          </Button>
-          <Button variant="secondary" disabled={testingOss} onClick={testOss}>
-            {testingOss ? "检测中..." : "测试 OSS 连接"}
           </Button>
           <Button variant="primary" disabled={testing} onClick={testNetwork}>
             {testing ? "测试中..." : "测试连接"}
@@ -145,16 +123,6 @@ export function NetworkDiagnosticsPanel() {
           placeholder="可选：Azure / Kling / Seedance 可填写完整 endpoint 或资源根地址"
         />
       </div>
-
-      {ossResult && (
-        <div className={`mt-3 rounded-xl border px-3 py-2 text-[12px] ${ossResult.ok ? "border-emerald-300/[0.14] bg-emerald-400/[0.07] text-emerald-100" : "border-red-300/[0.16] bg-red-400/[0.08] text-red-100"}`}>
-          <div>{ossResult.ok ? "OSS 连接正常，可以上传本地素材。" : ossResult.message || "OSS 检测失败"}</div>
-          <div className="mt-1 text-[#a2acba]">
-            bucket: {ossResult.bucket || "-"} · region: {ossResult.region || "-"} · endpoint: {ossResult.endpoint || "-"}
-          </div>
-          {!ossResult.ok && ossResult.suggestion && <div className="mt-1 text-red-100/80">{ossResult.suggestion}</div>}
-        </div>
-      )}
 
       {result && (
         <div className={`mt-3 rounded-xl border px-3 py-2 text-[12px] ${result.ok ? "border-emerald-300/[0.14] bg-emerald-400/[0.07] text-emerald-100" : "border-red-300/[0.16] bg-red-400/[0.08] text-red-100"}`}>

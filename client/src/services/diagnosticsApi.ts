@@ -13,19 +13,6 @@ export type NetworkDiagnosticResult = {
   debugMessage?: string;
 };
 
-export type OssHealthResult = {
-  ok: boolean;
-  bucket?: string;
-  region?: string;
-  endpoint?: string;
-  canPutObject?: boolean;
-  canGetSignedUrl?: boolean;
-  code?: string;
-  message?: string;
-  suggestion?: string;
-  debugMessage?: string;
-};
-
 export type SystemNetworkHealthResult = {
   ok: boolean;
   latencyMs: number;
@@ -94,7 +81,6 @@ export const diagnosticsApi = {
     api.post<ProxySettingsResult>("/api/diagnostics/proxy", data),
   network: (data: { providerId: string; apiBaseUrl?: string }) =>
     api.post<NetworkDiagnosticResult>("/api/diagnostics/network", data),
-  ossHealth: () => api.get<OssHealthResult>("/api/system/oss/health"),
   systemNetworkHealth: () => api.get<SystemNetworkHealthResult>("/api/system/network/health"),
   shareInfo: () => api.get<ShareInfoResult>("/api/system/share-info"),
   veoDebugLogs: () => api.get<VeoDebugLogsResult>("/api/diagnostics/admin/veo-debug")

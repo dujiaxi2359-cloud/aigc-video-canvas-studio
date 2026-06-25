@@ -97,7 +97,7 @@ async function publicImageInput(assetId: string) {
   };
   if (resolved.type === "base64") return { value: `data:${resolved.mimeType};base64,${resolved.base64}`, audit };
   if (resolved.url) return { value: resolved.url, audit };
-  throw new ProviderError("PUBLIC_URL_REQUIRED", "当前阿里图片模型需要可访问图片 URL，请配置 BACKEND_PUBLIC_BASE_URL 或 OSS 临时上传。");
+  throw new ProviderError("PUBLIC_URL_REQUIRED", "当前阿里图片模型需要可访问图片 URL，请配置 BACKEND_PUBLIC_BASE_URL 或确认腾讯 COS 配置可用。");
 }
 
 export async function generateImageWithAlibaba(params: ImageProviderParams): Promise<ProviderGenerateResult> {

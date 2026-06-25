@@ -13,7 +13,6 @@ import { historyRouter } from "./routes/history.routes.js";
 import { modelConfigRouter } from "./routes/modelConfig.routes.js";
 import { projectRouter } from "./routes/project.routes.js";
 import { diagnosticsRouter } from "./routes/diagnostics.routes.js";
-import { ossDiagnosticsRouter } from "./routes/ossDiagnostics.routes.js";
 import { agentRouter } from "./routes/agent.routes.js";
 import { exportRouter } from "./routes/export.routes.js";
 import { authRouter } from "./routes/auth.routes.js";
@@ -21,13 +20,11 @@ import { inviteRouter } from "./routes/invite.routes.js";
 import { adminRouter, syncProviderVideoResult } from "./routes/admin.routes.js";
 import { requireActiveWorkspace, requireAdmin, requireAssetFileAccess, requireLogin } from "./middleware/auth.js";
 import { applySmartProxyConfig } from "./utils/proxy.js";
-import { logOssConfig } from "./services/assets/ossUpload.service.js";
 
 dotenv.config({ path: path.resolve(process.cwd(), ".env") });
 dotenv.config({ path: path.resolve(process.cwd(), "../.env") });
 
 await applySmartProxyConfig();
-logOssConfig();
 
 if (!process.env.APP_SECRET || process.env.APP_SECRET === "replace-with-a-long-random-secret") {
   console.warn("APP_SECRET is not set. Development can continue, but set a long random APP_SECRET before real use.");
@@ -127,8 +124,6 @@ app.use("/api/assets", requireActiveWorkspace, assetRouter);
 app.use("/api/generate", requireActiveWorkspace, generationRouter);
 app.use("/api/history", requireActiveWorkspace, historyRouter);
 app.use("/api/diagnostics", requireActiveWorkspace, requireAdmin, diagnosticsRouter);
-app.use("/api/diagnostics", requireActiveWorkspace, requireAdmin, ossDiagnosticsRouter);
-app.use("/api/system", requireActiveWorkspace, requireAdmin, ossDiagnosticsRouter);
 app.use("/api/agent", requireActiveWorkspace, agentRouter);
 app.use("/api/export", requireActiveWorkspace, exportRouter);
 app.use("/api", requireActiveWorkspace, capabilityRouter);

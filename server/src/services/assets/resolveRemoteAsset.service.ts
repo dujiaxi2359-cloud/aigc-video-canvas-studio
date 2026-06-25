@@ -3,7 +3,6 @@ import path from "node:path";
 import { ProviderError } from "../../utils/providerErrors.js";
 import { readGeneratedFileMetadata } from "../../utils/mediaMetadata.js";
 import { getProviderAssetStrategy, type AssetInputStrategy } from "./providerAssetStrategy.js";
-import { uploadLocalFileToOss } from "./ossUpload.service.js";
 import { ensureAssetLocalFile } from "./ensureAssetLocalFile.service.js";
 import { signedAssetUrl } from "../../utils/assetAccessToken.js";
 import { requireRequestContext } from "../requestContext.js";
@@ -194,13 +193,6 @@ function attachLocalMetadata(result: ResolvedRemoteAsset, metadata: Awaited<Retu
   return result;
 }
 
-function assetTypeForMime(mimeType: string) {
-  if (mimeType.startsWith("video/")) return "video";
-  if (mimeType.startsWith("audio/")) return "audio";
-  if (mimeType.startsWith("text/")) return "text";
-  return "image";
-}
-
 function storageFileTypeForMime(mimeType: string): StorageFileType {
   if (mimeType.startsWith("video/")) return "reference";
   if (mimeType.startsWith("audio/")) return "task_temp";
@@ -296,7 +288,7 @@ async function probePublicAssetUrl(url: string) {
     if (!response.ok) {
       throw new ProviderError(
         "PUBLIC_URL_REQUIRED",
-        `公网素材 URL 不可下载，状态码 ${response.status}。请更新 BACKEND_PUBLIC_BASE_URL、保持内网穿透在线，或配置 OSS 临时上传。`,
+        `公网素材 URL 不可下载，状态码 ${response.status}。请更新 BACKEND_PUBLIC_BASE_URL、保持内网穿透在线，或确认腾讯 COS 配置可用。`,
         url
       );
     }
@@ -304,7 +296,7 @@ async function probePublicAssetUrl(url: string) {
     if (error instanceof ProviderError) throw error;
     throw new ProviderError(
       "PUBLIC_URL_REQUIRED",
-      "公网素材 URL 不可下载。请更新 BACKEND_PUBLIC_BASE_URL、保持内网穿透在线，或配置 OSS 临时上传。",
+      "公网素材 URL 不可下载。请更新 BACKEND_PUBLIC_BASE_URL、保持内网穿透在线，或确认腾讯 COS 配置可用。",
       error instanceof Error ? `${url}\n${error.message}` : url
     );
   } finally {
@@ -350,15 +342,6 @@ export async function resolveRemoteAsset(
   } else if (asset.localPath && strategy.supportsPublicUrl && publicUrlFromLocalPath(asset.localPath)) {
     assertLocalFile(asset.localPath);
     result = { type: "url", url: publicUrlFromLocalPath(asset.localPath), mimeType, filename, localPath: asset.localPath, source: "backendPublicUrl" };
-  } else if (asset.localPath && !isCosLocalPath(asset.localPath) && strategy.supportsPublicUrl) {
-    const oss = await uploadLocalFileToOss({
-      localPath: asset.localPath,
-      mimeType,
-      assetType: assetTypeForMime(mimeType),
-      projectId: asset.projectId,
-      assetId: asset.id
-    });
-    result = { type: "url", url: oss.publicUrl || oss.signedUrl, mimeType, filename, localPath: asset.localPath, source: "oss" };
   }
 
   if (!result && (asset.localPath || asset.storageKey) && strategy.supportsBase64) {
@@ -391,7 +374,7 @@ export async function resolveRemoteAsset(
   if (!result) {
     throw new ProviderError(
       "PUBLIC_URL_REQUIRED",
-      "当前模型需要可访问的素材 URL。请配置 BACKEND_PUBLIC_BASE_URL，或启用 OSS 临时上传。"
+      "当前模型需要可访问的素材 URL。请配置 BACKEND_PUBLIC_BASE_URL，或确认腾讯 COS 配置可用。"
     );
   }
   return result;
