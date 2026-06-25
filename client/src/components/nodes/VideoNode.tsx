@@ -16,7 +16,7 @@ import { buildReferenceAwareVideoPrompt, compactAssetIds, resolvePromptReference
 import { diagnoseVideoChannel } from "../../utils/videoChannelCapability";
 import { dedupeModelConfigsForSelect, findCanonicalModelConfig } from "../../utils/modelConfigSelection";
 import { AgentAnalyzeErrorButton } from "../agent/AgentAnalyzeErrorButton";
-import type { AvailableVideoOptions, ModelConfig, VideoInputMode } from "../../types/model";
+import type { AvailableVideoOptions, ModelConfig, ModelCapabilityKind, VideoInputMode } from "../../types/model";
 import type { VideoNodeData } from "../../types/node";
 import { categoryForOfficialVideoMode, legacyInputModeToOfficialMode, officialModeToLegacyInputMode, officialVideoCategoryLabels, officialVideoModeLabels, type OfficialVideoCategory, type OfficialVideoMode } from "../../types/videoModes";
 import { NodeParameterPopover } from "./NodeParameterPopover";
@@ -67,6 +67,14 @@ function modelOptionLabel(model: ModelConfig, models: ModelConfig[]) {
 function modelIdentity(model?: ModelConfig) {
   if (!model) return "";
   return `${model.providerId} ${model.provider} ${model.modelName} ${model.displayName}`.toLowerCase();
+}
+
+function videoCapabilityForMode(mode: OfficialVideoMode): ModelCapabilityKind {
+  const category = categoryForOfficialVideoMode(mode);
+  if (category === "text_to_video") return "text_to_video";
+  if (category === "reference_to_video") return "reference_to_video";
+  if (category === "video_edit" || category === "video_extension") return "video_to_video";
+  return "image_to_video";
 }
 
 function taskResultVideoUrl(value: unknown): string | undefined {
@@ -641,7 +649,20 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
     const currentCategory = categoryForOfficialVideoMode(currentMode);
     const currentModelHandlesVideo = selectedModel && (supportsVideoExtension(selectedModel) || supportsVideoEdit(selectedModel));
     if (currentModelHandlesVideo && (currentCategory === "video_extension" || currentCategory === "video_edit")) return;
-    const nextModel = preferredVideoInputModel(allModels, selectedModel);
+    if (selectedModel) {
+      const nextMode = preferredVideoInputMode(selectedModel);
+      if (!nextMode) return;
+      setVideoCategory(categoryForOfficialVideoMode(nextMode));
+      update(props.id, {
+        videoMode: nextMode,
+        inputMode: officialModeToLegacyInputMode(nextMode),
+        errorCode: undefined,
+        errorMessage: undefined,
+        debugMessage: undefined
+      });
+      return;
+    }
+    const nextModel = preferredVideoInputModel(allModels);
     const nextMode = preferredVideoInputMode(nextModel);
     if (!nextModel || !nextMode) return;
     setVideoCategory(categoryForOfficialVideoMode(nextMode));
@@ -1057,11 +1078,23 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
       });
       lastRequestKeyRef.current = clientRequestId;
       update(props.id, { clientRequestId });
+      const selectedCapability = videoCapabilityForMode(videoMode);
 
       const result = await generationApi.video({
         clientRequestId,
+        requestId: clientRequestId,
         nodeId: props.id,
         projectId: useProjectStore.getState().currentProject?.id,
+        selectedProviderId: selectedModel.providerId,
+        providerId: selectedModel.providerId,
+        selectedModelId: selectedModel.modelName,
+        modelId: selectedModel.modelName,
+        selectedCapability,
+        capability: selectedCapability,
+        nodeType: selectedCapability,
+        endpointStrategy: "selected_model_only",
+        autoModelSelection: false,
+        autoVideoModelSelection: false,
         modelConfigId: props.data.modelConfigId,
         inputMode: props.data.inputMode,
         videoMode,

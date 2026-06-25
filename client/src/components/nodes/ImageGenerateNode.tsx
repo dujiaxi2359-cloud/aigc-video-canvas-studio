@@ -15,7 +15,7 @@ import { absoluteUploadUrl } from "../../utils/file";
 import { buildReferenceAwareImagePrompt, compactAssetIds, resolveImageNodeInputs, resolvePromptReferencedImageInputs } from "../../utils/workflowInputs";
 import { dedupeModelConfigsForSelect, findCanonicalModelConfig } from "../../utils/modelConfigSelection";
 import { AgentAnalyzeErrorButton } from "../agent/AgentAnalyzeErrorButton";
-import type { AvailableImageOptions, ImageInputMode } from "../../types/model";
+import type { AvailableImageOptions, ImageInputMode, ModelCapabilityKind } from "../../types/model";
 import type { ImageGenerateNodeData } from "../../types/node";
 import { NodeParameterPopover } from "./NodeParameterPopover";
 import { CreationNodeFrame } from "./CreationNodeFrame";
@@ -94,6 +94,10 @@ function humanizeError(error: unknown) {
 function isTerminalImageFailure(input: { errorCode?: string; errorMessage?: string; debugMessage?: string }) {
   const text = `${input.errorCode ?? ""}\n${input.errorMessage ?? ""}\n${input.debugMessage ?? ""}`;
   return /INSUFFICIENT_CREDITS|UPSTREAM_QUOTA_EXHAUSTED|UPSTREAM_CHANNEL_UNAVAILABLE|UPSTREAM_HUMAN_PRIVACY_REVIEW|API_KEY_INVALID|MODEL_ACCESS_DENIED|quota|credit|balance|insufficient|余额|额度|无可用渠道|可用渠道不存在|审核|安全|违规|safety|content policy|policy violation|moderation|blocked|filtered|RAI|privacy|隐私|unauthorized|invalid api key|incorrect api key|forbidden|permission|access denied|无权限|未开通/i.test(text);
+}
+
+function imageCapabilityForMode(mode: ImageInputMode): ModelCapabilityKind {
+  return mode === "text-to-image" ? "image_generation" : "image_edit";
 }
 
 function resultHasSubmittedImageTask(result: {
@@ -352,8 +356,19 @@ function ImageGenerateNodeComponent(props: NodeProps<ImageGenerateNodeData>) {
         throw new Error(props.data.inputMode === "image-edit" ? "图片编辑需要连接一张图片素材。" : "图生图需要连接一张图片素材。");
       }
       requestSent = true;
+      const selectedCapability = imageCapabilityForMode(props.data.inputMode);
+      const requestId = typeof crypto !== "undefined" && "randomUUID" in crypto
+        ? crypto.randomUUID()
+        : `${props.id}-${Date.now()}`;
       const result = await generationApi.image({
+        requestId,
         nodeId: props.id,
+        providerId: selectedModel.providerId,
+        modelId: selectedModel.modelName,
+        capability: selectedCapability,
+        nodeType: selectedCapability,
+        endpointStrategy: "selected_model_only",
+        autoModelSelection: false,
         modelConfigId: props.data.modelConfigId,
         inputMode: props.data.inputMode,
         prompt: promptForProvider,

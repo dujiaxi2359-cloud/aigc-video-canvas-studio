@@ -7,7 +7,7 @@ import { joinUrl, resolveVideoRequestConfig } from "../services/providers/videoR
 import { getVideoModelCapability } from "../config/videoModelCapabilities.js";
 import { modelCatalog } from "../services/modelCatalog.js";
 import { calculateAvailableVideoOptions } from "../services/modelCapability.service.js";
-import { hasSubmittedRemoteVideoTask, shouldUseVideoFallbackCandidate } from "../services/model.service.js";
+import { hasSubmittedRemoteVideoTask } from "../services/model.service.js";
 import { isGrokLikeVideoModel, normalizeVideoCapabilities } from "../services/videoCapabilityNormalization.js";
 import { ProviderError } from "../utils/providerErrors.js";
 import { mapVideoDimensions, normalizeVideoAspectRatio } from "../utils/videoParams.js";
@@ -40,38 +40,7 @@ assert(
 );
 assert(
   !hasSubmittedRemoteVideoTask(new ProviderError("NETWORK_ERROR", "create failed", "fetch failed")),
-  "Video fallback can still run when no upstream task was created"
-);
-assert(
-  !shouldUseVideoFallbackCandidate(
-    { provider_id: "grok", api_base_url: "https://runapi.co/v1" },
-    { provider_id: "kling", api_base_url: "https://runapi.co/v1" }
-  ),
-  "Grok video fallback must not switch to Kling on the same relay"
-);
-assert(
-  shouldUseVideoFallbackCandidate(
-    { provider_id: "google", api_base_url: "https://ai.cy88.ai/v1" },
-    { provider_id: "google", api_base_url: "https://ai.cy88.ai/v1" }
-  ),
-  "Video fallback can stay within the same provider and relay"
-);
-assert(
-  !shouldUseVideoFallbackCandidate(
-    {
-      provider_id: "google",
-      api_base_url: "https://ai.cy88.ai/v1",
-      model_name: "omni-fast-v2v",
-      capabilities_json: JSON.stringify({ channelCapability: { apiFamily: "omni_fast_v2v" } })
-    },
-    {
-      provider_id: "google",
-      api_base_url: "https://ai.cy88.ai/v1",
-      model_name: "omni-fast",
-      capabilities_json: JSON.stringify({ channelCapability: { apiFamily: "omni_fast" } })
-    }
-  ),
-  "Omni-fast-v2v fallback must not switch to the image/text omni-fast route"
+  "Create failures without a task id should not be treated as submitted remote tasks"
 );
 const upstreamVeoCapabilities = normalizeVideoCapabilities({
   capabilitySource: "upstream",
@@ -101,21 +70,8 @@ assert(
   "Upstream Veo 3.1 requests should normalize unsupported durations before adapter calls"
 );
 assert(
-  !shouldUseVideoFallbackCandidate(
-    {
-      provider_id: "google",
-      api_base_url: "https://ai.cy88.ai/v1",
-      model_name: "omni-fast-v2v",
-      capabilities_json: JSON.stringify({ channelCapability: { apiFamily: "omni_fast_v2v" } })
-    },
-    {
-      provider_id: "google",
-      api_base_url: "https://ai.cy88.ai/v1",
-      model_name: "veo_3_1-fast",
-      capabilities_json: JSON.stringify({ channelCapability: { apiFamily: "veo_proxy" } })
-    }
-  ),
-  "Omni-fast-v2v fallback must not switch to a Veo route with different video input rules"
+  grokPollEndpointCandidates("https://ai.cy88.ai/v1/video/create", "task_abc").includes("https://ai.cy88.ai/v1/videos/task_abc"),
+  "Video fallback is limited to alternate endpoints for the same selected provider and model"
 );
 assert(
   grokPollEndpoint("https://api.x.ai/v1", "request/1") === "https://api.x.ai/v1/videos/request%2F1",

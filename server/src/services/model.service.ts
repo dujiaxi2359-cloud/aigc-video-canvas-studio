@@ -59,10 +59,23 @@ export type GenerateTextRequest = {
 };
 
 export type GenerateVideoRequest = {
+  requestId?: string;
   clientRequestId?: string;
   projectId?: string;
   nodeId: string;
   modelConfigId: string;
+  providerId?: string;
+  selectedProviderId?: string;
+  modelId?: string;
+  selectedModelId?: string;
+  capability?: ModelCapabilityKind;
+  selectedCapability?: ModelCapabilityKind;
+  nodeType?: string;
+  endpointStrategy?: string;
+  autoModelSelection?: boolean;
+  autoVideoModelSelection?: boolean;
+  videoCreateEndpoint?: string;
+  videoPollEndpoint?: string;
   inputMode: VideoNodeContext["inputMode"];
   videoMode?: OfficialVideoMode;
   prompt: string;
@@ -92,9 +105,16 @@ export type GenerateVideoRequest = {
 };
 
 export type GenerateImageRequest = {
+  requestId?: string;
   projectId?: string;
   nodeId: string;
   modelConfigId: string;
+  providerId?: string;
+  modelId?: string;
+  capability?: ModelCapabilityKind;
+  nodeType?: string;
+  endpointStrategy?: string;
+  autoModelSelection?: boolean;
   inputMode: ImageInputMode;
   prompt: string;
   imageAssetIds?: string[];
@@ -274,10 +294,14 @@ function shouldUseCatalogCapabilities(model: ActiveModelConfig, catalogItem?: Mo
   return isOfficialProviderBaseUrl(model);
 }
 
-async function getGenerationContext(modelConfigId: string, type: "text" | "image" | "video") {
+async function getGenerationContext(modelConfigId: string | undefined, type: "text" | "image" | "video") {
+  if (!modelConfigId?.trim()) {
+    throw new ProviderError("MODEL_NOT_SELECTED", "未选择生成模型，请先选择模型。", undefined, { type });
+  }
   const model = await getInternalModelConfig(modelConfigId);
-  if (!model) throw new Error("模型配置不存在");
-  if (!model.enabled) throw new Error("模型已禁用");
+  if (!model || !model.enabled) {
+    throw new ProviderError("MODEL_NOT_FOUND", "当前模型不存在或已被禁用。", undefined, { modelConfigId, type });
+  }
 
   const apiKey = model.encrypted_api_key ? decryptApiKey(model.encrypted_api_key) : "";
   const catalogItem = catalogFor(model);
@@ -318,6 +342,18 @@ function categoryCapability(input: { type: "text" | "image" | "video"; inputMode
   return "image_to_video";
 }
 
+function isModelCapabilityKind(value: unknown): value is ModelCapabilityKind {
+  return typeof value === "string" && [
+    "text",
+    "image_generation",
+    "image_edit",
+    "text_to_video",
+    "image_to_video",
+    "reference_to_video",
+    "video_to_video"
+  ].includes(value);
+}
+
 function assertModelRuntimeReady(input: {
   model: ActiveModelConfig;
   apiKey: string;
@@ -342,13 +378,13 @@ function assertModelRuntimeReady(input: {
     });
   }
   if (!capabilityKinds.size) {
-    throw new ProviderError("MODEL_MODE_UNSUPPORTED", "模型 capability 未配置，禁止生成。请在设置中心为该模型选择文本、图片或视频能力。", undefined, {
+    throw new ProviderError("CAPABILITY_MISMATCH", "模型 capability 未配置，禁止生成。请在设置中心为该模型选择文本、图片或视频能力。", undefined, {
       model: input.model.model_name,
       providerType
     });
   }
   if (!capabilityKinds.has(required)) {
-    throw new ProviderError("MODEL_MODE_UNSUPPORTED", `能力不匹配：当前节点需要 ${required}，但模型只配置了 ${Array.from(capabilityKinds).join(", ")}。`, undefined, {
+    throw new ProviderError("CAPABILITY_MISMATCH", `能力不匹配：当前节点需要 ${required}，但模型只配置了 ${Array.from(capabilityKinds).join(", ")}。`, undefined, {
       model: input.model.model_name,
       providerType,
       requiredCapability: required,
@@ -358,6 +394,58 @@ function assertModelRuntimeReady(input: {
 }
 
 function validateVideoRequest(capabilities: ModelCapabilities, input: GenerateVideoRequest, providerId?: string, modelName?: string) {
+  const requiredCapability = categoryCapability({ type: "video", inputMode: input.inputMode });
+  const selectedCapability = input.selectedCapability ?? input.capability;
+  if (selectedCapability && selectedCapability !== requiredCapability) {
+    throw new ProviderError(
+      "CAPABILITY_MISMATCH",
+      "当前视频模型能力与节点类型不匹配。",
+      undefined,
+      {
+        selectedCapability,
+        requiredCapability,
+        nodeType: input.nodeType,
+        modelConfigId: input.modelConfigId
+      }
+    );
+  }
+  if (isModelCapabilityKind(input.nodeType) && input.nodeType !== requiredCapability) {
+    throw new ProviderError(
+      "CAPABILITY_MISMATCH",
+      "当前视频模型能力与节点类型不匹配。",
+      undefined,
+      {
+        selectedCapability,
+        requiredCapability,
+        nodeType: input.nodeType,
+        modelConfigId: input.modelConfigId
+      }
+    );
+  }
+  if (requiredCapability === "text_to_video" && ((input.imageAssetIds?.length ?? 0) > 0 || (input.videoAssetIds?.length ?? 0) > 0)) {
+    throw new ProviderError(
+      "CAPABILITY_MISMATCH",
+      "当前视频模型是文生视频模型，不支持参考素材输入，请切换图生/参考/视频转视频模型或移除参考素材。",
+      undefined,
+      { selectedCapability, requiredCapability, imageInputCount: input.imageAssetIds?.length ?? 0, videoInputCount: input.videoAssetIds?.length ?? 0 }
+    );
+  }
+  if (requiredCapability === "reference_to_video" && !(input.imageAssetIds?.length || input.videoAssetIds?.length || input.audioAssetIds?.length)) {
+    throw new ProviderError(
+      "CAPABILITY_MISMATCH",
+      "当前参考视频节点需要至少连接一个参考素材。",
+      undefined,
+      { selectedCapability, requiredCapability, modelConfigId: input.modelConfigId }
+    );
+  }
+  if (requiredCapability === "video_to_video" && !input.videoAssetIds?.length) {
+    throw new ProviderError(
+      "CAPABILITY_MISMATCH",
+      "当前视频转视频节点需要连接视频素材。",
+      undefined,
+      { selectedCapability, requiredCapability, modelConfigId: input.modelConfigId }
+    );
+  }
   const effectiveCapabilities = normalizeVideoCapabilities(capabilities, providerId, modelName);
   const options = calculateAvailableVideoOptions(effectiveCapabilities, {
     inputMode: input.inputMode,
@@ -376,7 +464,21 @@ function validateVideoRequest(capabilities: ModelCapabilities, input: GenerateVi
         : "image";
   const explicitlySupported = channel.supportedInputs?.some((value) => value === requiredInput
     || (requiredInput === "image" && ["first_frame", "reference_image", "first_last_frame"].includes(value)));
-  if (!options.availableInputModes.includes(input.inputMode) && !explicitlySupported) throw new Error("当前模型不支持该输入模式");
+  if (!options.availableInputModes.includes(input.inputMode) && !explicitlySupported) {
+    throw new ProviderError(
+      "CAPABILITY_MISMATCH",
+      "当前视频模型能力与节点类型不匹配。",
+      undefined,
+      {
+        selectedCapability,
+        requiredCapability,
+        inputMode: input.inputMode,
+        availableInputModes: options.availableInputModes,
+        supportedInputs: channel.supportedInputs,
+        modelConfigId: input.modelConfigId
+      }
+    );
+  }
   if (input.duration !== undefined && options.availableDurations.length && !options.availableDurations.includes(input.duration)) throw new Error("当前模型不支持该视频时长");
   if (input.aspectRatio && options.availableAspectRatios.length && !options.availableAspectRatios.includes(input.aspectRatio)) throw new Error("当前模型不支持该画面比例");
   if (input.resolution && options.availableResolutions.length && !options.availableResolutions.includes(input.resolution)) throw new Error("当前模型不支持该分辨率");
@@ -506,6 +608,47 @@ function validateAgainstOfficial(input: {
 }
 
 function validateImageRequest(capabilities: ModelCapabilities, input: GenerateImageRequest) {
+  const requiredCapability = categoryCapability({ type: "image", inputMode: input.inputMode });
+  if (input.capability && input.capability !== requiredCapability) {
+    throw new ProviderError(
+      "CAPABILITY_MISMATCH",
+      "当前模型能力与节点类型不匹配。",
+      undefined,
+      {
+        selectedCapability: input.capability,
+        requiredCapability,
+        nodeType: input.nodeType,
+        modelConfigId: input.modelConfigId
+      }
+    );
+  }
+  if (input.nodeType && input.nodeType !== requiredCapability) {
+    throw new ProviderError(
+      "CAPABILITY_MISMATCH",
+      "当前节点类型与模型能力不匹配。",
+      undefined,
+      {
+        selectedCapability: input.capability,
+        requiredCapability,
+        nodeType: input.nodeType,
+        modelConfigId: input.modelConfigId
+      }
+    );
+  }
+  if (input.inputMode === "text-to-image" && input.imageAssetIds?.length) {
+    throw new ProviderError(
+      "CAPABILITY_MISMATCH",
+      "当前模型是文生图模型，不支持参考图输入，请切换图片编辑模型或移除参考图。",
+      undefined,
+      {
+        selectedCapability: "image_generation",
+        requiredCapability,
+        nodeType: input.nodeType ?? "image_generation",
+        imageInputCount: input.imageAssetIds.length,
+        modelConfigId: input.modelConfigId
+      }
+    );
+  }
   const options = calculateAvailableImageOptions(capabilities, {
     inputMode: input.inputMode,
     hasImageInput: Boolean(input.imageAssetIds?.length),
@@ -513,7 +656,20 @@ function validateImageRequest(capabilities: ModelCapabilities, input: GenerateIm
     selectedQuality: input.imageQuality,
     selectedFormat: input.imageFormat
   });
-  if (!options.availableInputModes.includes(input.inputMode)) throw new Error("当前模型不支持该图片输入模式");
+  if (!options.availableInputModes.includes(input.inputMode)) {
+    throw new ProviderError(
+      "CAPABILITY_MISMATCH",
+      "当前模型能力与节点类型不匹配。",
+      undefined,
+      {
+        selectedCapability: input.capability,
+        requiredCapability,
+        inputMode: input.inputMode,
+        availableInputModes: options.availableInputModes,
+        modelConfigId: input.modelConfigId
+      }
+    );
+  }
   if (input.inputMode !== "text-to-image" && !input.imageAssetIds?.length) {
     throw new Error(input.inputMode === "image-edit" ? "图片编辑需要连接一张图片素材" : "图生图需要连接一张图片素材");
   }
@@ -526,6 +682,141 @@ function validateImageRequest(capabilities: ModelCapabilities, input: GenerateIm
   }
   if (!options.availableImageFormats.includes(input.imageFormat)) {
     input.imageFormat = options.normalizedSelection.imageFormat ?? options.availableImageFormats[0] ?? "png";
+  }
+}
+
+function selectedImageRouting(input: {
+  model: ActiveModelConfig;
+  request: GenerateImageRequest;
+  modelName: string;
+}) {
+  const actualProviderId = input.model.provider_id ?? "";
+  const actualModelId = input.modelName || input.model.model_name || input.model.id;
+  const actualCapability = categoryCapability({ type: "image", inputMode: input.request.inputMode });
+  return {
+    requestId: input.request.requestId,
+    nodeId: input.request.nodeId,
+    nodeType: input.request.nodeType ?? actualCapability,
+    endpointStrategy: input.request.endpointStrategy ?? "selected_model_only",
+    selectedProviderId: input.request.providerId ?? actualProviderId,
+    selectedModelId: input.request.modelId ?? actualModelId,
+    selectedModelConfigId: input.request.modelConfigId,
+    selectedCapability: input.request.capability ?? actualCapability,
+    actualProviderId,
+    actualModelId,
+    actualModelConfigId: input.model.id,
+    actualCapability,
+    autoModelSelection: input.request.autoModelSelection === true
+  };
+}
+
+function assertSelectedImageRouting(route: ReturnType<typeof selectedImageRouting>) {
+  if (route.autoModelSelection) {
+    throw new ProviderError(
+      "MODEL_ROUTING_MISMATCH",
+      "当前阶段已关闭自动模型选择，请明确选择单个模型。",
+      undefined,
+      route
+    );
+  }
+  if (route.selectedProviderId && route.selectedProviderId !== route.actualProviderId) {
+    throw new ProviderError(
+      "MODEL_ROUTING_MISMATCH",
+      "实际调用模型与用户选择模型不一致。",
+      undefined,
+      route
+    );
+  }
+  const selectedModelMatches = route.selectedModelId === route.actualModelId || route.selectedModelId === route.actualModelConfigId;
+  if (route.selectedModelId && !selectedModelMatches) {
+    throw new ProviderError(
+      "MODEL_ROUTING_MISMATCH",
+      "实际调用模型与用户选择模型不一致。",
+      undefined,
+      route
+    );
+  }
+  if (route.selectedCapability !== route.actualCapability || route.nodeType !== route.actualCapability) {
+    throw new ProviderError(
+      "CAPABILITY_MISMATCH",
+      "当前模型能力与节点类型不匹配。",
+      undefined,
+      route
+    );
+  }
+}
+
+function selectedVideoRouting(input: {
+  model: ActiveModelConfig;
+  request: GenerateVideoRequest;
+  modelName: string;
+  capabilities: ModelCapabilities;
+}) {
+  const actualProviderId = input.model.provider_id ?? "";
+  const actualModelId = input.modelName || input.model.model_name || input.model.id;
+  const actualCapability = categoryCapability({ type: "video", inputMode: input.request.inputMode });
+  const videoConfig = resolveVideoRequestConfig({
+    ...input.request,
+    videoMode: input.request.videoMode ?? legacyInputModeToOfficialMode(input.request.inputMode, actualProviderId),
+    apiKey: "",
+    apiBaseUrl: apiBaseUrlFor(input.model),
+    modelName: actualModelId,
+    providerId: actualProviderId,
+    qualityMode: input.request.qualityMode ?? "full_quality"
+  }, input.capabilities);
+  return {
+    requestId: input.request.requestId ?? input.request.clientRequestId,
+    nodeId: input.request.nodeId,
+    nodeType: input.request.nodeType ?? actualCapability,
+    endpointStrategy: input.request.endpointStrategy ?? "selected_model_only",
+    selectedProviderId: input.request.selectedProviderId ?? input.request.providerId ?? actualProviderId,
+    selectedModelId: input.request.selectedModelId ?? input.request.modelId ?? actualModelId,
+    selectedModelConfigId: input.request.modelConfigId,
+    selectedCapability: input.request.selectedCapability ?? input.request.capability ?? actualCapability,
+    actualProviderId,
+    actualModelId,
+    actualModelConfigId: input.model.id,
+    actualCapability,
+    createEndpoint: input.request.videoCreateEndpoint ?? videoConfig.createEndpoint,
+    pollEndpoint: input.request.videoPollEndpoint ?? videoConfig.pollEndpoint,
+    apiFamily: videoConfig.apiFamily,
+    autoModelSelection: input.request.autoModelSelection === true || input.request.autoVideoModelSelection === true
+  };
+}
+
+function assertSelectedVideoRouting(route: ReturnType<typeof selectedVideoRouting>) {
+  if (route.autoModelSelection) {
+    throw new ProviderError(
+      "MODEL_ROUTING_MISMATCH",
+      "当前阶段已关闭视频自动模型选择，请明确选择单个视频模型。",
+      undefined,
+      route
+    );
+  }
+  if (route.selectedProviderId && route.selectedProviderId !== route.actualProviderId) {
+    throw new ProviderError(
+      "MODEL_ROUTING_MISMATCH",
+      "实际调用视频模型与用户选择模型不一致。",
+      undefined,
+      route
+    );
+  }
+  const selectedModelMatches = route.selectedModelId === route.actualModelId || route.selectedModelId === route.actualModelConfigId;
+  if (route.selectedModelId && !selectedModelMatches) {
+    throw new ProviderError(
+      "MODEL_ROUTING_MISMATCH",
+      "实际调用视频模型与用户选择模型不一致。",
+      undefined,
+      route
+    );
+  }
+  if (route.selectedCapability !== route.actualCapability || (isModelCapabilityKind(route.nodeType) && route.nodeType !== route.actualCapability)) {
+    throw new ProviderError(
+      "CAPABILITY_MISMATCH",
+      "当前视频模型能力与节点类型不匹配。",
+      undefined,
+      route
+    );
   }
 }
 
@@ -549,42 +840,6 @@ function effectiveImageRuntime(input: {
     modelName,
     capabilities: normalizeImageCapabilities(input.capabilities, input.providerId, modelName, input.displayName, input.provider)
   };
-}
-
-function isRetryableImageRelayError(error: unknown) {
-  const text = error instanceof Error ? error.message : safeStringify(error);
-  return /OpenAI 兼容图片中转返回|Cloudflare|OPENAI_COMPAT_NON_JSON_RESPONSE|HTML 页面|上游响应超时|upstream request failed|openai_error|upstream_error|provider_error|暂时繁忙|temporarily unavailable|service busy|fully loaded|method not allowed|not found|unsupported (?:endpoint|route|path)|error code 524|a timeout occurred|404|405|502|503|504/i.test(text);
-}
-
-function imageProviderPriority(providerId?: string) {
-  if (providerId === "openai") return 0;
-  if (providerId === "google") return 1;
-  if (providerId === "seedance") return 2;
-  if (providerId === "alibaba") return 3;
-  if (providerId === "azure-openai") return 4;
-  return 9;
-}
-
-async function listImageFallbackModels(primary: ActiveModelConfig) {
-  const db = await getDb();
-  const rows = await db.all<ActiveModelConfig[]>(
-    `SELECT * FROM model_configs
-     WHERE workspace_id = ?
-       AND enabled = 1
-       AND id <> ?
-       AND encrypted_api_key IS NOT NULL
-       AND (category = 'image' OR model_type LIKE '%image%')
-       AND provider_id IN ('openai', 'google', 'seedance', 'alibaba', 'azure-openai')
-     ORDER BY
-       CASE WHEN provider_id = ? THEN 0 ELSE 1 END,
-       CASE WHEN api_base_url = ? THEN 0 ELSE 1 END,
-       updated_at DESC`,
-    primary.workspace_id,
-    primary.id,
-    primary.provider_id,
-    primary.api_base_url
-  );
-  return rows.sort((a, b) => imageProviderPriority(a.provider_id) - imageProviderPriority(b.provider_id));
 }
 
 async function callImageProvider(input: {
@@ -631,99 +886,6 @@ async function callImageProvider(input: {
   }
 }
 
-async function tryImageFallback(input: {
-  primaryModel: ActiveModelConfig;
-  request: GenerateImageRequest;
-  primaryError: unknown;
-}) {
-  if (!isRetryableImageRelayError(input.primaryError)) return undefined;
-  const candidates = await listImageFallbackModels(input.primaryModel);
-  for (const candidate of candidates) {
-    try {
-      const catalogItem = catalogFor(candidate);
-      const useCatalogCapabilities = shouldUseCatalogCapabilities(candidate, catalogItem);
-      const configuredCapabilities = JSON.parse(candidate.capabilities_json) as ModelCapabilities;
-      const candidateRequest: GenerateImageRequest = { ...input.request };
-      const runtime = effectiveImageRuntime({
-        capabilities: useCatalogCapabilities ? catalogItem!.capabilities : configuredCapabilities,
-        providerId: candidate.provider_id,
-        modelName: candidate.model_name,
-        displayName: candidate.display_name,
-        provider: candidate.provider,
-        request: candidateRequest
-      });
-      const capabilities = runtime.capabilities;
-      validateImageRequest(capabilities, candidateRequest);
-      const apiKey = candidate.encrypted_api_key ? decryptApiKey(candidate.encrypted_api_key) : "";
-      if (!apiKey) continue;
-      const providerId = candidate.provider_id ?? "";
-      const modelName = runtime.modelName;
-      const providerParams = {
-        ...candidateRequest,
-        apiKey,
-        apiBaseUrl: apiBaseUrlFor(candidate),
-        modelName,
-        providerId,
-        catalogModelId: useCatalogCapabilities ? catalogItem?.id : undefined,
-        capabilities,
-        qualityMode: candidateRequest.qualityMode ?? "full_quality"
-      };
-      const preflightSummary = buildPayloadSummary({
-        providerId,
-        selectedModelId: useCatalogCapabilities ? catalogItem?.id : candidate.id,
-        actualModelName: modelName,
-        inputMode: candidateRequest.inputMode,
-        aspectRatio: candidateRequest.aspectRatio,
-        quality: candidateRequest.imageQuality,
-        qualityMode: candidateRequest.qualityMode ?? "full_quality",
-        hasImageInput: Boolean(candidateRequest.imageAssetIds?.length),
-        imageInputCount: candidateRequest.imageAssetIds?.length ?? 0,
-        prompt: candidateRequest.prompt,
-        negativePrompt: candidateRequest.negativePrompt,
-        isMock: false,
-        qualityAudit: {
-          qualityMode: candidateRequest.qualityMode ?? "full_quality",
-          promptExtend: candidateRequest.promptExtend,
-          seed: candidateRequest.seed,
-          isFallback: true
-        },
-        payloadSummary: {
-          stage: "fallback-preflight",
-          fallbackFromModelConfigId: input.primaryModel.id,
-          fallbackFromModel: input.primaryModel.model_name,
-          fallbackFromBaseUrl: input.primaryModel.api_base_url
-        }
-      });
-      console.warn("[image fallback] retrying with alternate model", {
-        fromModelConfigId: input.primaryModel.id,
-        fromModelName: input.primaryModel.model_name,
-        toModelConfigId: candidate.id,
-        toModelName: candidate.model_name,
-        toProviderId: candidate.provider_id,
-        toApiBaseUrl: candidate.api_base_url
-      });
-      logOfficialPayload(preflightSummary);
-      let result = await callImageProvider({ model: candidate, providerParams });
-      result = await enforceImageAspectRatio(result, candidateRequest.aspectRatio);
-      return { model: candidate, catalogItem, useCatalogCapabilities, request: candidateRequest, result, preflightSummary };
-    } catch (fallbackError) {
-      console.warn("[image fallback] candidate failed", {
-        modelConfigId: candidate.id,
-        modelName: candidate.model_name,
-        providerId: candidate.provider_id,
-        message: fallbackError instanceof Error ? fallbackError.message : String(fallbackError)
-      });
-    }
-  }
-  return undefined;
-}
-
-function isRetryableVideoRelayError(error: unknown) {
-  const text = error instanceof Error ? `${error.message}\n${error.stack ?? ""}` : safeStringify(error);
-  return /中转接口|Invalid URL|没有返回任务 id|task_not_exist|OPENAI_COMPAT_NON_JSON_RESPONSE|HTML 页面|Cloudflare|网关|gateway|route|path|not found|method not allowed|unsupported endpoint|fetch failed|network|timeout|ECONN|502|503|504/i.test(text)
-    && !/unauthorized|forbidden|invalid api key|incorrect api key|quota|credit|balance|insufficient|no access|permission|额度|余额|无权限|未开通/i.test(text);
-}
-
 export function hasSubmittedRemoteVideoTask(error: unknown) {
   if (!(error instanceof ProviderError)) return false;
   const details = error.details;
@@ -731,89 +893,6 @@ export function hasSubmittedRemoteVideoTask(error: unknown) {
   const record = details as Record<string, unknown>;
   return [record.proxyTaskId, record.taskId, record.requestId, record.id]
     .some((value) => typeof value === "string" && value.length > 0);
-}
-
-function videoProviderPriority(providerId?: string) {
-  if (providerId === "google") return 0;
-  if (providerId === "grok") return 1;
-  if (providerId === "openai-video") return 2;
-  if (providerId === "seedance") return 3;
-  if (providerId === "kling") return 4;
-  if (providerId === "alibaba") return 5;
-  if (providerId === "minimax") return 6;
-  return 9;
-}
-
-type VideoFallbackCandidateConfig = Pick<ActiveModelConfig, "provider_id" | "api_base_url"> & Partial<Pick<ActiveModelConfig, "model_name" | "capabilities_json">>;
-
-function videoFallbackApiFamily(config: VideoFallbackCandidateConfig) {
-  if (!config.model_name && !config.capabilities_json) return undefined;
-  try {
-    const configuredCapabilities = config.capabilities_json ? JSON.parse(config.capabilities_json) as ModelCapabilities : { inputModes: [] };
-    const explicitApiFamily = configuredCapabilities.channelCapability?.apiFamily ?? configuredCapabilities.apiFamily;
-    if (explicitApiFamily) return explicitApiFamily;
-    const capabilities = normalizeVideoCapabilities(configuredCapabilities, config.provider_id, config.model_name);
-    const normalizedApiFamily = capabilities.channelCapability?.apiFamily ?? capabilities.apiFamily;
-    if (normalizedApiFamily) return normalizedApiFamily;
-    return resolveVideoRequestConfig({
-      nodeId: "fallback-check",
-      modelConfigId: "fallback-check",
-      inputMode: "text-to-video",
-      videoMode: "text_to_video",
-      prompt: "fallback check",
-      imageAssetIds: [],
-      videoAssetIds: [],
-      audioAssetIds: [],
-      duration: 10,
-      aspectRatio: "16:9",
-      resolution: "720p",
-      generateCount: 1,
-      apiKey: "",
-      apiBaseUrl: resolveProviderApiBaseUrl(config.provider_id, config.api_base_url ?? ""),
-      modelName: config.model_name ?? "",
-      providerId: config.provider_id ?? "",
-      qualityMode: "full_quality"
-    }, capabilities).apiFamily;
-  } catch {
-    return undefined;
-  }
-}
-
-export function shouldUseVideoFallbackCandidate(primary: VideoFallbackCandidateConfig, candidate: VideoFallbackCandidateConfig) {
-  const sameRelay = (candidate.provider_id ?? "") === (primary.provider_id ?? "")
-    && (candidate.api_base_url ?? "") === (primary.api_base_url ?? "");
-  if (!sameRelay) return false;
-  const primaryApiFamily = videoFallbackApiFamily(primary);
-  const candidateApiFamily = videoFallbackApiFamily(candidate);
-  if (primaryApiFamily && candidateApiFamily && primaryApiFamily !== candidateApiFamily) return false;
-  return true;
-}
-
-async function listVideoFallbackModels(primary: ActiveModelConfig) {
-  const db = await getDb();
-  const rows = await db.all<ActiveModelConfig[]>(
-    `SELECT * FROM model_configs
-     WHERE workspace_id = ?
-       AND enabled = 1
-       AND id <> ?
-       AND encrypted_api_key IS NOT NULL
-       AND (category = 'video' OR model_type LIKE '%video%')
-       AND provider_id = ?
-       AND COALESCE(api_base_url, '') = COALESCE(?, '')
-     ORDER BY
-       CASE WHEN provider_id = ? THEN 0 ELSE 1 END,
-       CASE WHEN api_base_url = ? THEN 0 ELSE 1 END,
-       updated_at DESC`,
-    primary.workspace_id,
-    primary.id,
-    primary.provider_id,
-    primary.api_base_url,
-    primary.provider_id,
-    primary.api_base_url
-  );
-  return rows
-    .filter((candidate) => shouldUseVideoFallbackCandidate(primary, candidate))
-    .sort((a, b) => videoProviderPriority(a.provider_id) - videoProviderPriority(b.provider_id));
 }
 
 async function callVideoProvider(input: {
@@ -896,89 +975,6 @@ async function callVideoProvider(input: {
     default:
       return generateVideoWithSeedance(providerParams);
   }
-}
-
-async function tryVideoFallback(input: {
-  primaryModel: ActiveModelConfig;
-  request: GenerateVideoRequest;
-  primaryError: unknown;
-}) {
-  if (hasSubmittedRemoteVideoTask(input.primaryError)) return undefined;
-  if (!isRetryableVideoRelayError(input.primaryError)) return undefined;
-  const candidates = await listVideoFallbackModels(input.primaryModel);
-  for (const candidate of candidates) {
-    try {
-      const configuredCapabilities = JSON.parse(candidate.capabilities_json) as ModelCapabilities;
-      const capabilities = normalizeVideoCapabilities(configuredCapabilities, candidate.provider_id, candidate.model_name);
-      const candidateRequest: GenerateVideoRequest = { ...input.request };
-      normalizeVideoRequestForCapabilities(capabilities, candidateRequest, candidate.provider_id, candidate.model_name);
-      validateVideoRequest(capabilities, candidateRequest, candidate.provider_id, candidate.model_name);
-      const apiKey = candidate.encrypted_api_key ? decryptApiKey(candidate.encrypted_api_key) : "";
-      if (!apiKey) continue;
-      const providerId = candidate.provider_id ?? "";
-      const modelName = candidate.model_name ?? "";
-      const officialVideoMode = candidateRequest.videoMode ?? legacyInputModeToOfficialMode(candidateRequest.inputMode, providerId);
-      const providerParams = {
-        ...candidateRequest,
-        videoMode: officialVideoMode,
-        apiKey,
-        apiBaseUrl: apiBaseUrlFor(candidate),
-        modelName,
-        providerId,
-        capabilities,
-        qualityMode: candidateRequest.qualityMode ?? "full_quality"
-      };
-      const preflightSummary = buildPayloadSummary({
-        providerId,
-        selectedModelId: candidate.id,
-        actualModelName: modelName,
-        inputMode: officialVideoMode,
-        aspectRatio: candidateRequest.aspectRatio,
-        mappedResolution: candidateRequest.resolution,
-        duration: candidateRequest.duration,
-        quality: candidateRequest.qualityMode ?? "full_quality",
-        qualityMode: candidateRequest.qualityMode ?? "full_quality",
-        hasImageInput: Boolean(candidateRequest.imageAssetIds?.length),
-        imageInputCount: candidateRequest.imageAssetIds?.length ?? 0,
-        prompt: candidateRequest.prompt,
-        negativePrompt: candidateRequest.negativePrompt,
-        isMock: false,
-        qualityAudit: {
-          videoMode: officialVideoMode,
-          qualityMode: candidateRequest.qualityMode ?? "full_quality",
-          promptExtend: candidateRequest.promptExtend ?? true,
-          seed: candidateRequest.seed,
-          isFallback: true
-        },
-        payloadSummary: {
-          stage: "fallback-preflight",
-          fallbackFromModelConfigId: input.primaryModel.id,
-          fallbackFromModel: input.primaryModel.model_name,
-          fallbackFromBaseUrl: input.primaryModel.api_base_url
-        }
-      });
-      console.warn("[video fallback] retrying with alternate model", {
-        fromModelConfigId: input.primaryModel.id,
-        fromModelName: input.primaryModel.model_name,
-        toModelConfigId: candidate.id,
-        toModelName: candidate.model_name,
-        toProviderId: candidate.provider_id,
-        toApiBaseUrl: candidate.api_base_url
-      });
-      logOfficialPayload(preflightSummary);
-      let result = await callVideoProvider({ model: candidate, providerParams, capabilities });
-      result = await enforceVideoAspectRatio(result, candidateRequest.aspectRatio, candidateRequest.resolution);
-      return { model: candidate, request: candidateRequest, result, preflightSummary };
-    } catch (fallbackError) {
-      console.warn("[video fallback] candidate failed", {
-        modelConfigId: candidate.id,
-        modelName: candidate.model_name,
-        providerId: candidate.provider_id,
-        message: fallbackError instanceof Error ? fallbackError.message : String(fallbackError)
-      });
-    }
-  }
-  return undefined;
 }
 
 async function writeMockAsset(input: { nodeId: string; kind: "image" | "video"; payload: Record<string, unknown> }) {
@@ -1252,6 +1248,7 @@ export async function generateVideo(input: GenerateVideoRequest) {
   const configuredCapabilities = JSON.parse(model.capabilities_json) as ModelCapabilities;
   const capabilities = normalizeVideoCapabilities(configuredCapabilities, model.provider_id, model.model_name);
   const inputForGeneration: GenerateVideoRequest = { ...input, generateCount: 1 };
+  let videoRoute: ReturnType<typeof selectedVideoRouting> | undefined;
   try {
     normalizeVideoRequestForCapabilities(capabilities, inputForGeneration, model.provider_id, model.model_name);
     validateVideoRequest(capabilities, inputForGeneration, model.provider_id, model.model_name);
@@ -1289,6 +1286,8 @@ export async function generateVideo(input: GenerateVideoRequest) {
     const providerId = model.provider_id ?? "";
     const modelName = model.model_name ?? "";
     const officialVideoMode = inputForGeneration.videoMode ?? legacyInputModeToOfficialMode(inputForGeneration.inputMode, providerId);
+    videoRoute = selectedVideoRouting({ model, request: inputForGeneration, modelName, capabilities });
+    assertSelectedVideoRouting(videoRoute);
     const providerParams = {
       ...inputForGeneration,
       videoMode: officialVideoMode,
@@ -1304,7 +1303,7 @@ export async function generateVideo(input: GenerateVideoRequest) {
     let activeInputForGeneration = inputForGeneration;
     let preflightSummary = buildPayloadSummary({
       providerId,
-      selectedModelId: model.id,
+      selectedModelId: videoRoute.selectedModelId,
       actualModelName: modelName,
       inputMode: officialVideoMode,
       aspectRatio: inputForGeneration.aspectRatio,
@@ -1324,7 +1323,21 @@ export async function generateVideo(input: GenerateVideoRequest) {
         seed: inputForGeneration.seed,
         isFallback: false
       },
-      payloadSummary: { stage: "preflight", legacyInputMode: inputForGeneration.inputMode, officialMode: officialVideoMode }
+      payloadSummary: {
+        stage: "preflight",
+        legacyInputMode: inputForGeneration.inputMode,
+        officialMode: officialVideoMode,
+        routing: videoRoute,
+        selectedProviderId: videoRoute.selectedProviderId,
+        selectedModelId: videoRoute.selectedModelId,
+        selectedCapability: videoRoute.selectedCapability,
+        actualProviderId: videoRoute.actualProviderId,
+        actualModelId: videoRoute.actualModelId,
+        actualCapability: videoRoute.actualCapability,
+        endpointStrategy: videoRoute.endpointStrategy,
+        createEndpoint: videoRoute.createEndpoint,
+        pollEndpoint: videoRoute.pollEndpoint
+      }
     });
     logOfficialPayload(preflightSummary);
 
@@ -1338,10 +1351,12 @@ export async function generateVideo(input: GenerateVideoRequest) {
         result: {
           provider: providerId,
           modelId: modelName,
-          capability: "video",
+          capability: videoRoute.actualCapability,
+          routing: videoRoute,
           nodeId: inputForGeneration.nodeId,
           projectId: inputForGeneration.projectId,
-          createEndpoint: "provider_adapter"
+          createEndpoint: videoRoute.createEndpoint,
+          pollEndpoint: videoRoute.pollEndpoint
         }
       });
       result = await callVideoProvider({ model, providerParams, capabilities });
@@ -1354,7 +1369,8 @@ export async function generateVideo(input: GenerateVideoRequest) {
         result: {
           provider: providerId,
           modelId: modelName,
-          capability: "video",
+          capability: videoRoute.actualCapability,
+          routing: videoRoute,
           nodeId: inputForGeneration.nodeId,
           projectId: inputForGeneration.projectId,
           createRawResponse: result.rawResponse,
@@ -1376,7 +1392,8 @@ export async function generateVideo(input: GenerateVideoRequest) {
             ...payloadSummary,
             provider: providerId,
             modelId: modelName,
-            capability: "video",
+            capability: videoRoute.actualCapability,
+            routing: videoRoute,
             nodeId: inputForGeneration.nodeId,
             projectId: inputForGeneration.projectId,
             createRawResponse: result.rawResponse
@@ -1400,19 +1417,7 @@ export async function generateVideo(input: GenerateVideoRequest) {
       }
       result = await enforceVideoAspectRatio(result, inputForGeneration.aspectRatio, inputForGeneration.resolution);
     } catch (primaryError) {
-      const fallback = await tryVideoFallback({ primaryModel: model, request: inputForGeneration, primaryError });
-      if (!fallback) throw primaryError;
-      activeModel = fallback.model;
-      activeInputForGeneration = fallback.request;
-      preflightSummary = fallback.preflightSummary;
-      result = fallback.result;
-      result.payloadSummary = {
-        ...(result.payloadSummary && typeof result.payloadSummary === "object" ? result.payloadSummary as Record<string, unknown> : {}),
-        fallbackFromModelConfigId: model.id,
-        fallbackFromModelDisplayName: model.display_name,
-        fallbackToModelConfigId: activeModel.id,
-        fallbackToModelDisplayName: activeModel.display_name
-      };
+      throw primaryError;
     }
 
     const taskId = videoTaskIdFrom(result, activeInputForGeneration);
@@ -1425,7 +1430,8 @@ export async function generateVideo(input: GenerateVideoRequest) {
       result: {
         provider: activeModel.provider_id ?? "",
         modelId: activeModel.model_name ?? activeModel.id,
-        capability: "video",
+        capability: videoRoute?.actualCapability ?? "video",
+        routing: videoRoute,
         nodeId: activeInputForGeneration.nodeId,
         projectId: activeInputForGeneration.projectId,
         pollRawResponse: result.rawResponse,
@@ -1635,7 +1641,8 @@ export async function generateVideo(input: GenerateVideoRequest) {
       result: {
         provider: activeModel.provider_id ?? "",
         modelId: activeModel.model_name ?? activeModel.id,
-        capability: "video",
+        capability: videoRoute?.actualCapability ?? "video",
+        routing: videoRoute,
         parsedTaskId: taskId,
         parsedVideoUrl: sanitizeUrlForLog(providerVideoUrl),
         providerVideoUrl: sanitizeUrlForLog(providerVideoUrl),
@@ -1648,6 +1655,18 @@ export async function generateVideo(input: GenerateVideoRequest) {
     return { status: "success" as const, outputAssetId: asset.id, outputUrl: finalOutputUrl, payloadSummary };
   } catch (error) {
     const meta = providerErrorMeta(model.provider_id, error);
+    const routingSummary = videoRoute ? {
+      routing: videoRoute,
+      selectedProviderId: videoRoute.selectedProviderId,
+      selectedModelId: videoRoute.selectedModelId,
+      selectedCapability: videoRoute.selectedCapability,
+      actualProviderId: videoRoute.actualProviderId,
+      actualModelId: videoRoute.actualModelId,
+      actualCapability: videoRoute.actualCapability,
+      createEndpoint: videoRoute.createEndpoint,
+      pollEndpoint: videoRoute.pollEndpoint,
+      endpointStrategy: videoRoute.endpointStrategy
+    } : {};
     const errorDetails = isProviderError(error) && error.details && typeof error.details === "object"
       ? error.details as Record<string, unknown>
       : {};
@@ -1663,9 +1682,10 @@ export async function generateVideo(input: GenerateVideoRequest) {
         progress: 35,
         result: {
           ...details,
+          ...routingSummary,
           provider: model.provider_id ?? "",
           modelId: model.model_name ?? model.id,
-          capability: "video",
+          capability: videoRoute?.actualCapability ?? "video",
           nodeId: input.nodeId,
           projectId: input.projectId,
           parsedTaskId: failedTaskId,
@@ -1690,6 +1710,7 @@ export async function generateVideo(input: GenerateVideoRequest) {
         status: "processing" as const,
         payloadSummary: {
           ...details,
+          ...routingSummary,
           pendingAfterPollInterruption: true,
           message: "上游任务已创建，仍在排队或生成中。"
         }
@@ -1708,9 +1729,10 @@ export async function generateVideo(input: GenerateVideoRequest) {
       progress: 100,
       result: {
         ...errorDetails,
+        ...routingSummary,
         provider: model.provider_id ?? "",
         modelId: model.model_name ?? model.id,
-        capability: "video",
+        capability: videoRoute?.actualCapability ?? "video",
         nodeId: input.nodeId,
         projectId: input.projectId,
         failedStage,
@@ -1733,7 +1755,11 @@ export async function generateVideo(input: GenerateVideoRequest) {
       status: "error",
       errorMessage: `${meta.errorMessage}${failedStage !== "failed" ? `（阶段：${failedStage}）` : ""}${meta.errorCode ? ` [${meta.errorCode}]` : ""}`
     });
-    return errorResponse(meta.errorMessage, meta.errorCode, meta.debugMessage, meta.payloadSummary);
+    const payloadSummary = {
+      ...(meta.payloadSummary && typeof meta.payloadSummary === "object" ? meta.payloadSummary as Record<string, unknown> : {}),
+      ...routingSummary
+    };
+    return errorResponse(meta.errorMessage, meta.errorCode, meta.debugMessage, payloadSummary);
   }
 }
 
@@ -1752,6 +1778,7 @@ export async function generateImage(input: GenerateImageRequest) {
     request: inputForGeneration
   });
   const capabilities = runtime.capabilities;
+  let imageRoute: ReturnType<typeof selectedImageRouting> | undefined;
   try {
     validateImageRequest(capabilities, inputForGeneration);
     if (forceMock) {
@@ -1786,6 +1813,8 @@ export async function generateImage(input: GenerateImageRequest) {
 
     const providerId = model.provider_id ?? "";
     const modelName = runtime.modelName;
+    imageRoute = selectedImageRouting({ model, request: inputForGeneration, modelName });
+    assertSelectedImageRouting(imageRoute);
     assertModelRuntimeReady({ model, apiKey, capabilities, type: "image", inputMode: inputForGeneration.inputMode });
     if (useCatalogCapabilities) {
       assertFullQualityModel({ qualityMode: inputForGeneration.qualityMode, providerId, catalogModelId: catalogItem?.id, modelName });
@@ -1814,7 +1843,7 @@ export async function generateImage(input: GenerateImageRequest) {
     let activeInputForGeneration = inputForGeneration;
     let preflightSummary = buildPayloadSummary({
       providerId,
-      selectedModelId: useCatalogCapabilities ? catalogItem?.id : model.id,
+      selectedModelId: imageRoute.selectedModelId,
       actualModelName: modelName,
       inputMode: inputForGeneration.inputMode,
       aspectRatio: inputForGeneration.aspectRatio,
@@ -1831,7 +1860,18 @@ export async function generateImage(input: GenerateImageRequest) {
         seed: inputForGeneration.seed,
         isFallback: false
       },
-      payloadSummary: { stage: "preflight", officialCatalogValidation: useCatalogCapabilities }
+      payloadSummary: {
+        stage: "preflight",
+        officialCatalogValidation: useCatalogCapabilities,
+        routing: imageRoute,
+        selectedProviderId: imageRoute.selectedProviderId,
+        selectedModelId: imageRoute.selectedModelId,
+        selectedCapability: imageRoute.selectedCapability,
+        actualProviderId: imageRoute.actualProviderId,
+        actualModelId: imageRoute.actualModelId,
+        actualCapability: imageRoute.actualCapability,
+        endpointStrategy: imageRoute.endpointStrategy
+      }
     });
     logOfficialPayload(preflightSummary);
 
@@ -1840,21 +1880,7 @@ export async function generateImage(input: GenerateImageRequest) {
       result = await callImageProvider({ model, providerParams });
       result = await enforceImageAspectRatio(result, inputForGeneration.aspectRatio);
     } catch (primaryError) {
-      const fallback = await tryImageFallback({ primaryModel: model, request: inputForGeneration, primaryError });
-      if (!fallback) throw primaryError;
-      activeModel = fallback.model;
-      activeCatalogItem = fallback.catalogItem;
-      activeUseCatalogCapabilities = fallback.useCatalogCapabilities;
-      activeInputForGeneration = fallback.request;
-      preflightSummary = fallback.preflightSummary;
-      result = fallback.result;
-      result.payloadSummary = {
-        ...(result.payloadSummary && typeof result.payloadSummary === "object" ? result.payloadSummary as Record<string, unknown> : {}),
-        fallbackFromModelConfigId: model.id,
-        fallbackFromModelDisplayName: model.display_name,
-        fallbackToModelConfigId: activeModel.id,
-        fallbackToModelDisplayName: activeModel.display_name
-      }
+      throw primaryError;
     }
 
     const asset = await createGeneratedAssetFromProvider(result, `image_${activeInputForGeneration.nodeId}.png`, {
@@ -1883,6 +1909,16 @@ export async function generateImage(input: GenerateImageRequest) {
     return { status: "success" as const, outputAssetId: asset?.id, outputUrl: asset?.url ?? result.outputUrl, payloadSummary };
   } catch (error) {
     const meta = providerErrorMeta(model.provider_id, error);
+    const routingSummary = imageRoute ? {
+      routing: imageRoute,
+      selectedProviderId: imageRoute.selectedProviderId,
+      selectedModelId: imageRoute.selectedModelId,
+      selectedCapability: imageRoute.selectedCapability,
+      actualProviderId: imageRoute.actualProviderId,
+      actualModelId: imageRoute.actualModelId,
+      actualCapability: imageRoute.actualCapability,
+      endpointStrategy: imageRoute.endpointStrategy
+    } : {};
     await addHistory({
       generationType: "image",
       projectId: input.projectId,
@@ -1894,7 +1930,11 @@ export async function generateImage(input: GenerateImageRequest) {
       status: "error",
       errorMessage: meta.errorMessage
     });
-    return errorResponse(meta.errorMessage, meta.errorCode, meta.debugMessage, meta.payloadSummary);
+    const payloadSummary = {
+      ...(meta.payloadSummary && typeof meta.payloadSummary === "object" ? meta.payloadSummary as Record<string, unknown> : {}),
+      ...routingSummary
+    };
+    return errorResponse(meta.errorMessage, meta.errorCode, meta.debugMessage, payloadSummary);
   }
 }
 
