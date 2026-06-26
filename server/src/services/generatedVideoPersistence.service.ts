@@ -179,7 +179,13 @@ export async function persistGeneratedVideoToCOS(input: PersistGeneratedVideoInp
       asset,
       localPath: asset.localPath,
       cosObjectKey: asset.storageKey,
-      cosUrl: asset.url,
+      outputUrl: asset.url,
+      cdnUrl: asset.cdnUrl,
+      cosUrl: asset.cosUrl || asset.url,
+      downloadableUrl: asset.downloadableUrl || asset.downloadUrl || asset.url,
+      posterUrl: asset.posterUrl,
+      previewUrl: asset.previewUrl,
+      thumbnailUrl: asset.thumbnailUrl,
       fileSize: asset.size ?? downloaded.fileSize,
       mimeType: asset.mimeType ?? downloaded.mimeType,
       providerVideoUrl: input.providerVideoUrl,
@@ -215,6 +221,11 @@ export async function updateCanvasNodeWithGeneratedVideo(input: {
   nodeId?: string;
   outputUrl: string;
   outputAssetId?: string;
+  cdnUrl?: string;
+  cosUrl?: string;
+  posterUrl?: string;
+  previewUrl?: string;
+  thumbnailUrl?: string;
   downloadableUrl?: string;
 }) {
   if (!input.projectId || !input.nodeId) return { updated: false };
@@ -240,7 +251,11 @@ export async function updateCanvasNodeWithGeneratedVideo(input: {
         status: "success",
         generationStatus: "succeeded",
         outputUrl: input.outputUrl,
-        previewUrl: input.outputUrl,
+        cdnUrl: input.cdnUrl,
+        cosUrl: input.cosUrl,
+        posterUrl: input.posterUrl,
+        previewUrl: input.previewUrl,
+        thumbnailUrl: input.thumbnailUrl,
         downloadableUrl: input.downloadableUrl ?? input.outputUrl,
         outputAssetId: input.outputAssetId,
         loading: false,

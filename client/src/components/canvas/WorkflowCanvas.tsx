@@ -267,8 +267,12 @@ export function WorkflowCanvas({ showGrid = true, onToggleGrid = () => undefined
           assetId: asset.id,
           type: "image",
           url: asset.url,
+          cdnUrl: asset.cdnUrl,
+          cosUrl: asset.cosUrl,
+          downloadableUrl: asset.downloadableUrl,
           filePath: asset.localPath,
           thumbnailUrl: asset.thumbnailUrl,
+          previewUrl: asset.previewUrl,
           width: asset.width,
           height: asset.height
         }, { x: position.x + index * 36, y: position.y + index * 36 });
@@ -309,7 +313,7 @@ export function WorkflowCanvas({ showGrid = true, onToggleGrid = () => undefined
     if (internalAsset) {
       event.preventDefault();
       try {
-        const asset = JSON.parse(internalAsset) as { assetId: string; type: string; url?: string; filePath?: string; thumbnailUrl?: string; width?: number; height?: number; duration?: number };
+        const asset = JSON.parse(internalAsset) as { assetId: string; type: string; url?: string; filePath?: string; thumbnailUrl?: string; posterUrl?: string; previewUrl?: string; cdnUrl?: string; cosUrl?: string; downloadableUrl?: string; width?: number; height?: number; duration?: number };
         addAssetNode(asset, screenToFlow({ x: event.clientX, y: event.clientY }));
       } catch {
         // Ignore malformed internal drag payloads.

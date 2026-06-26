@@ -3,6 +3,7 @@ import { Download, Maximize2, Play } from "lucide-react";
 import { absoluteUploadUrl } from "../../utils/file";
 import { MediaLightbox } from "./MediaLightbox";
 import { useLazyResource } from "../../utils/useLazyResource";
+import { imageDisplayUrl, imageOriginalUrl, mediaDownloadUrl, videoPlayableUrl, videoPosterUrl } from "../../utils/mediaUrls";
 
 type MediaPreviewProps = {
   type: "image" | "video";
@@ -12,6 +13,9 @@ type MediaPreviewProps = {
   outputUrl?: string;
   thumbnailUrl?: string;
   posterUrl?: string;
+  cdnUrl?: string;
+  cosUrl?: string;
+  downloadableUrl?: string;
   aspectRatio?: string;
   className?: string;
   showInlineActions?: boolean;
@@ -25,7 +29,7 @@ function ratioToCss(ratio?: string) {
   return ratio.replace(":", " / ");
 }
 
-export function MediaPreview({ type, title, previewUrl, originalUrl, outputUrl, thumbnailUrl, posterUrl, aspectRatio, className = "", showInlineActions = true, onVideoMetadata, children, meta }: MediaPreviewProps) {
+export function MediaPreview({ type, title, previewUrl, originalUrl, outputUrl, thumbnailUrl, posterUrl, cdnUrl, cosUrl, downloadableUrl, aspectRatio, className = "", showInlineActions = true, onVideoMetadata, children, meta }: MediaPreviewProps) {
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [videoRequested, setVideoRequested] = useState(false);
   const [videoError, setVideoError] = useState("");
@@ -34,16 +38,17 @@ export function MediaPreview({ type, title, previewUrl, originalUrl, outputUrl, 
   const allowNodeDrag = className.includes("creation-media-preview");
   const previewSrc = useMemo(() => {
     const selected = type === "image"
-      ? thumbnailUrl || previewUrl || outputUrl || originalUrl
-      : posterUrl || thumbnailUrl || previewUrl;
+      ? imageDisplayUrl({ thumbnailUrl, previewUrl, cdnUrl, outputUrl, originalUrl })
+      : videoPosterUrl({ posterUrl, thumbnailUrl });
     return lazy.visible ? absoluteUploadUrl(selected) : "";
-  }, [lazy.visible, originalUrl, outputUrl, posterUrl, previewUrl, thumbnailUrl, type]);
+  }, [cdnUrl, lazy.visible, originalUrl, outputUrl, posterUrl, previewUrl, thumbnailUrl, type]);
   const highResSrc = useMemo(() => {
     const selected = type === "image"
-      ? originalUrl || outputUrl || previewUrl || thumbnailUrl
-      : outputUrl || originalUrl || previewUrl || thumbnailUrl;
+      ? imageOriginalUrl({ originalUrl, outputUrl, previewUrl, thumbnailUrl, cdnUrl, cosUrl })
+      : videoPlayableUrl({ originalUrl, outputUrl, previewUrl, thumbnailUrl, cdnUrl, cosUrl });
     return absoluteUploadUrl(selected);
-  }, [originalUrl, outputUrl, previewUrl, thumbnailUrl, type]);
+  }, [cdnUrl, cosUrl, originalUrl, outputUrl, previewUrl, thumbnailUrl, type]);
+  const downloadSrc = useMemo(() => absoluteUploadUrl(mediaDownloadUrl({ downloadableUrl, originalUrl, outputUrl, previewUrl, thumbnailUrl, cdnUrl, cosUrl })), [cdnUrl, cosUrl, downloadableUrl, originalUrl, outputUrl, previewUrl, thumbnailUrl]);
   const videoSrc = type === "video" && videoRequested ? highResSrc : "";
 
   useEffect(() => {
@@ -75,9 +80,9 @@ export function MediaPreview({ type, title, previewUrl, originalUrl, outputUrl, 
   function download(event: React.MouseEvent<HTMLButtonElement>) {
     event.preventDefault();
     event.stopPropagation();
-    if (!highResSrc) return;
+    if (!downloadSrc) return;
     const link = document.createElement("a");
-    link.href = highResSrc;
+    link.href = downloadSrc;
     link.download = title || (type === "image" ? "image" : "video");
     link.rel = "noopener";
     link.click();

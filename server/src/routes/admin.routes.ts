@@ -238,7 +238,11 @@ export async function syncProviderVideoResult(req: Request, res: Response) {
         status: "processing",
         providerStatus: "succeeded",
         providerVideoUrl,
-        outputUrl: persisted.cosUrl,
+        outputUrl: persisted.outputUrl,
+        cdnUrl: persisted.cdnUrl,
+        posterUrl: persisted.posterUrl,
+        previewUrl: persisted.previewUrl,
+        downloadableUrl: persisted.downloadableUrl,
         cosKey: persisted.cosObjectKey,
         fileSize: persisted.fileSize,
         mimeType: persisted.mimeType,
@@ -248,7 +252,9 @@ export async function syncProviderVideoResult(req: Request, res: Response) {
           providerVideoUrl: sanitizeUrlForLog(providerVideoUrl),
           cosUploadStatus: persisted.cosUploadStatus,
           cosObjectKey: persisted.cosObjectKey,
-          finalOutputUrl: persisted.cosUrl
+          finalOutputUrl: persisted.outputUrl,
+          cdnUrl: persisted.cdnUrl,
+          cosUrl: persisted.cosUrl
         }
       });
       await addHistory({
@@ -264,30 +270,49 @@ export async function syncProviderVideoResult(req: Request, res: Response) {
         resolution: typeof taskResult.resolution === "string" ? taskResult.resolution : undefined,
         status: "success",
         outputPath: persisted.localPath,
-        outputUrl: persisted.cosUrl
+        outputUrl: persisted.outputUrl,
+        thumbnailUrl: persisted.thumbnailUrl,
+        posterUrl: persisted.posterUrl,
+        previewUrl: persisted.previewUrl,
+        cdnUrl: persisted.cdnUrl,
+        cosUrl: persisted.cosUrl,
+        downloadableUrl: persisted.downloadableUrl
       });
       await saveGenerationTask({
         id: task.id,
         status: "processing",
         providerStatus: "succeeded",
         providerVideoUrl,
-        outputUrl: persisted.cosUrl,
+        outputUrl: persisted.outputUrl,
+        cdnUrl: persisted.cdnUrl,
+        posterUrl: persisted.posterUrl,
+        previewUrl: persisted.previewUrl,
+        downloadableUrl: persisted.downloadableUrl,
         stage: "history_saved",
         progress: 96
       });
       await updateCanvasNodeWithGeneratedVideo({
         projectId,
         nodeId,
-        outputUrl: persisted.cosUrl,
+        outputUrl: persisted.outputUrl,
         outputAssetId: persisted.asset.id,
-        downloadableUrl: persisted.asset.downloadUrl ?? persisted.cosUrl
+        cdnUrl: persisted.cdnUrl,
+        cosUrl: persisted.cosUrl,
+        posterUrl: persisted.posterUrl,
+        previewUrl: persisted.previewUrl,
+        thumbnailUrl: persisted.thumbnailUrl,
+        downloadableUrl: persisted.downloadableUrl || persisted.asset.downloadUrl || persisted.outputUrl
       });
       await saveGenerationTask({
         id: task.id,
         status: "succeeded",
         providerStatus: "succeeded",
         providerVideoUrl,
-        outputUrl: persisted.cosUrl,
+        outputUrl: persisted.outputUrl,
+        cdnUrl: persisted.cdnUrl,
+        posterUrl: persisted.posterUrl,
+        previewUrl: persisted.previewUrl,
+        downloadableUrl: persisted.downloadableUrl,
         cosKey: persisted.cosObjectKey,
         fileSize: persisted.fileSize,
         mimeType: persisted.mimeType,
@@ -298,8 +323,10 @@ export async function syncProviderVideoResult(req: Request, res: Response) {
           providerVideoUrl: sanitizeUrlForLog(providerVideoUrl),
           cosUploadStatus: persisted.cosUploadStatus,
           cosObjectKey: persisted.cosObjectKey,
-          finalOutputUrl: persisted.cosUrl,
-          outputUrl: persisted.cosUrl,
+          finalOutputUrl: persisted.outputUrl,
+          outputUrl: persisted.outputUrl,
+          cdnUrl: persisted.cdnUrl,
+          cosUrl: persisted.cosUrl,
           canvasUpdated: true,
           manualRepair: true
         }
@@ -309,7 +336,9 @@ export async function syncProviderVideoResult(req: Request, res: Response) {
     return res.json({
       status: "success",
       taskId: task.id,
-      outputUrl: repaired.cosUrl,
+      outputUrl: repaired.outputUrl,
+      cdnUrl: repaired.cdnUrl,
+      cosUrl: repaired.cosUrl,
       cosObjectKey: repaired.cosObjectKey,
       fileSize: repaired.fileSize,
       mimeType: repaired.mimeType

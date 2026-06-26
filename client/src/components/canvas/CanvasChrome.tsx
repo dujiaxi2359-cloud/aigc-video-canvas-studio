@@ -15,6 +15,7 @@ import type { Asset } from "../../types/asset";
 import type { GenerationHistory } from "../../types/history";
 import type { WorkflowNodeType } from "../../types/node";
 import { absoluteUploadUrl } from "../../utils/file";
+import { imageDisplayUrl, imageOriginalUrl, mediaDownloadUrl, videoPlayableUrl, videoPosterUrl } from "../../utils/mediaUrls";
 import { downloadAssetById } from "../../services/downloadApi";
 import { MediaLightbox } from "../media/MediaLightbox";
 import { AssetFolderTree } from "../assets/AssetFolderTree";
@@ -39,7 +40,7 @@ const templateItems = [
 ];
 
 function assetDragPayload(asset: Asset) {
-  return JSON.stringify({ assetId: asset.id, type: asset.type, filePath: asset.localPath, url: asset.url, publicUrl: asset.publicUrl, thumbnailUrl: asset.thumbnailUrl, width: asset.width, height: asset.height, duration: asset.duration });
+  return JSON.stringify({ assetId: asset.id, type: asset.type, filePath: asset.localPath, url: asset.url, publicUrl: asset.publicUrl, thumbnailUrl: asset.thumbnailUrl, posterUrl: asset.posterUrl, previewUrl: asset.previewUrl, cdnUrl: asset.cdnUrl, cosUrl: asset.cosUrl, downloadableUrl: asset.downloadableUrl, width: asset.width, height: asset.height, duration: asset.duration });
 }
 
 function historyKind(item: GenerationHistory) {
@@ -251,7 +252,7 @@ function AssetDrawer({ onClose }: { onClose: () => void }) {
             <div className="mt-5 px-2 text-[11px] font-medium text-white/30">{folderId === undefined ? t("canvas.recentAssets") : t("canvas.currentFolderAssets")}</div>
             <div className="mt-2 grid grid-cols-3 gap-2">
               {visibleAssets.slice(0, 12).map((asset) => {
-                const src = absoluteUploadUrl(asset.type === "video" ? asset.posterUrl || asset.thumbnailUrl : asset.thumbnailUrl || asset.previewUrl || asset.url);
+                const src = absoluteUploadUrl(asset.type === "video" ? videoPosterUrl(asset) : imageDisplayUrl(asset));
                 return (
                   <div
                     key={asset.id}
@@ -263,7 +264,7 @@ function AssetDrawer({ onClose }: { onClose: () => void }) {
                     {asset.type === "image" && src ? <img src={src} alt="" loading="lazy" decoding="async" /> : asset.type === "video" ? (src ? <img src={src} alt="" loading="lazy" decoding="async" /> : <Video size={20} />) : <FileAudio size={20} />}
                     <span className="drawer-resource-actions">
                       {(asset.type === "image" || asset.type === "video") && <button type="button" title="预览" onClick={() => setPreview(asset)}><Eye size={12} /></button>}
-                      <button type="button" title={t("canvas.addToCanvas")} onClick={() => addAssetNode({ assetId: asset.id, type: asset.type, url: asset.url, filePath: asset.localPath, thumbnailUrl: asset.thumbnailUrl, posterUrl: asset.posterUrl, width: asset.width, height: asset.height, duration: asset.duration })}><Plus size={12} /></button>
+                      <button type="button" title={t("canvas.addToCanvas")} onClick={() => addAssetNode({ assetId: asset.id, type: asset.type, url: asset.url, filePath: asset.localPath, thumbnailUrl: asset.thumbnailUrl, posterUrl: asset.posterUrl, previewUrl: asset.previewUrl, cdnUrl: asset.cdnUrl, cosUrl: asset.cosUrl, downloadableUrl: asset.downloadableUrl, width: asset.width, height: asset.height, duration: asset.duration })}><Plus size={12} /></button>
                       <button type="button" title="下载" onClick={() => void downloadLibraryAsset(asset)}><Download size={12} /></button>
                       <button type="button" title="删除" onClick={() => void deleteAsset(asset.id)}><Trash2 size={12} /></button>
                     </span>
@@ -279,8 +280,8 @@ function AssetDrawer({ onClose }: { onClose: () => void }) {
     <MediaLightbox
       open={Boolean(preview)}
       type={preview?.type === "video" ? "video" : "image"}
-      src={absoluteUploadUrl(preview?.url)}
-      previewSrc={absoluteUploadUrl(preview?.type === "video" ? preview.posterUrl || preview.thumbnailUrl : preview?.thumbnailUrl || preview?.previewUrl)}
+      src={absoluteUploadUrl(preview?.type === "video" ? videoPlayableUrl(preview) : imageOriginalUrl(preview || {}))}
+      previewSrc={absoluteUploadUrl(preview?.type === "video" ? videoPosterUrl(preview) : imageDisplayUrl(preview || {}))}
       title={preview?.name}
       meta={[{ label: "尺寸", value: preview?.width && preview?.height ? `${preview.width}×${preview.height}` : undefined }]}
       onClose={() => setPreview(null)}
@@ -308,9 +309,10 @@ function HistoryDrawer({ onClose }: { onClose: () => void }) {
   const samples = visible.length ? visible : Array.from({ length: 6 }, (_, index) => ({ id: `mock-${index}`, outputUrl: "", modelDisplayName: "Moon｜Tv" } as GenerationHistory));
 
   function download(item: GenerationHistory) {
-    if (!item.outputUrl) return;
+    const url = mediaDownloadUrl(item);
+    if (!url) return;
     const link = document.createElement("a");
-    link.href = absoluteUploadUrl(item.outputUrl) || "";
+    link.href = absoluteUploadUrl(url) || "";
     link.download = `${item.modelDisplayName || "generation"}-${item.id}`;
     link.click();
   }
@@ -323,16 +325,16 @@ function HistoryDrawer({ onClose }: { onClose: () => void }) {
       </div>
       <div className="grid grid-cols-3 gap-2 p-3">
         {samples.map((item, index) => {
-          const src = absoluteUploadUrl(item.outputUrl);
-          const poster = absoluteUploadUrl(item.posterUrl || item.thumbnailUrl || item.previewUrl);
+          const src = absoluteUploadUrl(historyKind(item) === "video" ? videoPlayableUrl(item) : imageOriginalUrl(item));
+          const poster = absoluteUploadUrl(videoPosterUrl(item));
           const kind = item.outputUrl ? historyKind(item) : tab;
           return (
             <div key={item.id} className={`drawer-history-tile ${!src ? `is-placeholder tone-${index % 4}` : ""}`}>
-              {src && kind === "image" ? <img src={absoluteUploadUrl(item.thumbnailUrl || item.previewUrl || item.outputUrl)} alt="" loading="lazy" decoding="async" /> : src && kind === "video" ? (poster ? <img src={poster} alt="" loading="lazy" decoding="async" /> : <span><Video size={19} /></span>) : <span>{kind === "image" ? <ImageIcon size={19} /> : <Video size={19} />}</span>}
+              {src && kind === "image" ? <img src={absoluteUploadUrl(imageDisplayUrl(item))} alt="" loading="lazy" decoding="async" /> : src && kind === "video" ? (poster ? <img src={poster} alt="" loading="lazy" decoding="async" /> : <span><Video size={19} /></span>) : <span>{kind === "image" ? <ImageIcon size={19} /> : <Video size={19} />}</span>}
               {!item.id.startsWith("mock-") && <span className={`drawer-history-status is-${item.status}`}>{item.status === "processing" ? "生成中" : item.status === "error" ? "失败" : "已完成"}</span>}
               {item.outputUrl && <span className="drawer-resource-actions">
                 <button type="button" title="预览" onClick={() => setPreview(item)}><Eye size={12} /></button>
-                <button type="button" title="加入画布" onClick={() => addAssetNode({ assetId: item.outputAssetId || item.id, type: kind === "image" ? "image" : "video", url: item.outputUrl, thumbnailUrl: item.thumbnailUrl, posterUrl: item.posterUrl, aspectRatio: item.aspectRatio, duration: item.duration })}><Plus size={12} /></button>
+                <button type="button" title="加入画布" onClick={() => addAssetNode({ assetId: item.outputAssetId || item.id, type: kind === "image" ? "image" : "video", url: item.outputUrl, thumbnailUrl: item.thumbnailUrl, posterUrl: item.posterUrl, previewUrl: item.previewUrl, cdnUrl: item.cdnUrl, cosUrl: item.cosUrl, downloadableUrl: item.downloadableUrl, aspectRatio: item.aspectRatio, duration: item.duration })}><Plus size={12} /></button>
                 <button type="button" title="下载" onClick={() => download(item)}><Download size={12} /></button>
                 <button type="button" title="删除" onClick={() => void deleteHistory(item.id)}><Trash2 size={12} /></button>
               </span>}
@@ -345,8 +347,8 @@ function HistoryDrawer({ onClose }: { onClose: () => void }) {
     <MediaLightbox
       open={Boolean(preview)}
       type={preview && historyKind(preview) === "image" ? "image" : "video"}
-      src={absoluteUploadUrl(preview?.outputUrl)}
-      previewSrc={absoluteUploadUrl(preview && historyKind(preview) === "video" ? preview.posterUrl || preview.thumbnailUrl : preview?.thumbnailUrl || preview?.previewUrl)}
+      src={absoluteUploadUrl(preview && historyKind(preview) === "video" ? videoPlayableUrl(preview) : imageOriginalUrl(preview || {}))}
+      previewSrc={absoluteUploadUrl(preview && historyKind(preview) === "video" ? videoPosterUrl(preview) : imageDisplayUrl(preview || {}))}
       title={preview?.modelDisplayName || "生成结果"}
       meta={[
         { label: "比例", value: preview?.aspectRatio },

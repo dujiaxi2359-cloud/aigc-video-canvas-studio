@@ -23,8 +23,12 @@ export type ImageNodeData = {
   title: string;
   assetId?: string;
   url?: string;
+  cdnUrl?: string;
+  cosUrl?: string;
+  downloadableUrl?: string;
   localPath?: string;
   thumbnailUrl?: string;
+  previewUrl?: string;
   width?: number;
   height?: number;
   aspectRatio?: string;
@@ -44,6 +48,10 @@ export type ImageGenerateNodeData = {
   outputUrl?: string;
   url?: string;
   thumbnailUrl?: string;
+  cdnUrl?: string;
+  cosUrl?: string;
+  previewUrl?: string;
+  downloadableUrl?: string;
   errorCode?: string;
   errorMessage?: string;
   debugMessage?: string;
@@ -120,6 +128,9 @@ export type Director3DNodeData = {
   outputAssetId?: string;
   outputUrl?: string;
   thumbnailUrl?: string;
+  cdnUrl?: string;
+  cosUrl?: string;
+  downloadableUrl?: string;
   aspectRatio?: string;
   errorMessage?: string;
 };
@@ -142,6 +153,8 @@ export type VideoNodeData = {
   thumbnailUrl?: string;
   posterUrl?: string;
   previewUrl?: string;
+  cdnUrl?: string;
+  cosUrl?: string;
   downloadableUrl?: string;
   errorCode?: string;
   errorMessage?: string;

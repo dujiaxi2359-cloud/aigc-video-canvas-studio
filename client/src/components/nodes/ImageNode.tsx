@@ -81,7 +81,7 @@ export function ImageNode(props: NodeProps<ImageNodeData>) {
   const [editorOpen, setEditorOpen] = useState(false);
   const [gridMenuOpen, setGridMenuOpen] = useState(false);
   const [activePanel, setActivePanel] = useState<"angle" | null>(null);
-  const previewUrl = props.data.thumbnailUrl || props.data.url;
+  const previewUrl = props.data.thumbnailUrl || props.data.previewUrl || props.data.cdnUrl || props.data.url;
   const ratio = useMemo(() => ratioFromDimensions(props.data.width, props.data.height) || props.data.aspectRatio || "9:16", [props.data.aspectRatio, props.data.height, props.data.width]);
 
   useEffect(() => {
@@ -102,7 +102,7 @@ export function ImageNode(props: NodeProps<ImageNodeData>) {
     if (!file) return;
     try {
       const asset = await upload(file);
-      update(props.id, { assetId: asset.id, url: asset.url, localPath: asset.localPath, thumbnailUrl: asset.thumbnailUrl, width: undefined, height: undefined, aspectRatio: undefined });
+      update(props.id, { assetId: asset.id, url: asset.url, cdnUrl: asset.cdnUrl, cosUrl: asset.cosUrl, downloadableUrl: asset.downloadableUrl, localPath: asset.localPath, thumbnailUrl: asset.thumbnailUrl, previewUrl: asset.previewUrl, width: undefined, height: undefined, aspectRatio: undefined });
     } catch (error) {
       window.alert(error instanceof Error ? error.message : "上传图片素材失败，请检查文件或网络。");
     }
@@ -205,7 +205,7 @@ export function ImageNode(props: NodeProps<ImageNodeData>) {
       floatingToolbar={floatingToolbar}
       hideInlineControls={Boolean(floatingToolbar)}
       preview={
-        props.data.url ? <MediaPreview type="image" title={props.data.title} previewUrl={previewUrl} originalUrl={props.data.url} thumbnailUrl={props.data.thumbnailUrl} aspectRatio={ratio} className="creation-media-preview" showInlineActions={false} /> :
+        props.data.url ? <MediaPreview type="image" title={props.data.title} previewUrl={props.data.previewUrl || previewUrl} originalUrl={props.data.url} thumbnailUrl={props.data.thumbnailUrl} cdnUrl={props.data.cdnUrl} cosUrl={props.data.cosUrl} downloadableUrl={props.data.downloadableUrl} aspectRatio={ratio} className="creation-media-preview" showInlineActions={false} /> :
         <label className="creation-upload-preview">
           <ImagePlus size={30} /><span>图片素材</span><small>点击或拖入上传</small>
           <input hidden type="file" accept="image/*" onChange={(event) => onFile(event.target.files?.[0])} />
@@ -218,7 +218,7 @@ export function ImageNode(props: NodeProps<ImageNodeData>) {
       title={props.data.title || "图片素材"}
       uploadAsset={upload}
       onClose={() => setEditorOpen(false)}
-      onSaved={(asset) => update(props.id, { assetId: asset.id, url: asset.url, localPath: asset.localPath, thumbnailUrl: asset.thumbnailUrl, width: undefined, height: undefined, aspectRatio: undefined })}
+      onSaved={(asset) => update(props.id, { assetId: asset.id, url: asset.url, cdnUrl: asset.cdnUrl, cosUrl: asset.cosUrl, downloadableUrl: asset.downloadableUrl, localPath: asset.localPath, thumbnailUrl: asset.thumbnailUrl, previewUrl: asset.previewUrl, width: undefined, height: undefined, aspectRatio: undefined })}
     />
     </>
   );

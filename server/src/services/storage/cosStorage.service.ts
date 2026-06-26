@@ -100,6 +100,31 @@ export function normalizeCosKey(fileKey: string) {
   return String(fileKey || "").trim().replace(/^\/+/, "").replace(/\\/g, "/");
 }
 
+function truthyEnv(value?: string) {
+  return /^(1|true|yes|on)$/i.test(String(value || "").trim());
+}
+
+export function isCdnDeliveryEnabled() {
+  return truthyEnv(process.env.USE_CDN_FOR_PUBLIC_ASSETS) && Boolean(process.env.TENCENT_CDN_BASE_URL?.trim());
+}
+
+export function getCdnBaseUrl() {
+  return (process.env.TENCENT_CDN_BASE_URL || "").trim().replace(/\/+$/, "");
+}
+
+function encodeCosKeyForUrl(fileKey: string) {
+  return normalizeCosKey(fileKey).split("/").map(encodeURIComponent).join("/");
+}
+
+export function cdnUrlForCosKey(fileKey?: string | null) {
+  if (!fileKey || !isCdnDeliveryEnabled()) return undefined;
+  return `${getCdnBaseUrl()}/${encodeCosKeyForUrl(fileKey)}`;
+}
+
+export function publicDeliveryProviderForCosKey(fileKey?: string | null) {
+  return cdnUrlForCosKey(fileKey) ? "tencent_cdn" : "tencent_cos";
+}
+
 function todayPath() {
   const date = new Date();
   const year = date.getFullYear();

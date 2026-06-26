@@ -112,6 +112,10 @@ async function hydrateProjectNodes(nodes: ProjectNode[], projectId?: string) {
     const nextData = { ...data };
     if (asset.type === "image") {
       if (!nextData.thumbnailUrl && asset.thumbnailUrl) nextData.thumbnailUrl = asset.thumbnailUrl;
+      if (!nextData.previewUrl && asset.previewUrl) nextData.previewUrl = asset.previewUrl;
+      if (!nextData.cdnUrl && asset.cdnUrl) nextData.cdnUrl = asset.cdnUrl;
+      if (!nextData.cosUrl && asset.cosUrl) nextData.cosUrl = asset.cosUrl;
+      if (!nextData.downloadableUrl && (asset.downloadableUrl || asset.downloadUrl)) nextData.downloadableUrl = asset.downloadableUrl || asset.downloadUrl;
       if (!nextData.url && asset.url) nextData.url = asset.url;
       if (!nextData.outputUrl && outputAssetId && asset.url) nextData.outputUrl = asset.url;
       if (!nextData.outputAssetId && node.type === "imageGenerate") nextData.outputAssetId = asset.id;
@@ -120,6 +124,11 @@ async function hydrateProjectNodes(nodes: ProjectNode[], projectId?: string) {
     }
     if (asset.type === "video") {
       if (!nextData.thumbnailUrl && asset.thumbnailUrl) nextData.thumbnailUrl = asset.thumbnailUrl;
+      if (!nextData.posterUrl && asset.posterUrl) nextData.posterUrl = asset.posterUrl;
+      if (!nextData.previewUrl && asset.previewUrl) nextData.previewUrl = asset.previewUrl;
+      if (!nextData.cdnUrl && asset.cdnUrl) nextData.cdnUrl = asset.cdnUrl;
+      if (!nextData.cosUrl && asset.cosUrl) nextData.cosUrl = asset.cosUrl;
+      if (!nextData.downloadableUrl && (asset.downloadableUrl || asset.downloadUrl)) nextData.downloadableUrl = asset.downloadableUrl || asset.downloadUrl;
       if (asset.url) nextData.outputUrl = asset.url;
       if (!nextData.outputAssetId) nextData.outputAssetId = asset.id;
       if (!nextData.duration && asset.duration) nextData.duration = asset.duration;

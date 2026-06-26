@@ -16,6 +16,8 @@ export type GenerationHistory = {
   thumbnailUrl?: string;
   posterUrl?: string;
   previewUrl?: string;
+  cdnUrl?: string;
+  cosUrl?: string;
   downloadableUrl?: string;
   errorMessage?: string;
   createdAt: number;

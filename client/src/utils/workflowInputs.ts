@@ -11,6 +11,9 @@ export type AssetInput = {
   thumbnailUrl?: string;
   posterUrl?: string;
   previewUrl?: string;
+  cdnUrl?: string;
+  cosUrl?: string;
+  downloadableUrl?: string;
   localPath?: string;
   publicUrl?: string;
   mimeType?: string;
@@ -29,6 +32,9 @@ function toAssetInput(node: Node): AssetInput {
     thumbnailUrl: data.thumbnailUrl as string | undefined,
     posterUrl: data.posterUrl as string | undefined,
     previewUrl: data.previewUrl as string | undefined,
+    cdnUrl: data.cdnUrl as string | undefined,
+    cosUrl: data.cosUrl as string | undefined,
+    downloadableUrl: data.downloadableUrl as string | undefined,
     localPath: data.localPath as string | undefined,
     publicUrl: data.publicUrl as string | undefined,
     mimeType: data.mimeType as string | undefined

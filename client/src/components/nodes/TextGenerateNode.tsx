@@ -282,8 +282,8 @@ export function TextGenerateNode(props: NodeProps<TextGenerateNodeData>) {
   ], [resolvedReferenceInputs]);
   const kindName = (kind: "image" | "video" | "audio") => kind === "image" ? "图片" : kind === "video" ? "视频" : "音频";
   const kindToken = (kind: "image" | "video" | "audio") => kind === "image" ? "图片" : kind === "video" ? "视频" : "音频";
-  const previewForInput = (input: AssetInput) => absoluteUploadUrl(input.thumbnailUrl || input.url);
-  const fallbackForInput = (input: AssetInput) => absoluteUploadUrl(input.url);
+  const previewForInput = (input: AssetInput) => absoluteUploadUrl(input.thumbnailUrl || input.posterUrl || input.previewUrl || input.cdnUrl || input.url);
+  const fallbackForInput = (input: AssetInput) => absoluteUploadUrl(input.cdnUrl || input.url);
   const referenceVisualItems = allReferenceInputs.map(({ input, kind, kindIndex }, index) => ({
     input,
     token: `@素材${index + 1}`,

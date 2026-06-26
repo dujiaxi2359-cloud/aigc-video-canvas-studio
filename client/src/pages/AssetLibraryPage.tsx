@@ -8,6 +8,7 @@ import { assetApi } from "../services/assetApi";
 import { useAssetStore } from "../store/assetStore";
 import type { Asset, AssetType } from "../types/asset";
 import { absoluteUploadUrl } from "../utils/file";
+import { imageDisplayUrl, videoPosterUrl } from "../utils/mediaUrls";
 import { formatTime } from "../utils/time";
 import { AssetFolderTree } from "../components/assets/AssetFolderTree";
 import { HomeTopNav } from "../components/home/HomeTopNav";
@@ -150,7 +151,12 @@ export function AssetLibraryPage({ onNavigate }: { onNavigate: (page: Page, proj
       filePath: asset.localPath,
       url: asset.url,
       publicUrl: asset.publicUrl,
-      thumbnailUrl: asset.thumbnailUrl
+      thumbnailUrl: asset.thumbnailUrl,
+      posterUrl: asset.posterUrl,
+      previewUrl: asset.previewUrl,
+      cdnUrl: asset.cdnUrl,
+      cosUrl: asset.cosUrl,
+      downloadableUrl: asset.downloadableUrl
     });
   }
 
@@ -305,10 +311,10 @@ export function AssetLibraryPage({ onNavigate }: { onNavigate: (page: Page, proj
                         </div>
 
                         <div className="overflow-hidden rounded-xl border border-white/[0.06] bg-black/20">
-                          {asset.type === "image" ? <img src={absoluteUploadUrl(asset.thumbnailUrl || asset.previewUrl || asset.url)} className="h-40 w-full object-cover" loading="lazy" decoding="async" /> : null}
+                          {asset.type === "image" ? <img src={absoluteUploadUrl(imageDisplayUrl(asset))} className="h-40 w-full object-cover" loading="lazy" decoding="async" /> : null}
                           {asset.type === "video" ? (
                             <div className="relative grid h-40 place-items-center bg-black/35 text-white/40">
-                              {asset.posterUrl || asset.thumbnailUrl ? <img src={absoluteUploadUrl(asset.posterUrl || asset.thumbnailUrl)} className="absolute inset-0 h-full w-full object-cover" loading="lazy" decoding="async" /> : null}
+                              {videoPosterUrl(asset) ? <img src={absoluteUploadUrl(videoPosterUrl(asset))} className="absolute inset-0 h-full w-full object-cover" loading="lazy" decoding="async" /> : null}
                               <span className="relative rounded-full border border-white/15 bg-black/55 px-3 py-1 text-[12px] text-white/72">点击下载或拖入画布后播放</span>
                             </div>
                           ) : null}

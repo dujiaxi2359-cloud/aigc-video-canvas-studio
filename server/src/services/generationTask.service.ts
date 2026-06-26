@@ -8,6 +8,10 @@ interface GenerationTaskRow {
   provider_status?: string;
   provider_video_url?: string;
   output_url?: string;
+  cdn_url?: string;
+  poster_url?: string;
+  preview_url?: string;
+  downloadable_url?: string;
   cos_key?: string;
   file_size?: number;
   mime_type?: string;
@@ -28,6 +32,10 @@ function toGenerationTask(row: GenerationTaskRow) {
     providerStatus: row.provider_status,
     providerVideoUrl: row.provider_video_url,
     outputUrl: row.output_url,
+    cdnUrl: row.cdn_url,
+    posterUrl: row.poster_url,
+    previewUrl: row.preview_url,
+    downloadableUrl: row.downloadable_url,
     cosKey: row.cos_key,
     fileSize: row.file_size,
     mimeType: row.mime_type,
@@ -74,6 +82,10 @@ export async function saveGenerationTask(input: {
   providerStatus?: string;
   providerVideoUrl?: string;
   outputUrl?: string;
+  cdnUrl?: string;
+  posterUrl?: string;
+  previewUrl?: string;
+  downloadableUrl?: string;
   cosKey?: string;
   fileSize?: number;
   mimeType?: string;
@@ -98,15 +110,19 @@ export async function saveGenerationTask(input: {
     : nextResult ?? previousResult;
   await db.run(
     `INSERT INTO generation_tasks (
-       id, workspace_id, user_id, status, provider_status, provider_video_url, output_url, cos_key, file_size, mime_type,
+       id, workspace_id, user_id, status, provider_status, provider_video_url, output_url, cdn_url, poster_url, preview_url, downloadable_url, cos_key, file_size, mime_type,
        completed_at, failed_stage, error_code, progress, result_json, error_message, created_at, updated_at
      )
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(id) DO UPDATE SET
        status = excluded.status,
        provider_status = excluded.provider_status,
        provider_video_url = excluded.provider_video_url,
        output_url = excluded.output_url,
+       cdn_url = excluded.cdn_url,
+       poster_url = excluded.poster_url,
+       preview_url = excluded.preview_url,
+       downloadable_url = excluded.downloadable_url,
        cos_key = excluded.cos_key,
        file_size = excluded.file_size,
        mime_type = excluded.mime_type,
@@ -124,6 +140,10 @@ export async function saveGenerationTask(input: {
     input.providerStatus ?? existing?.provider_status,
     input.providerVideoUrl ?? existing?.provider_video_url,
     input.outputUrl ?? existing?.output_url,
+    input.cdnUrl ?? existing?.cdn_url,
+    input.posterUrl ?? existing?.poster_url,
+    input.previewUrl ?? existing?.preview_url,
+    input.downloadableUrl ?? existing?.downloadable_url,
     input.cosKey ?? existing?.cos_key,
     input.fileSize ?? existing?.file_size,
     input.mimeType ?? existing?.mime_type,

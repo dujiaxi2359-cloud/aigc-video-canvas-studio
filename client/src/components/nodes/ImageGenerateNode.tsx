@@ -393,6 +393,8 @@ function ImageGenerateNodeComponent(props: NodeProps<ImageGenerateNodeData>) {
             outputUrl: result.outputUrl,
             thumbnailUrl: result.thumbnailUrl ?? result.previewUrl ?? previousThumbnailUrl,
             previewUrl: result.previewUrl,
+            cdnUrl: result.cdnUrl,
+            cosUrl: result.cosUrl,
             downloadableUrl: result.downloadableUrl,
             payloadSummary: result.payloadSummary
           }
@@ -479,7 +481,7 @@ function ImageGenerateNodeComponent(props: NodeProps<ImageGenerateNodeData>) {
   const displayOutputUrl = props.data.outputUrl || props.data.url;
   const displayThumbnailUrl = props.data.thumbnailUrl;
   const preview = imageModels.length === 0 ? <div className="creation-preview-empty"><ImagePlus size={29} /><span>请先配置图片模型</span></div> : (
-    <MediaPreview type="image" title={props.data.title} outputUrl={displayOutputUrl} thumbnailUrl={displayThumbnailUrl} aspectRatio={aspectRatioCss(displayRatio)} className="creation-media-preview" showInlineActions={false}>
+    <MediaPreview type="image" title={props.data.title} outputUrl={displayOutputUrl} thumbnailUrl={displayThumbnailUrl} previewUrl={props.data.previewUrl} cdnUrl={props.data.cdnUrl} cosUrl={props.data.cosUrl} downloadableUrl={props.data.downloadableUrl} aspectRatio={aspectRatioCss(displayRatio)} className="creation-media-preview" showInlineActions={false}>
       <div className={`creation-preview-empty ${props.data.status === "error" ? "is-error" : ""}`}><ImagePlus size={28} /><span>{props.data.status === "generating" ? "正在生成图片" : props.data.status === "error" ? "图片生成失败" : "图片预览"}</span></div>
     </MediaPreview>
   );
@@ -571,7 +573,7 @@ function ImageGenerateNodeComponent(props: NodeProps<ImageGenerateNodeData>) {
         title={props.data.title || "生成图片"}
         uploadAsset={upload}
         onClose={() => setEditorOpen(false)}
-        onSaved={(asset) => update(props.id, { status: "success", outputAssetId: asset.id, outputUrl: asset.url })}
+        onSaved={(asset) => update(props.id, { status: "success", outputAssetId: asset.id, outputUrl: asset.url, cdnUrl: asset.cdnUrl, cosUrl: asset.cosUrl, downloadableUrl: asset.downloadableUrl, thumbnailUrl: asset.thumbnailUrl, previewUrl: asset.previewUrl })}
       />
     </>
   );

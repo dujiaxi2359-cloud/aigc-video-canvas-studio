@@ -14,12 +14,17 @@ export type Asset = {
   publicUrl?: string;
   downloadUrl?: string;
   outputUrl?: string;
+  cdnUrl?: string;
+  cosUrl?: string;
   previewUrl?: string;
   posterUrl?: string;
   downloadableUrl?: string;
   cosKey?: string;
   thumbnailCosKey?: string;
   posterCosKey?: string;
+  thumbnailKey?: string;
+  posterKey?: string;
+  previewKey?: string;
   size?: number;
   mimeType?: string;
   width?: number;
@@ -32,6 +37,9 @@ export type Asset = {
   storageBucket?: string;
   storageRegion?: string;
   storageFileType?: string;
+  originalStorageProvider?: string;
+  previewStorageProvider?: string;
+  publicDeliveryProvider?: string;
   providerId?: string;
   modelId?: string;
   nodeId?: string;

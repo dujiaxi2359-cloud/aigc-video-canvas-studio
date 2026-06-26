@@ -1151,6 +1151,10 @@ async function markVideoTaskStage(input: {
   providerStatus?: string;
   providerVideoUrl?: string;
   outputUrl?: string;
+  cdnUrl?: string;
+  posterUrl?: string;
+  previewUrl?: string;
+  downloadableUrl?: string;
   cosKey?: string;
   fileSize?: number;
   mimeType?: string;
@@ -1167,6 +1171,10 @@ async function markVideoTaskStage(input: {
     providerStatus: input.providerStatus,
     providerVideoUrl: input.providerVideoUrl,
     outputUrl: input.outputUrl,
+    cdnUrl: input.cdnUrl,
+    posterUrl: input.posterUrl,
+    previewUrl: input.previewUrl,
+    downloadableUrl: input.downloadableUrl,
     cosKey: input.cosKey,
     fileSize: input.fileSize,
     mimeType: input.mimeType,
@@ -1342,9 +1350,15 @@ export async function generateVideo(input: GenerateVideoRequest) {
         resolution: inputForGeneration.resolution,
         status: "success",
         outputPath: asset.localPath,
-        outputUrl: asset.url
+        outputUrl: asset.url,
+        thumbnailUrl: asset.thumbnailUrl,
+        posterUrl: asset.posterUrl,
+        previewUrl: asset.previewUrl,
+        cdnUrl: asset.cdnUrl,
+        cosUrl: asset.cosUrl,
+        downloadableUrl: asset.downloadableUrl || asset.downloadUrl
       });
-      return { status: "success" as const, outputAssetId: asset.id, outputUrl: asset.url };
+      return { status: "success" as const, outputAssetId: asset.id, outputUrl: asset.url, thumbnailUrl: asset.thumbnailUrl, posterUrl: asset.posterUrl, previewUrl: asset.previewUrl, cdnUrl: asset.cdnUrl, cosUrl: asset.cosUrl, downloadableUrl: asset.downloadableUrl || asset.downloadUrl };
     }
 
     assertModelRuntimeReady({ model, apiKey, capabilities, type: "video", inputMode: inputForGeneration.inputMode });
@@ -1578,7 +1592,7 @@ export async function generateVideo(input: GenerateVideoRequest) {
       asset = persisted.asset;
       result = {
         ...result,
-        outputUrl: persisted.cosUrl,
+        outputUrl: persisted.outputUrl,
         localPath: persisted.localPath,
         payloadSummary: {
           ...providerSummary(result),
@@ -1594,7 +1608,11 @@ export async function generateVideo(input: GenerateVideoRequest) {
         stage: "cos_uploaded",
         providerStatus: "succeeded",
         providerVideoUrl,
-        outputUrl: persisted.cosUrl,
+        outputUrl: persisted.outputUrl,
+        cdnUrl: persisted.cdnUrl,
+        posterUrl: persisted.posterUrl,
+        previewUrl: persisted.previewUrl,
+        downloadableUrl: persisted.downloadableUrl,
         cosKey: persisted.cosObjectKey,
         fileSize: persisted.fileSize,
         mimeType: persisted.mimeType,
@@ -1603,7 +1621,9 @@ export async function generateVideo(input: GenerateVideoRequest) {
           providerVideoUrl: sanitizeUrlForLog(providerVideoUrl),
           cosUploadStatus: persisted.cosUploadStatus,
           cosObjectKey: persisted.cosObjectKey,
-          finalOutputUrl: persisted.cosUrl
+          finalOutputUrl: persisted.outputUrl,
+          cdnUrl: persisted.cdnUrl,
+          cosUrl: persisted.cosUrl
         }
       });
     }
@@ -1625,6 +1645,10 @@ export async function generateVideo(input: GenerateVideoRequest) {
       providerStatus: "succeeded",
       providerVideoUrl,
       outputUrl: finalOutputUrl,
+      cdnUrl: asset.cdnUrl,
+      posterUrl: asset.posterUrl,
+      previewUrl: asset.previewUrl,
+      downloadableUrl: asset.downloadableUrl || asset.downloadUrl || finalOutputUrl,
       cosKey: asset.storageKey,
       fileSize: asset.size,
       mimeType: asset.mimeType,
@@ -1645,7 +1669,13 @@ export async function generateVideo(input: GenerateVideoRequest) {
         resolution: activeInputForGeneration.resolution,
         status: "success",
         outputPath: finalLocalPath,
-        outputUrl: finalOutputUrl
+        outputUrl: finalOutputUrl,
+        thumbnailUrl: asset.thumbnailUrl,
+        posterUrl: asset.posterUrl,
+        previewUrl: asset.previewUrl,
+        cdnUrl: asset.cdnUrl,
+        cosUrl: asset.cosUrl,
+        downloadableUrl: asset.downloadableUrl || asset.downloadUrl || finalOutputUrl
       });
     } catch (historyError) {
       throw new ProviderError(
@@ -1668,6 +1698,10 @@ export async function generateVideo(input: GenerateVideoRequest) {
       providerStatus: "succeeded",
       providerVideoUrl,
       outputUrl: finalOutputUrl,
+      cdnUrl: asset.cdnUrl,
+      posterUrl: asset.posterUrl,
+      previewUrl: asset.previewUrl,
+      downloadableUrl: asset.downloadableUrl || asset.downloadUrl || finalOutputUrl,
       cosKey: asset.storageKey,
       fileSize: asset.size,
       mimeType: asset.mimeType,
@@ -1679,7 +1713,12 @@ export async function generateVideo(input: GenerateVideoRequest) {
         nodeId: activeInputForGeneration.nodeId,
         outputUrl: finalOutputUrl,
         outputAssetId: asset.id,
-        downloadableUrl: asset.downloadUrl ?? finalOutputUrl
+        cdnUrl: asset.cdnUrl,
+        cosUrl: asset.cosUrl,
+        posterUrl: asset.posterUrl,
+        previewUrl: asset.previewUrl,
+        thumbnailUrl: asset.thumbnailUrl,
+        downloadableUrl: asset.downloadableUrl || asset.downloadUrl || finalOutputUrl
       });
     } catch (canvasError) {
       throw new ProviderError(
@@ -1703,6 +1742,10 @@ export async function generateVideo(input: GenerateVideoRequest) {
       providerStatus: "succeeded",
       providerVideoUrl,
       outputUrl: finalOutputUrl,
+      cdnUrl: asset.cdnUrl,
+      posterUrl: asset.posterUrl,
+      previewUrl: asset.previewUrl,
+      downloadableUrl: asset.downloadableUrl || asset.downloadUrl || finalOutputUrl,
       cosKey: asset.storageKey,
       fileSize: asset.size,
       mimeType: asset.mimeType,
@@ -1720,10 +1763,13 @@ export async function generateVideo(input: GenerateVideoRequest) {
         cosObjectKey: asset.storageKey,
         finalOutputUrl,
         outputUrl: finalOutputUrl,
+        cdnUrl: asset.cdnUrl,
+        cosUrl: asset.cosUrl,
+        downloadableUrl: asset.downloadableUrl || asset.downloadUrl || finalOutputUrl,
         canvasUpdated: true
       }
     });
-    return { status: "success" as const, outputAssetId: asset.id, outputUrl: finalOutputUrl, payloadSummary };
+    return { status: "success" as const, outputAssetId: asset.id, outputUrl: finalOutputUrl, thumbnailUrl: asset.thumbnailUrl, posterUrl: asset.posterUrl, previewUrl: asset.previewUrl, cdnUrl: asset.cdnUrl, cosUrl: asset.cosUrl, downloadableUrl: asset.downloadableUrl || asset.downloadUrl || finalOutputUrl, payloadSummary };
   } catch (error) {
     const meta = providerErrorMeta(model.provider_id, error);
     const routingSummary = videoRoute ? {
@@ -1884,9 +1930,14 @@ export async function generateImage(input: GenerateImageRequest) {
         aspectRatio: inputForGeneration.aspectRatio,
         status: "success",
         outputPath: asset.localPath,
-        outputUrl: asset.url
+        outputUrl: asset.url,
+        thumbnailUrl: asset.thumbnailUrl,
+        previewUrl: asset.previewUrl,
+        cdnUrl: asset.cdnUrl,
+        cosUrl: asset.cosUrl,
+        downloadableUrl: asset.downloadableUrl || asset.downloadUrl
       });
-      return { status: "success" as const, outputAssetId: asset.id, outputUrl: asset.url };
+      return { status: "success" as const, outputAssetId: asset.id, outputUrl: asset.url, thumbnailUrl: asset.thumbnailUrl, previewUrl: asset.previewUrl, cdnUrl: asset.cdnUrl, cosUrl: asset.cosUrl, downloadableUrl: asset.downloadableUrl || asset.downloadUrl };
     }
 
     const providerId = model.provider_id ?? "";
@@ -1994,9 +2045,14 @@ export async function generateImage(input: GenerateImageRequest) {
       aspectRatio: activeInputForGeneration.aspectRatio,
       status: "success",
       outputPath: asset?.localPath ?? result.localPath,
-      outputUrl: asset?.url ?? result.outputUrl
+      outputUrl: asset?.url ?? result.outputUrl,
+      thumbnailUrl: asset?.thumbnailUrl,
+      previewUrl: asset?.previewUrl,
+      cdnUrl: asset?.cdnUrl,
+      cosUrl: asset?.cosUrl,
+      downloadableUrl: asset?.downloadableUrl || asset?.downloadUrl
     });
-    return { status: "success" as const, outputAssetId: asset?.id, outputUrl: asset?.url ?? result.outputUrl, payloadSummary };
+    return { status: "success" as const, outputAssetId: asset?.id, outputUrl: asset?.url ?? result.outputUrl, thumbnailUrl: asset?.thumbnailUrl, previewUrl: asset?.previewUrl, cdnUrl: asset?.cdnUrl, cosUrl: asset?.cosUrl, downloadableUrl: asset?.downloadableUrl || asset?.downloadUrl, payloadSummary };
   } catch (error) {
     const meta = providerErrorMeta(model.provider_id, error);
     const routingSummary = imageRoute ? {

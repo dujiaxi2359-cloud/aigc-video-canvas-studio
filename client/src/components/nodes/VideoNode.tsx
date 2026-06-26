@@ -724,7 +724,7 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
   }, [selectedVideoMode, supportedVideoCategories, videoCategory]);
   const outputUrl = absoluteUploadUrl(props.data.outputUrl);
   const outputIsVideo = Boolean(props.data.outputUrl);
-  const posterUrl = props.data.posterUrl || props.data.thumbnailUrl || props.data.previewUrl;
+  const posterUrl = props.data.posterUrl || props.data.thumbnailUrl;
   const effectiveStatus = outputIsVideo ? "success" : props.data.status;
   const frameStatus = effectiveStatus === "success" && !outputIsVideo ? "idle" : effectiveStatus;
   const frameStatusLabel = outputIsVideo
@@ -1134,6 +1134,8 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
             posterUrl: result.posterUrl ?? result.thumbnailUrl ?? previousPosterUrl,
             thumbnailUrl: result.thumbnailUrl ?? previousThumbnailUrl,
             previewUrl: result.previewUrl ?? previousPreviewUrl,
+            cdnUrl: result.cdnUrl,
+            cosUrl: result.cosUrl,
             downloadableUrl: result.downloadableUrl,
             payloadSummary: result.payloadSummary,
             aspectRatio: selectedAspectRatio ?? props.data.aspectRatio,
@@ -1290,6 +1292,9 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
       posterUrl={posterUrl}
       thumbnailUrl={props.data.thumbnailUrl}
       previewUrl={props.data.previewUrl}
+      cdnUrl={props.data.cdnUrl}
+      cosUrl={props.data.cosUrl}
+      downloadableUrl={props.data.downloadableUrl}
       aspectRatio={aspectRatioCss(displayRatio)}
       className="creation-media-preview"
       showInlineActions={false}
@@ -1308,9 +1313,9 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
     ...item,
     name: compactName(item.input.title, `${item.kind}${item.kindIndex}`),
     previewUrl: referencedImageNodeIds.has(item.input.sourceNodeId)
-      ? absoluteUploadUrl(item.input.thumbnailUrl || item.input.url)
+      ? absoluteUploadUrl(item.input.thumbnailUrl || item.input.posterUrl || item.input.previewUrl || item.input.cdnUrl || item.input.url)
       : undefined,
-    fallbackUrl: referencedImageNodeIds.has(item.input.sourceNodeId) ? absoluteUploadUrl(item.input.url) : undefined
+    fallbackUrl: referencedImageNodeIds.has(item.input.sourceNodeId) ? absoluteUploadUrl(item.input.cdnUrl || item.input.url) : undefined
   }));
   const referenceMenuItems: ReferenceMenuItem[] = referenceVisualItems.map((item) => ({
     token: item.genericToken,

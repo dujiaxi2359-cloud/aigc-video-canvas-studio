@@ -12,6 +12,12 @@ export type GenerationHistory = {
   status: "success" | "error";
   outputAssetId?: string;
   outputUrl?: string;
+  thumbnailUrl?: string;
+  posterUrl?: string;
+  previewUrl?: string;
+  cdnUrl?: string;
+  cosUrl?: string;
+  downloadableUrl?: string;
   errorMessage?: string;
   createdAt: number;
 };

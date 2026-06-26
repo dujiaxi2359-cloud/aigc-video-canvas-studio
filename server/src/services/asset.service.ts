@@ -11,11 +11,13 @@ import type { Asset, AssetFolder } from "../types/asset.js";
 import { requireRequestContext } from "./requestContext.js";
 import {
   cachedSignedCosUrl,
+  cdnUrlForCosKey,
   deleteCosFile,
   downloadCosFileToLocal,
   isCosConfigured,
   isCosLocalPath,
   normalizeStorageFileType,
+  publicDeliveryProviderForCosKey,
   storageAccessPath,
   uploadLocalFileToCos
 } from "./storage/cosStorage.service.js";
@@ -43,10 +45,18 @@ export type CreateAssetInput = {
   url: string;
   publicUrl?: string;
   downloadUrl?: string;
+  cosUrl?: string;
+  cdnUrl?: string;
+  posterUrl?: string;
+  previewUrl?: string;
+  downloadableUrl?: string;
   size?: number;
   mimeType?: string;
   duration?: number;
   thumbnailUrl?: string;
+  thumbnailKey?: string;
+  posterKey?: string;
+  previewKey?: string;
   providerId?: string;
   modelId?: string;
   nodeId?: string;
@@ -59,6 +69,9 @@ export type CreateAssetInput = {
   storageBucket?: string;
   storageRegion?: string;
   storageFileType?: string;
+  originalStorageProvider?: string;
+  previewStorageProvider?: string;
+  publicDeliveryProvider?: string;
 };
 
 const uploadRoot = () => process.env.UPLOAD_DIR ?? "./uploads";
@@ -84,6 +97,16 @@ function previewEndpointUrl(assetId: string) {
   return `/api/assets/${encodeURIComponent(assetId)}/preview`;
 }
 
+function displayUrlForStorageKey(input: { storageKey?: string; cdnUrl?: string; publicUrl?: string; url?: string; cosUrl?: string }) {
+  const derivedCdnUrl = input.cdnUrl || cdnUrlForCosKey(input.storageKey);
+  const derivedCosUrl = input.cosUrl || (input.storageKey ? storageAccessPath(input.storageKey, { disposition: "inline" }) : undefined);
+  return {
+    cdnUrl: derivedCdnUrl,
+    cosUrl: derivedCosUrl,
+    displayUrl: derivedCdnUrl || input.publicUrl || input.url || derivedCosUrl
+  };
+}
+
 function inferTypeFromPath(localPath: string): Asset["type"] {
   const ext = path.extname(localPath).toLowerCase();
   if ([".png", ".jpg", ".jpeg", ".webp", ".gif"].includes(ext)) return "image";
@@ -95,8 +118,22 @@ function inferTypeFromPath(localPath: string): Asset["type"] {
 
 function toAsset(row: AssetRow): Asset {
   const storageKey = row.storage_key as string | undefined;
-  const cosUrl = storageKey ? storageAccessPath(storageKey, { disposition: "inline" }) : undefined;
+  const urls = displayUrlForStorageKey({
+    storageKey,
+    cdnUrl: row.cdn_url,
+    publicUrl: row.public_url,
+    url: row.url,
+    cosUrl: row.cos_url
+  });
   const cosDownloadUrl = storageKey ? storageAccessPath(storageKey, { disposition: "attachment" }) : undefined;
+  const thumbnailUrl = row.thumbnail_path
+    || (row.thumbnail_key ? cdnUrlForCosKey(row.thumbnail_key) || storageAccessPath(row.thumbnail_key, { disposition: "inline" }) : undefined)
+    || (row.type === "image" ? previewEndpointUrl(row.id) : undefined);
+  const posterUrl = row.poster_url
+    || (row.poster_key ? cdnUrlForCosKey(row.poster_key) || storageAccessPath(row.poster_key, { disposition: "inline" }) : undefined);
+  const previewUrl = row.preview_url
+    || (row.preview_key ? cdnUrlForCosKey(row.preview_key) || storageAccessPath(row.preview_key, { disposition: "inline" }) : undefined);
+  const downloadableUrl = row.downloadable_url || row.download_url || cosDownloadUrl || urls.displayUrl;
   return {
     id: row.id,
     name: row.name || row.original_name,
@@ -106,21 +143,33 @@ function toAsset(row: AssetRow): Asset {
     fileName: row.file_name || path.basename(row.local_path || row.url || row.original_name),
     originalName: row.original_name,
     localPath: row.local_path,
-    url: cosUrl ?? row.url,
+    url: urls.displayUrl ?? row.url,
+    outputUrl: urls.displayUrl ?? row.url,
     publicUrl: row.public_url,
-    downloadUrl: cosDownloadUrl ?? row.download_url,
+    downloadUrl: downloadableUrl,
+    cosUrl: urls.cosUrl,
+    cdnUrl: urls.cdnUrl,
+    posterUrl,
+    previewUrl,
+    downloadableUrl,
     size: row.size,
     mimeType: row.mime_type,
     width: row.width,
     height: row.height,
     duration: row.duration,
     fps: row.fps,
-    thumbnailUrl: row.thumbnail_path || (row.type === "image" ? previewEndpointUrl(row.id) : undefined),
+    thumbnailUrl,
+    thumbnailKey: row.thumbnail_key,
+    posterKey: row.poster_key,
+    previewKey: row.preview_key,
     storageProvider: row.storage_provider,
     storageKey,
     storageBucket: row.storage_bucket,
     storageRegion: row.storage_region,
     storageFileType: row.storage_file_type,
+    originalStorageProvider: row.original_storage_provider,
+    previewStorageProvider: row.preview_storage_provider,
+    publicDeliveryProvider: row.public_delivery_provider || publicDeliveryProviderForCosKey(storageKey),
     providerId: row.provider_id,
     modelId: row.model_id,
     nodeId: row.node_id,
@@ -136,7 +185,7 @@ function toAsset(row: AssetRow): Asset {
 async function hydrateCosAsset(asset: Asset): Promise<Asset> {
   if (!asset.storageKey || !isCosConfigured()) return asset;
   try {
-    const [url, downloadUrl] = await Promise.all([
+    const [cosUrl, downloadUrl] = await Promise.all([
       cachedSignedCosUrl({ fileKey: asset.storageKey, expiresSeconds: 1800 }),
       cachedSignedCosUrl({
         fileKey: asset.storageKey,
@@ -146,8 +195,11 @@ async function hydrateCosAsset(asset: Asset): Promise<Asset> {
     ]);
     return {
       ...asset,
-      url,
+      url: asset.cdnUrl || asset.publicUrl || asset.url || cosUrl,
+      outputUrl: asset.cdnUrl || asset.outputUrl || asset.publicUrl || asset.url || cosUrl,
+      cosUrl: asset.cosUrl || cosUrl,
       downloadUrl,
+      downloadableUrl: asset.downloadableUrl || downloadUrl,
       thumbnailUrl: asset.thumbnailUrl || (asset.type === "image" ? previewEndpointUrl(asset.id) : undefined)
     };
   } catch {
@@ -295,6 +347,11 @@ export async function createAsset(input: CreateAssetInput & { id?: string }) {
   let localPath = input.localPath;
   let url = input.url;
   let downloadUrl = input.downloadUrl;
+  let cosUrl = input.cosUrl;
+  let cdnUrl = input.cdnUrl;
+  let posterUrl = input.posterUrl;
+  let previewUrl = input.previewUrl;
+  let downloadableUrl = input.downloadableUrl;
   let storageProvider = input.storageProvider;
   let storageKey = input.storageKey;
   let storageBucket = input.storageBucket;
@@ -327,17 +384,29 @@ export async function createAsset(input: CreateAssetInput & { id?: string }) {
     storageRegion = stored.region;
     storageFileType = targetStorageFileType;
     localPath = stored.localPath;
-    url = stored.url;
+    cosUrl = stored.url;
+    cdnUrl = cdnUrlForCosKey(stored.fileKey);
+    url = cdnUrl || stored.url;
     downloadUrl = stored.downloadUrl;
+    downloadableUrl = downloadableUrl || stored.downloadUrl;
+  }
+  if (storageKey) {
+    cosUrl = cosUrl || storageAccessPath(storageKey, { disposition: "inline" });
+    cdnUrl = cdnUrl || cdnUrlForCosKey(storageKey);
+    url = cdnUrl || input.publicUrl || url || cosUrl;
+    downloadUrl = downloadUrl || storageAccessPath(storageKey, { disposition: "attachment" });
+    downloadableUrl = downloadableUrl || downloadUrl;
   }
 
   await db.run(
     `INSERT INTO assets (
       id, workspace_id, owner_user_id, name, type, source, folder_id, file_name, original_name, local_path, url, public_url, download_url,
+      cos_url, cdn_url, poster_url, preview_url, downloadable_url, thumbnail_key, poster_key, preview_key,
+      original_storage_provider, preview_storage_provider, public_delivery_provider,
       size, mime_type, width, height, duration, fps, thumbnail_path, storage_provider, storage_key, storage_bucket, storage_region, storage_file_type,
       provider_id, model_id, node_id, project_id,
       prompt, negative_prompt, generation_params_json, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     id,
     workspace.id,
     user.id,
@@ -351,6 +420,17 @@ export async function createAsset(input: CreateAssetInput & { id?: string }) {
     url,
     input.publicUrl,
     downloadUrl ?? `/api/assets/${id}/download`,
+    cosUrl,
+    cdnUrl,
+    posterUrl,
+    previewUrl,
+    downloadableUrl,
+    input.thumbnailKey,
+    input.posterKey,
+    input.previewKey,
+    input.originalStorageProvider || storageProvider,
+    input.previewStorageProvider,
+    input.publicDeliveryProvider || publicDeliveryProviderForCosKey(storageKey),
     metadata.fileSize ?? input.size,
     input.mimeType ?? contentTypeForFilename(fileName),
     metadata.width,

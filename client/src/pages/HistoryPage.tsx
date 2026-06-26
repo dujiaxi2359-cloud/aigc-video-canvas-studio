@@ -4,6 +4,7 @@ import { downloadAsset } from "../services/downloadApi";
 import { useHistoryStore } from "../store/historyStore";
 import type { GenerationHistory } from "../types/history";
 import { absoluteUploadUrl } from "../utils/file";
+import { imageDisplayUrl, imageOriginalUrl, mediaDownloadUrl, videoPlayableUrl, videoPosterUrl } from "../utils/mediaUrls";
 import { formatTime } from "../utils/time";
 
 type Filter = "all" | "image" | "video";
@@ -35,10 +36,11 @@ export function HistoryPage() {
   }, [filter, histories, keyword]);
 
   async function downloadHistory(item: GenerationHistory) {
-    if (!item.outputUrl) return;
-    const ext = /\.(png|jpe?g|webp|mp4|webm|mov|m4v)(\?|$)/i.exec(item.outputUrl)?.[1] ?? "bin";
+    const downloadUrl = mediaDownloadUrl(item);
+    if (!downloadUrl) return;
+    const ext = /\.(png|jpe?g|webp|mp4|webm|mov|m4v)(\?|$)/i.exec(downloadUrl)?.[1] ?? "bin";
     try {
-      await downloadAsset(item.outputUrl, `aigc_history_${item.modelDisplayName || item.id}.${ext}`);
+      await downloadAsset(downloadUrl, `aigc_history_${item.modelDisplayName || item.id}.${ext}`);
       setStatus("下载已开始");
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "下载失败");
@@ -71,12 +73,12 @@ export function HistoryPage() {
           <div className="mt-6 grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-4">
             {visible.map((item) => {
               const kind = historyKind(item);
-              const source = item.outputUrl ? absoluteUploadUrl(item.outputUrl) : "";
-              const poster = absoluteUploadUrl(item.posterUrl || item.thumbnailUrl || item.previewUrl);
+              const source = absoluteUploadUrl(kind === "video" ? videoPlayableUrl(item) : imageOriginalUrl(item));
+              const poster = absoluteUploadUrl(videoPosterUrl(item));
               return (
                 <article key={item.id} className="group overflow-hidden rounded-[8px] border border-white/[0.1] bg-[#19191a]">
                   <div className="relative aspect-[4/3] overflow-hidden bg-[#242426]">
-                    {source && kind === "image" ? <img src={absoluteUploadUrl(item.thumbnailUrl || item.previewUrl || item.outputUrl)} alt="" className="h-full w-full object-cover" loading="lazy" decoding="async" /> : null}
+                    {source && kind === "image" ? <img src={absoluteUploadUrl(imageDisplayUrl(item))} alt="" className="h-full w-full object-cover" loading="lazy" decoding="async" /> : null}
                     {source && kind === "video" ? (
                       <div className="relative h-full w-full">
                         {poster ? <img src={poster} alt="" className="h-full w-full object-cover" loading="lazy" decoding="async" /> : <div className="grid h-full place-items-center text-white/24"><Video size={32} /></div>}
