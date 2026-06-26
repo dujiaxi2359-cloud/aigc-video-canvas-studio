@@ -1171,6 +1171,10 @@ function logVideoTask(event: string, payload: Record<string, unknown>) {
   console.info(`[video-task:${event}]`, JSON.stringify(payload));
 }
 
+function logCustomerVideo(event: string, payload: Record<string, unknown>) {
+  console.info(`[customer-video:${event}]`, JSON.stringify(payload));
+}
+
 async function markVideoTaskStage(input: {
   id?: string;
   status: string;
@@ -1182,6 +1186,11 @@ async function markVideoTaskStage(input: {
   projectId?: string;
   providerId?: string;
   modelId?: string;
+  modelConfigId?: string;
+  upstreamModelId?: string;
+  apiBaseUrl?: string;
+  encryptedApiKeySnapshot?: string;
+  capabilitiesJsonSnapshot?: string;
   providerVideoUrl?: string;
   outputUrl?: string;
   cdnUrl?: string;
@@ -1209,6 +1218,8 @@ async function markVideoTaskStage(input: {
     canvasNodeId: input.canvasNodeId,
     providerId: input.providerId,
     modelId: input.modelId,
+    modelConfigId: input.modelConfigId,
+    upstreamModelId: input.upstreamModelId,
     status: input.status,
     providerStatus: input.providerStatus,
     progress: input.progress,
@@ -1223,6 +1234,11 @@ async function markVideoTaskStage(input: {
     projectId: input.projectId,
     providerId: input.providerId,
     modelId: input.modelId,
+    modelConfigId: input.modelConfigId,
+    upstreamModelId: input.upstreamModelId,
+    apiBaseUrl: input.apiBaseUrl,
+    encryptedApiKeySnapshot: input.encryptedApiKeySnapshot,
+    capabilitiesJsonSnapshot: input.capabilitiesJsonSnapshot,
     providerVideoUrl: input.providerVideoUrl,
     outputUrl: input.outputUrl,
     cdnUrl: input.cdnUrl,
@@ -1299,13 +1315,56 @@ async function findModelForVideoTask(task: any, result: Record<string, unknown>)
   const db = await getDb();
   const { workspace } = requireRequestContext();
   const candidateIds = [
+    stringFrom(task.model_config_id),
     stringFrom(task.model_id),
     stringFrom(result.modelConfigId),
-    stringFrom(result.model_config_id)
+    stringFrom(result.model_config_id),
+    stringFrom(objectFrom(result.modelConfigSnapshot).id),
+    stringFrom(objectFrom(result.modelConfigSnapshot).modelConfigId)
   ].filter(Boolean) as string[];
   for (const id of candidateIds) {
     const row = await getInternalModelConfig(id);
     if (row) return row;
+  }
+  const snapshotCapabilities = stringFrom(task.capabilities_json_snapshot)
+    ?? stringFrom(result.capabilitiesJsonSnapshot)
+    ?? stringFrom(objectFrom(result.modelConfigSnapshot).capabilitiesJson);
+  const snapshotApiBaseUrl = stringFrom(task.api_base_url)
+    ?? stringFrom(result.apiBaseUrl)
+    ?? stringFrom(objectFrom(result.modelConfigSnapshot).apiBaseUrl);
+  const snapshotEncryptedKey = stringFrom(task.encrypted_api_key_snapshot)
+    ?? stringFrom(result.encryptedApiKeySnapshot)
+    ?? stringFrom(objectFrom(result.modelConfigSnapshot).encryptedApiKey);
+  const snapshotModelConfigId = stringFrom(task.model_config_id)
+    ?? stringFrom(result.modelConfigId)
+    ?? stringFrom(objectFrom(result.modelConfigSnapshot).id)
+    ?? stringFrom(objectFrom(result.modelConfigSnapshot).modelConfigId);
+  if (snapshotCapabilities && snapshotApiBaseUrl && snapshotEncryptedKey) {
+    const snapshotModelName = stringFrom(task.upstream_model_id)
+      ?? stringFrom(result.upstreamModelId)
+      ?? stringFrom(objectFrom(result.modelConfigSnapshot).upstreamModelId)
+      ?? stringFrom(task.model_id)
+      ?? stringFrom(result.modelId)
+      ?? stringFrom(result.modelName)
+      ?? "video-model";
+    return {
+      id: snapshotModelConfigId ?? stringFrom(task.model_id) ?? snapshotModelName,
+      workspace_id: task.workspace_id ?? workspace.id,
+      created_by_user_id: task.user_id,
+      provider_id: stringFrom(task.provider_id) ?? stringFrom(result.provider) ?? "openai-video",
+      provider: stringFrom(result.providerName) ?? stringFrom(result.provider) ?? "video",
+      category: "video",
+      display_name: stringFrom(result.displayName) ?? snapshotModelName,
+      api_base_url: snapshotApiBaseUrl,
+      requires_api_base_url: 1,
+      encrypted_api_key: snapshotEncryptedKey,
+      model_name: snapshotModelName,
+      model_type: "video",
+      enabled: 1,
+      capabilities_json: snapshotCapabilities,
+      created_at: task.created_at,
+      updated_at: task.updated_at
+    };
   }
   const providerId = stringFrom(task.provider_id) ?? stringFrom(result.provider);
   const modelName = stringFrom(task.model_id) ?? stringFrom(result.modelId) ?? stringFrom(result.modelName) ?? stringFrom(result.model);
@@ -1345,7 +1404,11 @@ export async function syncVideoTaskUpstream(input: { localTaskId?: string; provi
   const model = await findModelForVideoTask(task, result);
   if (!model) throw new ProviderError("MODEL_NOT_FOUND", "未找到该任务对应的视频模型配置，无法同步上游结果。");
 
-  const capabilities = normalizeVideoCapabilities(JSON.parse(model.capabilities_json) as ModelCapabilities, model.provider_id, model.model_name);
+  const capabilitiesJsonForPoll = stringFrom(task.capabilities_json_snapshot) ?? model.capabilities_json;
+  const apiBaseUrlForPoll = stringFrom(task.api_base_url) ?? apiBaseUrlFor(model);
+  const encryptedApiKeyForPoll = stringFrom(task.encrypted_api_key_snapshot) ?? model.encrypted_api_key;
+  const upstreamModelForPoll = stringFrom(task.upstream_model_id);
+  const capabilities = normalizeVideoCapabilities(JSON.parse(capabilitiesJsonForPoll) as ModelCapabilities, model.provider_id, model.model_name);
   const request: GenerateVideoRequest = {
     nodeId: stringFrom(task.canvas_node_id) ?? stringFrom(input.canvasNodeId) ?? "",
     projectId: stringFrom(task.project_id),
@@ -1362,16 +1425,29 @@ export async function syncVideoTaskUpstream(input: { localTaskId?: string; provi
     resolution: "720p",
     generateCount: 1
   };
-  const apiKey = model.encrypted_api_key ? decryptApiKey(model.encrypted_api_key) : "";
+  const apiKey = encryptedApiKeyForPoll ? decryptApiKey(encryptedApiKeyForPoll) : "";
   const config = validateVideoRequestConfig({
     ...request,
     apiKey,
-    apiBaseUrl: apiBaseUrlFor(model),
-    modelName: upstreamModelName(model, capabilities, model.model_name),
+    apiBaseUrl: apiBaseUrlForPoll,
+    modelName: upstreamModelForPoll ?? upstreamModelName(model, capabilities, model.model_name),
     providerId: model.provider_id,
     videoMode: "text_to_video",
     capabilities
   }, capabilities);
+  logCustomerVideo("poll", {
+    userId: task.user_id,
+    workspaceId: task.workspace_id,
+    projectId: task.project_id,
+    canvasNodeId: task.canvas_node_id,
+    providerId: model.provider_id,
+    modelId: task.model_id,
+    modelConfigId: task.model_config_id ?? model.id,
+    providerTaskId,
+    usesTaskKeySnapshot: Boolean(task.encrypted_api_key_snapshot),
+    usesTaskBaseUrlSnapshot: Boolean(task.api_base_url),
+    usesTaskCapabilitiesSnapshot: Boolean(task.capabilities_json_snapshot)
+  });
   const pollUrl = materializeGenericPollUrl(config, providerTaskId);
   const headers: Record<string, string> = { Accept: "application/json", ...(config.pollHeaders ?? {}) };
   if (config.authType === "bearer" && apiKey) headers.Authorization = `Bearer ${apiKey}`;
@@ -1421,6 +1497,21 @@ export async function syncVideoTaskUpstream(input: { localTaskId?: string; provi
     });
     logVideoTask("provider-success", { localTaskId, providerTaskId, providerStatus, providerVideoUrl: sanitizeUrlForLog(providerVideoUrl) });
     logVideoTask("canvas-success-sync", { localTaskId, canvasNodeId, outputUrl: sanitizeUrlForLog(finalized.outputUrl) });
+    logCustomerVideo("poll-success", {
+      userId: task.user_id,
+      workspaceId: task.workspace_id,
+      projectId,
+      canvasNodeId,
+      providerTaskId,
+      videoUrl: sanitizeUrlForLog(providerVideoUrl)
+    });
+    logCustomerVideo("finalize", {
+      taskId: localTaskId,
+      canvasNodeId,
+      projectId,
+      workspaceId: task.workspace_id,
+      videoUrl: sanitizeUrlForLog(finalized.outputUrl)
+    });
     return { status: "succeeded", providerTaskId, providerStatus, providerVideoUrl, outputUrl: providerVideoUrl, progress: 100, rawResponse };
   }
 
@@ -1740,6 +1831,13 @@ export async function generateVideo(input: GenerateVideoRequest) {
       capabilities,
       qualityMode: inputForGeneration.qualityMode ?? "full_quality"
     };
+    const videoTaskConfigSnapshot = {
+      modelConfigId: model.id,
+      upstreamModelId,
+      apiBaseUrl: apiBaseUrlFor(model),
+      encryptedApiKeySnapshot: model.encrypted_api_key,
+      capabilitiesJsonSnapshot: model.capabilities_json
+    };
     let activeModel = model;
     let activeInputForGeneration = inputForGeneration;
     let preflightSummary = buildPayloadSummary({
@@ -1794,6 +1892,7 @@ export async function generateVideo(input: GenerateVideoRequest) {
         projectId: inputForGeneration.projectId,
         providerId,
         modelId: modelName,
+        ...videoTaskConfigSnapshot,
         progress: 0,
         result: {
           provider: providerId,
@@ -1828,6 +1927,7 @@ export async function generateVideo(input: GenerateVideoRequest) {
         projectId: inputForGeneration.projectId,
         providerId,
         modelId: modelName,
+        ...videoTaskConfigSnapshot,
         progress: createdProgress,
         rawCreateResponse: result.rawResponse,
         result: {
@@ -1870,6 +1970,7 @@ export async function generateVideo(input: GenerateVideoRequest) {
           projectId: inputForGeneration.projectId,
           providerId,
           modelId: modelName,
+          ...videoTaskConfigSnapshot,
           progress: createdProgress,
           result: {
             ...payloadSummary,
@@ -1916,6 +2017,11 @@ export async function generateVideo(input: GenerateVideoRequest) {
       projectId: activeInputForGeneration.projectId,
       providerId: activeModel.provider_id ?? "",
       modelId: activeModel.model_name ?? activeModel.id,
+      modelConfigId: activeModel.id,
+      upstreamModelId: upstreamModelName(activeModel, capabilities, activeModel.model_name),
+      apiBaseUrl: apiBaseUrlFor(activeModel),
+      encryptedApiKeySnapshot: activeModel.encrypted_api_key,
+      capabilitiesJsonSnapshot: activeModel.capabilities_json,
       progress: 85,
       result: {
         provider: activeModel.provider_id ?? "",
@@ -2417,6 +2523,11 @@ export async function generateVideo(input: GenerateVideoRequest) {
           projectId: input.projectId,
           providerId: model.provider_id ?? "",
           modelId: model.model_name ?? model.id,
+          modelConfigId: model.id,
+          upstreamModelId: upstreamModelName(model, capabilities, model.model_name),
+          apiBaseUrl: apiBaseUrlFor(model),
+          encryptedApiKeySnapshot: model.encrypted_api_key,
+          capabilitiesJsonSnapshot: model.capabilities_json,
           providerVideoUrl,
           outputUrl: finalOutputUrl,
           previewUrl: finalOutputUrl,
@@ -2466,6 +2577,11 @@ export async function generateVideo(input: GenerateVideoRequest) {
         projectId: input.projectId,
         providerId: model.provider_id ?? "",
         modelId: model.model_name ?? model.id,
+        modelConfigId: model.id,
+        upstreamModelId: upstreamModelName(model, capabilities, model.model_name),
+        apiBaseUrl: apiBaseUrlFor(model),
+        encryptedApiKeySnapshot: model.encrypted_api_key,
+        capabilitiesJsonSnapshot: model.capabilities_json,
         progress: 35,
         result: {
           ...details,
@@ -2519,6 +2635,11 @@ export async function generateVideo(input: GenerateVideoRequest) {
       projectId: input.projectId,
       providerId: model.provider_id ?? "",
       modelId: model.model_name ?? model.id,
+      modelConfigId: model.id,
+      upstreamModelId: upstreamModelName(model, capabilities, model.model_name),
+      apiBaseUrl: apiBaseUrlFor(model),
+      encryptedApiKeySnapshot: model.encrypted_api_key,
+      capabilitiesJsonSnapshot: model.capabilities_json,
       failedStage,
       errorCode: meta.errorCode,
       errorMessage: meta.errorMessage,

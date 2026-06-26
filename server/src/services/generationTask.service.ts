@@ -11,6 +11,11 @@ interface GenerationTaskRow {
   project_id?: string;
   provider_id?: string;
   model_id?: string;
+  model_config_id?: string;
+  upstream_model_id?: string;
+  api_base_url?: string;
+  encrypted_api_key_snapshot?: string;
+  capabilities_json_snapshot?: string;
   provider_video_url?: string;
   output_url?: string;
   cdn_url?: string;
@@ -45,6 +50,9 @@ function toGenerationTask(row: GenerationTaskRow) {
     projectId: row.project_id,
     providerId: row.provider_id,
     modelId: row.model_id,
+    modelConfigId: row.model_config_id,
+    upstreamModelId: row.upstream_model_id,
+    apiBaseUrl: row.api_base_url,
     providerVideoUrl: row.provider_video_url,
     outputUrl: row.output_url,
     cdnUrl: row.cdn_url,
@@ -152,6 +160,11 @@ export async function saveGenerationTask(input: {
   projectId?: string;
   providerId?: string;
   modelId?: string;
+  modelConfigId?: string;
+  upstreamModelId?: string;
+  apiBaseUrl?: string;
+  encryptedApiKeySnapshot?: string;
+  capabilitiesJsonSnapshot?: string;
   providerVideoUrl?: string;
   outputUrl?: string;
   cdnUrl?: string;
@@ -194,11 +207,12 @@ export async function saveGenerationTask(input: {
   await db.run(
     `INSERT INTO generation_tasks (
        id, workspace_id, user_id, status, provider_status, provider_task_id, canvas_node_id, project_id, provider_id, model_id,
+       model_config_id, upstream_model_id, api_base_url, encrypted_api_key_snapshot, capabilities_json_snapshot,
        provider_video_url, output_url, cdn_url, poster_url, preview_url, downloadable_url, cos_key, file_size, mime_type,
        completed_at, finished_at, failed_stage, error_code, storage_status, storage_error, raw_create_response, repaired_at,
        progress, result_json, error_message, created_at, updated_at
      )
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(id) DO UPDATE SET
        status = excluded.status,
        provider_status = excluded.provider_status,
@@ -207,6 +221,11 @@ export async function saveGenerationTask(input: {
        project_id = excluded.project_id,
        provider_id = excluded.provider_id,
        model_id = excluded.model_id,
+       model_config_id = excluded.model_config_id,
+       upstream_model_id = excluded.upstream_model_id,
+       api_base_url = excluded.api_base_url,
+       encrypted_api_key_snapshot = excluded.encrypted_api_key_snapshot,
+       capabilities_json_snapshot = excluded.capabilities_json_snapshot,
        provider_video_url = excluded.provider_video_url,
        output_url = excluded.output_url,
        cdn_url = excluded.cdn_url,
@@ -238,6 +257,11 @@ export async function saveGenerationTask(input: {
     input.projectId ?? existing?.project_id,
     input.providerId ?? existing?.provider_id,
     input.modelId ?? existing?.model_id,
+    input.modelConfigId ?? existing?.model_config_id,
+    input.upstreamModelId ?? existing?.upstream_model_id,
+    input.apiBaseUrl ?? existing?.api_base_url,
+    input.encryptedApiKeySnapshot ?? existing?.encrypted_api_key_snapshot,
+    input.capabilitiesJsonSnapshot ?? existing?.capabilities_json_snapshot,
     input.providerVideoUrl ?? existing?.provider_video_url,
     input.outputUrl ?? existing?.output_url,
     input.cdnUrl ?? existing?.cdn_url,

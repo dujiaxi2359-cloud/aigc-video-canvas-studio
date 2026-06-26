@@ -689,6 +689,11 @@ export async function getDb() {
   await ensureColumn("generation_tasks", "project_id", "ALTER TABLE generation_tasks ADD COLUMN project_id TEXT");
   await ensureColumn("generation_tasks", "provider_id", "ALTER TABLE generation_tasks ADD COLUMN provider_id TEXT");
   await ensureColumn("generation_tasks", "model_id", "ALTER TABLE generation_tasks ADD COLUMN model_id TEXT");
+  await ensureColumn("generation_tasks", "model_config_id", "ALTER TABLE generation_tasks ADD COLUMN model_config_id TEXT");
+  await ensureColumn("generation_tasks", "upstream_model_id", "ALTER TABLE generation_tasks ADD COLUMN upstream_model_id TEXT");
+  await ensureColumn("generation_tasks", "api_base_url", "ALTER TABLE generation_tasks ADD COLUMN api_base_url TEXT");
+  await ensureColumn("generation_tasks", "encrypted_api_key_snapshot", "ALTER TABLE generation_tasks ADD COLUMN encrypted_api_key_snapshot TEXT");
+  await ensureColumn("generation_tasks", "capabilities_json_snapshot", "ALTER TABLE generation_tasks ADD COLUMN capabilities_json_snapshot TEXT");
   await ensureColumn("generation_tasks", "provider_video_url", "ALTER TABLE generation_tasks ADD COLUMN provider_video_url TEXT");
   await ensureColumn("generation_tasks", "output_url", "ALTER TABLE generation_tasks ADD COLUMN output_url TEXT");
   await ensureColumn("generation_tasks", "cdn_url", "ALTER TABLE generation_tasks ADD COLUMN cdn_url TEXT");
