@@ -1458,7 +1458,7 @@ export async function syncVideoTaskUpstream(input: { localTaskId?: string; provi
     return { status: "processing", providerTaskId, providerStatus, progress, rawResponse };
   }
 
-  if (isRunningStatus(providerStatus) || response.ok) {
+  if (isRunningStatus(providerStatus)) {
     await markVideoTaskStage({
       id: localTaskId,
       status: "processing",
