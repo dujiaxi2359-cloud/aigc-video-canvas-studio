@@ -6,8 +6,9 @@ import { createId } from "../utils/id.js";
 import { now } from "../utils/time.js";
 import { maskEncryptedApiKey } from "../services/encryption.service.js";
 import { addHistory } from "../services/history.service.js";
-import { persistGeneratedVideoToCOS, updateCanvasNodeWithGeneratedVideo } from "../services/generatedVideoPersistence.service.js";
+import { persistGeneratedVideoToCOS } from "../services/generatedVideoPersistence.service.js";
 import { saveGenerationTask } from "../services/generationTask.service.js";
+import { finalizeVideoResult } from "../services/videoTaskFinalizer.service.js";
 import { runWithRequestContext } from "../services/requestContext.js";
 import { isProviderError, rawErrorMessage } from "../utils/providerErrors.js";
 import { sanitizeUrlForLog } from "../utils/videoResultExtractor.js";
@@ -318,17 +319,28 @@ export async function syncProviderVideoResult(req: Request, res: Response) {
         stage: "history_saved",
         progress: 96
       });
-      await updateCanvasNodeWithGeneratedVideo({
+      await finalizeVideoResult({
+        taskId: task.id,
+        providerTaskId: task.provider_task_id ?? task.id,
         projectId,
-        nodeId,
+        canvasNodeId: nodeId,
+        providerId,
+        modelId,
+        providerVideoUrl,
         outputUrl: persisted.outputUrl,
         outputAssetId: persisted.asset.id,
         cdnUrl: persisted.cdnUrl,
         cosUrl: persisted.cosUrl,
         posterUrl: persisted.posterUrl,
-        previewUrl: persisted.previewUrl,
         thumbnailUrl: persisted.thumbnailUrl,
-        downloadableUrl: persisted.downloadableUrl || persisted.asset.downloadUrl || persisted.outputUrl
+        previewUrl: persisted.previewUrl,
+        downloadableUrl: persisted.downloadableUrl || persisted.asset.downloadUrl || persisted.outputUrl,
+        providerResult: {
+          manualRepair: true,
+          cosUploadStatus: persisted.cosUploadStatus,
+          cosObjectKey: persisted.cosObjectKey
+        },
+        source: "admin_repair"
       });
       await saveGenerationTask({
         id: task.id,

@@ -220,6 +220,7 @@ export async function updateCanvasNodeWithGeneratedVideo(input: {
   projectId?: string;
   nodeId?: string;
   outputUrl: string;
+  providerTaskId?: string;
   outputAssetId?: string;
   cdnUrl?: string;
   cosUrl?: string;
@@ -248,11 +249,12 @@ export async function updateCanvasNodeWithGeneratedVideo(input: {
       ...node,
       data: {
         ...data,
-        status: "success",
+        status: "completed",
         outputType: "video",
-        generationStatus: "succeeded",
+        generationStatus: "success",
         outputUrl: input.outputUrl,
         videoUrl: input.outputUrl,
+        providerTaskId: input.providerTaskId ?? data.providerTaskId,
         cdnUrl: input.cdnUrl,
         cosUrl: input.cosUrl,
         posterUrl: input.posterUrl,
@@ -263,7 +265,9 @@ export async function updateCanvasNodeWithGeneratedVideo(input: {
         progress: 100,
         loading: false,
         error: undefined,
-        errorMessage: undefined
+        errorMessage: undefined,
+        diagnosisError: undefined,
+        debugMessage: undefined
       }
     };
   });

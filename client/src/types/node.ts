@@ -145,7 +145,7 @@ export type VideoNodeData = {
   resolution?: string;
   duration?: number;
   generateCount: number;
-  status: "idle" | "generating" | "success" | "error";
+  status: "idle" | "generating" | "success" | "completed" | "error";
   generationStartedAt?: number;
   clientRequestId?: string;
   providerTaskId?: string;
@@ -153,6 +153,7 @@ export type VideoNodeData = {
   assetId?: string;
   outputAssetId?: string;
   outputUrl?: string;
+  videoUrl?: string;
   thumbnailUrl?: string;
   posterUrl?: string;
   previewUrl?: string;

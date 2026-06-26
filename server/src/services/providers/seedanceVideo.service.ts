@@ -900,8 +900,13 @@ function materializePollEndpoint(config: VideoRequestConfig | undefined, createE
   const encoded = encodeURIComponent(taskIdValue);
   const template = config.pollEndpoint || "";
   if (!template) return seedancePollEndpoint(createEndpoint, taskIdValue);
-  const hasPlaceholder = /\{(?:taskId|id)\}/.test(template);
-  const replaced = template.replace(/\{taskId\}/g, encoded).replace(/\{id\}/g, encoded);
+  const hasPlaceholder = /\{(?:taskId|task_id|id|video_id|job_id)\}/.test(template);
+  const replaced = template
+    .replace(/\{taskId\}/g, encoded)
+    .replace(/\{task_id\}/g, encoded)
+    .replace(/\{id\}/g, encoded)
+    .replace(/\{video_id\}/g, encoded)
+    .replace(/\{job_id\}/g, encoded);
   if (config.apiFamily === "agnes_video") {
     const base = new URL(config.baseUrl);
     return new URL(replaced, `${base.origin}/`).toString();

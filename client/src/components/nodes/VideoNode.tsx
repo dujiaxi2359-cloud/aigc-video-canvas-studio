@@ -369,7 +369,7 @@ function humanizeError(error: unknown) {
 
 function generateButtonLabel(status: VideoNodeData["status"]) {
   if (status === "generating") return "生成中...";
-  if (status === "success") return "重新生成";
+  if (status === "success" || status === "completed") return "重新生成";
   if (status === "error") return "重试生成";
   return "生成视频";
 }
@@ -380,7 +380,7 @@ function compactName(value?: string, fallback = "素材") {
 }
 
 function statusText(status: VideoNodeData["status"]) {
-  return { idle: "未生成", generating: "生成中", success: "已完成", error: "失败" }[status];
+  return { idle: "未生成", generating: "生成中", success: "已完成", completed: "已完成", error: "失败" }[status];
 }
 
 function PayloadSummary({ data }: { data?: Record<string, unknown> }) {
@@ -542,12 +542,13 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
     () => diagnoseVideoChannel(selectedModel, allModels, resolvedInputs.imageInputs.length > 0),
     [allModels, resolvedInputs.imageInputs.length, selectedModel]
   );
-  const effectiveChannelDiagnostic = props.data.providerTaskId && props.data.status === "generating"
+  const hasNodeVideoUrl = Boolean(props.data.videoUrl || props.data.outputUrl || props.data.previewUrl);
+  const effectiveChannelDiagnostic = (hasNodeVideoUrl || (props.data.providerTaskId && props.data.status === "generating"))
     ? { ...channelDiagnostic, whyBlocked: "" }
     : channelDiagnostic;
   const rawVisibleError = props.data.errorMessage || localError;
   const isChannelPermissionError = /通道权限问题|当前中转账号|no available channel|no available platform|channel.*permission|model.*access/i.test(rawVisibleError || "");
-  const visibleErrorMessage = props.data.providerTaskId && isChannelPermissionError ? "" : rawVisibleError;
+  const visibleErrorMessage = hasNodeVideoUrl || (props.data.providerTaskId && isChannelPermissionError) ? "" : rawVisibleError;
 
   useEffect(() => {
     if (selectedModel || !models.length) return;
@@ -771,8 +772,9 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
     const currentCategory = categoryForOfficialVideoMode(selectedVideoMode);
     if (currentCategory !== videoCategory && supportedVideoCategories.includes(currentCategory)) setVideoCategory(currentCategory);
   }, [selectedVideoMode, supportedVideoCategories, videoCategory]);
-  const outputUrl = absoluteUploadUrl(props.data.outputUrl);
-  const outputIsVideo = Boolean(props.data.outputUrl);
+  const nodeVideoUrl = props.data.videoUrl || props.data.outputUrl || props.data.previewUrl;
+  const outputUrl = absoluteUploadUrl(nodeVideoUrl);
+  const outputIsVideo = Boolean(nodeVideoUrl);
   const posterUrl = props.data.posterUrl || props.data.thumbnailUrl;
   const effectiveStatus = outputIsVideo ? "success" : props.data.status;
   const frameStatus = effectiveStatus === "success" && !outputIsVideo ? "idle" : effectiveStatus;
@@ -825,14 +827,16 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
       const currentNode = useCanvasStore.getState().nodes.find((node) => node.id === props.id);
       const currentData = currentNode?.data as VideoNodeData | undefined;
       if (currentData?.status !== "generating" || currentData.generationStartedAt !== startedAt) break;
-      if (currentData.outputUrl) {
+      const currentVideoUrl = currentData.videoUrl || currentData.outputUrl || currentData.previewUrl;
+      if (currentVideoUrl) {
         update(props.id, {
           status: "success",
           outputAssetId: currentData.outputAssetId,
-          outputUrl: currentData.outputUrl,
+          outputUrl: currentVideoUrl,
+          videoUrl: currentVideoUrl,
           posterUrl: currentData.posterUrl,
           thumbnailUrl: currentData.thumbnailUrl,
-          previewUrl: currentData.previewUrl,
+          previewUrl: currentData.previewUrl ?? currentVideoUrl,
           errorCode: undefined,
           errorMessage: undefined,
           debugMessage: undefined,
@@ -880,12 +884,12 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
           });
           continue;
         }
-        if (latest?.status === "error" && !currentData.outputUrl) {
+        if (latest?.status === "error" && !currentVideoUrl) {
           const message = latest.errorMessage || "上游任务生成失败。";
           update(props.id, {
             status: "error",
             outputAssetId: currentData.outputAssetId,
-            outputUrl: currentData.outputUrl,
+            outputUrl: currentVideoUrl,
             errorMessage: message,
             generationStartedAt: undefined,
             clientRequestId: undefined
@@ -895,7 +899,7 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
           return;
         }
         const latestTask = await generationApi.latestTask(props.id, startedAt - 5000).catch(() => undefined);
-        if (latestTask && !currentData.outputUrl) {
+        if (latestTask && !currentVideoUrl) {
           const taskUrl = latestTask.outputUrl || latestTask.videoUrl || latestTask.cdnUrl || latestTask.previewUrl || latestTask.providerVideoUrl || taskResultVideoUrl(latestTask.result);
           if (isVideoSuccessStatus(latestTask.status) && taskUrl) {
             update(props.id, {
@@ -933,7 +937,7 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
             update(props.id, {
               status: "error",
               outputAssetId: currentData.outputAssetId,
-              outputUrl: currentData.outputUrl,
+              outputUrl: currentVideoUrl,
               errorMessage: message,
               debugMessage: `上游任务 ${latestTask.id} 状态：${latestTask.status}`,
               generationStartedAt: undefined,
@@ -959,11 +963,11 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
             return;
           }
         }
-        if (Date.now() - startedAt > videoResultTimeoutMs && !currentData.outputUrl) {
+        if (Date.now() - startedAt > videoResultTimeoutMs && !currentVideoUrl) {
           update(props.id, {
             status: "error",
             outputAssetId: currentData.outputAssetId,
-            outputUrl: currentData.outputUrl,
+              outputUrl: currentVideoUrl,
             errorCode: "UPSTREAM_RESULT_NOT_RETURNED",
             errorMessage: videoResultTimeoutMessage,
             debugMessage: latest
@@ -977,11 +981,11 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
           return;
         }
       } catch {
-        if (Date.now() - startedAt > videoResultTimeoutMs && !currentData.outputUrl) {
+        if (Date.now() - startedAt > videoResultTimeoutMs && !currentVideoUrl) {
           update(props.id, {
             status: "error",
             outputAssetId: currentData.outputAssetId,
-            outputUrl: currentData.outputUrl,
+            outputUrl: currentVideoUrl,
             errorCode: "UPSTREAM_RESULT_NOT_RETURNED",
             errorMessage: videoResultTimeoutMessage,
             debugMessage: "轮询生成历史失败，且等待时间已超过保护阈值。",
@@ -1391,7 +1395,7 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
       type="video"
       assetId={props.data.outputAssetId || props.data.assetId}
       title={props.data.title}
-      outputUrl={outputIsVideo ? props.data.outputUrl : undefined}
+      outputUrl={outputIsVideo ? outputUrl : undefined}
       posterUrl={posterUrl}
       thumbnailUrl={props.data.thumbnailUrl}
       previewUrl={props.data.previewUrl}
@@ -1492,9 +1496,9 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
       <NodeToolPanel tool={activeTool} onClose={() => setActiveTool(null)} onInsert={activeTool === "assets" ? insertReferenceToken : insertPromptContext} referenceItems={referenceMenuItems} />
       {expanded && <div className="creation-detail-panel nodrag nopan">
         <div className="creation-detail-section"><strong>生成方式</strong><div className="flex flex-wrap gap-1.5">{supportedVideoCategories.map((category) => <button key={category} className={videoCategory === category ? "is-active" : ""} onClick={() => changeVideoCategory(category)}>{videoCategoryLabelForModel(selectedModel, category)}</button>)}</div></div>
-        {actualOutputInfo && props.data.status === "success" && <div className="creation-detail-copy">实际输出：{actualOutputInfo.width && actualOutputInfo.height ? `${actualOutputInfo.width}×${actualOutputInfo.height}` : "未知尺寸"}{actualOutputInfo.ratio ? ` · ${actualOutputInfo.ratio}` : ""}{actualOutputInfo.duration ? ` · ${actualOutputInfo.duration.toFixed(1)}s` : ""}</div>}
+        {actualOutputInfo && outputIsVideo && <div className="creation-detail-copy">实际输出：{actualOutputInfo.width && actualOutputInfo.height ? `${actualOutputInfo.width}×${actualOutputInfo.height}` : "未知尺寸"}{actualOutputInfo.ratio ? ` · ${actualOutputInfo.ratio}` : ""}{actualOutputInfo.duration ? ` · ${actualOutputInfo.duration.toFixed(1)}s` : ""}</div>}
         {dynamicOptions?.warningMessage && <div className="creation-detail-copy">{dynamicOptions.warningMessage}</div>}
-        {effectiveChannelDiagnostic.whyBlocked && <div className="creation-detail-copy is-error">{effectiveChannelDiagnostic.sameModelImageCapableChannels[0]
+        {!outputIsVideo && effectiveChannelDiagnostic.whyBlocked && <div className="creation-detail-copy is-error">{effectiveChannelDiagnostic.sameModelImageCapableChannels[0]
           ? <>当前通道不支持图生视频。<Button className="ml-2 h-7" variant="secondary" onClick={() => update(props.id, { modelConfigId: effectiveChannelDiagnostic.sameModelImageCapableChannels[0].id, errorCode: undefined, errorMessage: undefined })}>切换到 {effectiveChannelDiagnostic.sameModelImageCapableChannels[0].label}</Button></>
           : "当前模型暂无图生视频能力。"}</div>}
         {staleModel && <div className="creation-detail-copy is-error">当前模型配置已失效，请重新选择模型。</div>}
@@ -1502,14 +1506,14 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
         <PayloadSummary data={props.data.payloadSummary} />
         <PayloadSummary data={effectiveChannelDiagnostic as unknown as Record<string, unknown>} />
         <div className="flex flex-wrap items-center gap-2">
-          {props.data.status === "generating" && <Button type="button" variant="secondary" className="h-7 px-3 text-[11px]" onClick={() => void syncUpstreamResult()}>同步上游结果</Button>}
+          {!outputIsVideo && props.data.status === "generating" && <Button type="button" variant="secondary" className="h-7 px-3 text-[11px]" onClick={() => void syncUpstreamResult()}>同步上游结果</Button>}
           {visibleErrorMessage && <AgentAnalyzeErrorButton nodeId={props.id} errorMessage={visibleErrorMessage} nodeData={props.data as unknown as Record<string, unknown>} />}
         </div>
       </div>}
     </div>
   );
 
-  return <CreationNodeFrame id={props.id} type={props.type} selected={props.selected} title={props.data.title || "Video"} ratio={displayRatio} status={frameStatus} statusLabel={frameStatusLabel} preview={preview} toolbar={<MediaPreviewActions kind="video" url={outputIsVideo ? props.data.outputUrl : undefined} assetId={props.data.outputAssetId} title={props.data.title} nodeId={props.id} onSaved={(assetId) => update(props.id, { outputAssetId: assetId })} />} dock={dock} />;
+  return <CreationNodeFrame id={props.id} type={props.type} selected={props.selected} title={props.data.title || "Video"} ratio={displayRatio} status={frameStatus} statusLabel={frameStatusLabel} preview={preview} toolbar={<MediaPreviewActions kind="video" url={outputIsVideo ? outputUrl : undefined} assetId={props.data.outputAssetId} title={props.data.title} nodeId={props.id} onSaved={(assetId) => update(props.id, { outputAssetId: assetId })} />} dock={dock} />;
 }
 
 export const VideoNode = memo(VideoNodeComponent);

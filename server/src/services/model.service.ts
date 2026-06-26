@@ -5,6 +5,7 @@ import { createAsset } from "./asset.service.js";
 import { decryptApiKey } from "./encryption.service.js";
 import { persistGeneratedVideoToCOS, updateCanvasNodeWithGeneratedVideo, updateCanvasNodeWithGenerationFailure, updateCanvasNodeWithVideoTaskRunning } from "./generatedVideoPersistence.service.js";
 import { addHistory } from "./history.service.js";
+import { finalizeVideoResult } from "./videoTaskFinalizer.service.js";
 import { saveGenerationTask } from "./generationTask.service.js";
 import { requireRequestContext } from "./requestContext.js";
 import { modelCatalog } from "./modelCatalog.js";
@@ -1403,33 +1404,23 @@ export async function syncVideoTaskUpstream(input: { localTaskId?: string; provi
   });
 
   if ((isSuccessStatus(providerStatus) || providerVideoUrl) && providerVideoUrl) {
-    const finishedAt = Date.now();
-    await markVideoTaskStage({
-      id: localTaskId,
-      status: "succeeded",
-      stage: "sync_upstream_succeeded",
-      providerStatus,
+    const finalized = await finalizeVideoResult({
+      taskId: localTaskId,
       providerTaskId,
-      canvasNodeId,
       projectId,
+      canvasNodeId,
       providerId: model.provider_id,
       modelId: model.id,
       providerVideoUrl,
       outputUrl: providerVideoUrl,
       previewUrl: providerVideoUrl,
       downloadableUrl: providerVideoUrl,
-      completedAt: finishedAt,
-      finishedAt,
-      progress: 100,
-      result: { rawResponse, syncUpstream: true, pollUrl }
+      providerResult: { syncUpstream: true, pollUrl },
+      rawResponse,
+      source: "sync_upstream"
     });
-    await updateCanvasNodeWithGeneratedVideo({
-      projectId,
-      nodeId: canvasNodeId,
-      outputUrl: providerVideoUrl,
-      previewUrl: providerVideoUrl,
-      downloadableUrl: providerVideoUrl
-    });
+    logVideoTask("provider-success", { localTaskId, providerTaskId, providerStatus, providerVideoUrl: sanitizeUrlForLog(providerVideoUrl) });
+    logVideoTask("canvas-success-sync", { localTaskId, canvasNodeId, outputUrl: sanitizeUrlForLog(finalized.outputUrl) });
     return { status: "succeeded", providerTaskId, providerStatus, providerVideoUrl, outputUrl: providerVideoUrl, progress: 100, rawResponse };
   }
 
@@ -1922,11 +1913,8 @@ export async function generateVideo(input: GenerateVideoRequest) {
     successfulOutputUrl = providerFallbackUrl;
     generationSucceeded = Boolean(providerVideoUrl);
     const completedAtAfterProvider = Date.now();
-    await markVideoTaskStage({
-      id: taskId,
-      status: "succeeded",
-      stage: "provider_result_parsed",
-      providerStatus: "succeeded",
+    await finalizeVideoResult({
+      taskId,
       providerTaskId: taskId,
       canvasNodeId: activeInputForGeneration.nodeId,
       projectId: activeInputForGeneration.projectId,
@@ -1936,23 +1924,16 @@ export async function generateVideo(input: GenerateVideoRequest) {
       outputUrl: providerFallbackUrl,
       previewUrl: providerFallbackUrl,
       downloadableUrl: providerFallbackUrl,
-      completedAt: completedAtAfterProvider,
-      finishedAt: completedAtAfterProvider,
-      progress: 100,
-      result: {
+      providerResult: {
         parsedTaskId: taskId,
         parsedVideoUrl: providerVideoUrl ? sanitizeUrlForLog(providerVideoUrl) : undefined,
-        providerVideoUrl: providerVideoUrl ? sanitizeUrlForLog(providerVideoUrl) : undefined
-      }
+        providerVideoUrl: providerVideoUrl ? sanitizeUrlForLog(providerVideoUrl) : undefined,
+        completedAt: completedAtAfterProvider
+      },
+      rawResponse: result.rawResponse,
+      source: "normal_generate"
     });
     taskMarkedSuccess = true;
-    await updateCanvasNodeWithGeneratedVideo({
-      projectId: activeInputForGeneration.projectId,
-      nodeId: activeInputForGeneration.nodeId,
-      outputUrl: providerFallbackUrl,
-      previewUrl: providerFallbackUrl,
-      downloadableUrl: providerFallbackUrl
-    });
     canvasNodeUpdated = true;
     logVideoTask("success", {
       localTaskId: taskId,

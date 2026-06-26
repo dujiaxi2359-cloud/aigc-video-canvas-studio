@@ -18,6 +18,7 @@ import { exportRouter } from "./routes/export.routes.js";
 import { authRouter } from "./routes/auth.routes.js";
 import { inviteRouter } from "./routes/invite.routes.js";
 import { adminRouter, syncProviderVideoResult } from "./routes/admin.routes.js";
+import { startVideoTaskReconciler } from "./services/videoTaskReconciler.service.js";
 import { requireActiveWorkspace, requireAdmin, requireAssetFileAccess, requireLogin } from "./middleware/auth.js";
 import { applySmartProxyConfig } from "./utils/proxy.js";
 
@@ -156,4 +157,5 @@ app.listen(port, host, () => {
   const localIp = localIpAddress();
   console.log(`AIGC Video Canvas Studio API listening on http://${host}:${port}`);
   console.log(`Intranet backend URL: http://${localIp}:${port}`);
+  startVideoTaskReconciler();
 });
