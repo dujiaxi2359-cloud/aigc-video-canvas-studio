@@ -214,6 +214,27 @@ export type ModelConfig = {
   modelType: ModelType;
   enabled: boolean;
   capabilities: ModelCapabilities;
+  healthStatus?:
+    | "ready"
+    | "untested"
+    | "testing"
+    | "running_slow"
+    | "need_config"
+    | "channel_unavailable"
+    | "poll_endpoint_missing"
+    | "result_parse_failed"
+    | "return_to_canvas_issue"
+    | "provider_failed"
+    | "safety_blocked"
+    | "quota_or_balance_error"
+    | "unsupported"
+    | "unknown_error";
+  lastHealthCheckAt?: number;
+  lastSuccessAt?: number;
+  lastFailureAt?: number;
+  lastErrorCode?: string;
+  lastErrorMessage?: string;
+  capabilityHealth?: Record<string, unknown>;
   createdAt: number;
   updatedAt: number;
 };

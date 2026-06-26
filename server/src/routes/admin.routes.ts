@@ -12,6 +12,7 @@ import { runWithRequestContext } from "../services/requestContext.js";
 import { isProviderError, rawErrorMessage } from "../utils/providerErrors.js";
 import { sanitizeUrlForLog } from "../utils/videoResultExtractor.js";
 import type { AuthUser, AuthWorkspace } from "../types/auth.js";
+import { getModelHealthMatrix, runModelHealthCheck } from "../services/modelHealth.service.js";
 
 export const adminRouter = Router();
 adminRouter.use(requireLogin, requireAdmin);
@@ -166,6 +167,32 @@ adminRouter.get("/overview", async (_req, res) => {
     };
   });
   res.json({ users, workspaces, invites, plans, models, failureLogs });
+});
+
+adminRouter.get("/model-health", async (_req, res) => {
+  res.json(await getModelHealthMatrix());
+});
+
+adminRouter.post("/model-health/run", async (req, res) => {
+  if (req.body?.mode === "real") {
+    res.status(400).json({
+      errorCode: "REAL_PROBE_DISABLED",
+      errorMessage: "真实视频探测会产生费用，本轮只启用 safe 体检。后续需要管理端确认弹窗后再开启 real。"
+    });
+    return;
+  }
+  const modelIds = Array.isArray(req.body?.modelIds)
+    ? req.body.modelIds.map((value: unknown) => String(value)).filter(Boolean)
+    : undefined;
+  const result = await runModelHealthCheck({
+    providerId: typeof req.body?.providerId === "string" ? req.body.providerId : undefined,
+    capability: typeof req.body?.capability === "string" ? req.body.capability : undefined,
+    modelIds,
+    mode: "safe",
+    limit: Number(req.body?.limit ?? 50),
+    dryRun: Boolean(req.body?.dryRun)
+  });
+  res.json(result);
 });
 
 export async function syncProviderVideoResult(req: Request, res: Response) {

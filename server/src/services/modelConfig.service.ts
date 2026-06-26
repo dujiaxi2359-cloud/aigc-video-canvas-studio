@@ -7,7 +7,7 @@ import { inferImageModelType, inferImageProvider, normalizeImageCapabilities } f
 import { normalizeVideoCapabilities } from "./videoCapabilityNormalization.js";
 import { grsaiImageModels, isGrsaiImageEndpoint, normalizeGrsaiImageBaseUrl } from "./providers/grsaiImageProtocol.js";
 import { isZhipuOfficialEndpoint, normalizeZhipuBaseUrl, zhipuImageModels, zhipuVideoModels } from "./providers/zhipuProtocol.js";
-import type { ModelCapabilities, ModelCapabilityKind, ModelConfig } from "../types/model.js";
+import type { ModelCapabilities, ModelCapabilityKind, ModelConfig, ModelHealthStatus } from "../types/model.js";
 import { requireRequestContext } from "./requestContext.js";
 
 type ModelConfigRow = {
@@ -25,6 +25,13 @@ type ModelConfigRow = {
   model_type: ModelConfig["modelType"];
   enabled: number;
   capabilities_json: string;
+  model_health_status?: ModelHealthStatus;
+  last_health_check_at?: number;
+  last_success_at?: number;
+  last_failure_at?: number;
+  last_error_code?: string;
+  last_error_message?: string;
+  capability_health_json?: string;
   created_at: number;
   updated_at: number;
 };
@@ -317,6 +324,7 @@ function extractModels(payload: unknown) {
 }
 
 function toPublicModelConfig(row: ModelConfigRow): ModelConfig {
+  const capabilityHealth = row.capability_health_json ? parseCapabilitiesHealth(row.capability_health_json) : undefined;
   return {
     id: row.id,
     workspaceId: row.workspace_id,
@@ -331,9 +339,25 @@ function toPublicModelConfig(row: ModelConfigRow): ModelConfig {
     modelType: row.model_type,
     enabled: Boolean(row.enabled),
     capabilities: JSON.parse(row.capabilities_json),
+    healthStatus: row.model_health_status ?? "untested",
+    lastHealthCheckAt: row.last_health_check_at,
+    lastSuccessAt: row.last_success_at,
+    lastFailureAt: row.last_failure_at,
+    lastErrorCode: row.last_error_code,
+    lastErrorMessage: row.last_error_message,
+    capabilityHealth,
     createdAt: row.created_at,
     updatedAt: row.updated_at
   };
+}
+
+function parseCapabilitiesHealth(value: string) {
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === "object" ? parsed as Record<string, unknown> : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function mergeCapabilitiesWithoutOverwriting(existing: ModelCapabilities, incoming?: ModelCapabilities) {

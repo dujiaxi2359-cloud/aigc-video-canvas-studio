@@ -200,7 +200,9 @@ function videoCategoryLabelForModel(model: ModelConfig | undefined, category: Of
 }
 
 function isRuntimeUsableVideoModel(model: ModelConfig) {
-  return model.enabled && model.category === "video" && modelInputModes(model).some((mode) =>
+  const healthStatus = model.healthStatus ?? "untested";
+  const visibleHealth = ["ready", "running_slow", "untested", "testing"].includes(healthStatus);
+  return model.enabled && visibleHealth && model.category === "video" && modelInputModes(model).some((mode) =>
     ["text-to-video", "image-to-video", "first-last-frame", "reference-to-video", "video-to-video"].includes(mode)
   );
 }

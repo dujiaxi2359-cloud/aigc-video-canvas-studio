@@ -46,23 +46,35 @@ export const useModelConfigStore = create<State>((set, get) => ({
   }
 }));
 
+const CANVAS_VISIBLE_HEALTH = new Set<ModelConfig["healthStatus"] | undefined>([
+  undefined,
+  "ready",
+  "running_slow",
+  "untested",
+  "testing"
+]);
+
+function isCanvasVisibleModel(model: ModelConfig) {
+  return model.enabled && CANVAS_VISIBLE_HEALTH.has(model.healthStatus);
+}
+
 export function useAvailableVideoModels() {
   return useModelConfigStore(useShallow((state) =>
-    dedupeModelConfigsForSelect(state.modelConfigs.filter((model) => model.enabled && (model.category === "video" || (!model.category && ["text-to-video", "image-to-video", "video-to-video"].includes(model.modelType)))))
+    dedupeModelConfigsForSelect(state.modelConfigs.filter((model) => isCanvasVisibleModel(model) && (model.category === "video" || (!model.category && ["text-to-video", "image-to-video", "video-to-video"].includes(model.modelType)))))
   )
   );
 }
 
 export function useAvailableImageModels() {
   return useModelConfigStore(useShallow((state) =>
-    dedupeModelConfigsForSelect(state.modelConfigs.filter((model) => model.enabled && (model.category === "image" || (!model.category && ["text-to-image", "image-to-image", "image-edit", "image"].includes(model.modelType)))))
+    dedupeModelConfigsForSelect(state.modelConfigs.filter((model) => isCanvasVisibleModel(model) && (model.category === "image" || (!model.category && ["text-to-image", "image-to-image", "image-edit", "image"].includes(model.modelType)))))
   )
   );
 }
 
 export function useAvailableTextModels() {
   return useModelConfigStore(useShallow((state) =>
-    dedupeModelConfigsForSelect(state.modelConfigs.filter((model) => model.enabled && (model.category === "text" || (!model.category && model.modelType === "text"))))
+    dedupeModelConfigsForSelect(state.modelConfigs.filter((model) => isCanvasVisibleModel(model) && (model.category === "text" || (!model.category && model.modelType === "text"))))
   )
   );
 }
