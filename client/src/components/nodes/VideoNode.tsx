@@ -724,6 +724,7 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
   }, [selectedVideoMode, supportedVideoCategories, videoCategory]);
   const outputUrl = absoluteUploadUrl(props.data.outputUrl);
   const outputIsVideo = Boolean(props.data.outputUrl);
+  const posterUrl = props.data.posterUrl || props.data.thumbnailUrl || props.data.previewUrl;
   const effectiveStatus = outputIsVideo ? "success" : props.data.status;
   const frameStatus = effectiveStatus === "success" && !outputIsVideo ? "idle" : effectiveStatus;
   const frameStatusLabel = outputIsVideo
@@ -780,6 +781,9 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
           status: "success",
           outputAssetId: currentData.outputAssetId,
           outputUrl: currentData.outputUrl,
+          posterUrl: currentData.posterUrl,
+          thumbnailUrl: currentData.thumbnailUrl,
+          previewUrl: currentData.previewUrl,
           errorCode: undefined,
           errorMessage: undefined,
           debugMessage: undefined,
@@ -802,6 +806,9 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
             status: "success",
             outputUrl: latest.outputUrl,
             outputAssetId: latest.outputAssetId ?? currentData.outputAssetId,
+            posterUrl: latest.posterUrl ?? latest.thumbnailUrl ?? currentData.posterUrl,
+            thumbnailUrl: latest.thumbnailUrl ?? currentData.thumbnailUrl,
+            previewUrl: latest.previewUrl ?? currentData.previewUrl,
             aspectRatio: selectedAspectRatio ?? props.data.aspectRatio,
             resolution: selectedResolution ?? props.data.resolution,
             duration: selectedDuration ?? props.data.duration,
@@ -1113,6 +1120,9 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
       });
       const previousOutputAssetId = props.data.outputAssetId;
       const previousOutputUrl = props.data.outputUrl;
+      const previousPosterUrl = props.data.posterUrl;
+      const previousThumbnailUrl = props.data.thumbnailUrl;
+      const previousPreviewUrl = props.data.previewUrl;
       const hasReturnedVideo = Boolean(result.outputUrl);
       update(
         props.id,
@@ -1121,6 +1131,10 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
             status: "success",
             outputAssetId: result.outputAssetId ?? previousOutputAssetId,
             outputUrl: result.outputUrl ?? previousOutputUrl,
+            posterUrl: result.posterUrl ?? result.thumbnailUrl ?? previousPosterUrl,
+            thumbnailUrl: result.thumbnailUrl ?? previousThumbnailUrl,
+            previewUrl: result.previewUrl ?? previousPreviewUrl,
+            downloadableUrl: result.downloadableUrl,
             payloadSummary: result.payloadSummary,
             aspectRatio: selectedAspectRatio ?? props.data.aspectRatio,
             resolution: selectedResolution ?? props.data.resolution,
@@ -1136,6 +1150,9 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
               status: "generating",
               outputAssetId: previousOutputAssetId,
               outputUrl: previousOutputUrl,
+              posterUrl: previousPosterUrl,
+              thumbnailUrl: previousThumbnailUrl,
+              previewUrl: previousPreviewUrl,
               payloadSummary: result.payloadSummary,
               errorCode: undefined,
               errorMessage: "上游已完成，正在等待视频地址回填到画布。",
@@ -1146,6 +1163,9 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
               status: "generating",
               outputAssetId: previousOutputAssetId,
               outputUrl: previousOutputUrl,
+              posterUrl: previousPosterUrl,
+              thumbnailUrl: previousThumbnailUrl,
+              previewUrl: previousPreviewUrl,
               payloadSummary: result.payloadSummary,
               errorCode: undefined,
               errorMessage: undefined,
@@ -1156,6 +1176,9 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
               status: "generating",
               outputAssetId: previousOutputAssetId,
               outputUrl: previousOutputUrl,
+              posterUrl: previousPosterUrl,
+              thumbnailUrl: previousThumbnailUrl,
+              previewUrl: previousPreviewUrl,
               errorCode: undefined,
               errorMessage: "上游任务仍在排队或生成中，完成后将自动回填画布。",
               debugMessage: undefined,
@@ -1165,6 +1188,9 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
               status: "error",
               outputAssetId: previousOutputAssetId,
               outputUrl: previousOutputUrl,
+              posterUrl: previousPosterUrl,
+              thumbnailUrl: previousThumbnailUrl,
+              previewUrl: previousPreviewUrl,
               errorCode: result.errorCode,
               errorMessage: result.errorMessage,
               debugMessage: result.debugMessage,
@@ -1261,6 +1287,9 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
       type="video"
       title={props.data.title}
       outputUrl={outputIsVideo ? props.data.outputUrl : undefined}
+      posterUrl={posterUrl}
+      thumbnailUrl={props.data.thumbnailUrl}
+      previewUrl={props.data.previewUrl}
       aspectRatio={aspectRatioCss(displayRatio)}
       className="creation-media-preview"
       showInlineActions={false}

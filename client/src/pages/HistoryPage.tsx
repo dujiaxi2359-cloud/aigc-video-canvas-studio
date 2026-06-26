@@ -72,11 +72,17 @@ export function HistoryPage() {
             {visible.map((item) => {
               const kind = historyKind(item);
               const source = item.outputUrl ? absoluteUploadUrl(item.outputUrl) : "";
+              const poster = absoluteUploadUrl(item.posterUrl || item.thumbnailUrl || item.previewUrl);
               return (
                 <article key={item.id} className="group overflow-hidden rounded-[8px] border border-white/[0.1] bg-[#19191a]">
                   <div className="relative aspect-[4/3] overflow-hidden bg-[#242426]">
-                    {source && kind === "image" ? <img src={source} alt="" className="h-full w-full object-cover" /> : null}
-                    {source && kind === "video" ? <video src={source} className="h-full w-full object-cover" muted playsInline /> : null}
+                    {source && kind === "image" ? <img src={absoluteUploadUrl(item.thumbnailUrl || item.previewUrl || item.outputUrl)} alt="" className="h-full w-full object-cover" loading="lazy" decoding="async" /> : null}
+                    {source && kind === "video" ? (
+                      <div className="relative h-full w-full">
+                        {poster ? <img src={poster} alt="" className="h-full w-full object-cover" loading="lazy" decoding="async" /> : <div className="grid h-full place-items-center text-white/24"><Video size={32} /></div>}
+                        <span className="absolute left-2 top-2 rounded-full bg-black/70 px-2 py-1 text-[10px] text-white/70">点击下载才加载原视频</span>
+                      </div>
+                    ) : null}
                     {!source ? <div className="grid h-full place-items-center text-white/24">{kind === "image" ? <Image size={32} /> : <Video size={32} />}</div> : null}
                     <div className="absolute right-2 top-2 flex gap-1 opacity-0 transition group-hover:opacity-100">
                       {source ? <button title="下载" type="button" onClick={() => downloadHistory(item)} className="grid h-8 w-8 place-items-center rounded-full bg-black/70 text-white hover:bg-black"><Download size={14} /></button> : null}

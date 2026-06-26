@@ -305,8 +305,13 @@ export function AssetLibraryPage({ onNavigate }: { onNavigate: (page: Page, proj
                         </div>
 
                         <div className="overflow-hidden rounded-xl border border-white/[0.06] bg-black/20">
-                          {asset.type === "image" ? <img src={absoluteUploadUrl(asset.thumbnailUrl || asset.url)} className="h-40 w-full object-cover" /> : null}
-                          {asset.type === "video" ? <video src={absoluteUploadUrl(asset.url)} className="h-40 w-full object-contain" controls /> : null}
+                          {asset.type === "image" ? <img src={absoluteUploadUrl(asset.thumbnailUrl || asset.previewUrl || asset.url)} className="h-40 w-full object-cover" loading="lazy" decoding="async" /> : null}
+                          {asset.type === "video" ? (
+                            <div className="relative grid h-40 place-items-center bg-black/35 text-white/40">
+                              {asset.posterUrl || asset.thumbnailUrl ? <img src={absoluteUploadUrl(asset.posterUrl || asset.thumbnailUrl)} className="absolute inset-0 h-full w-full object-cover" loading="lazy" decoding="async" /> : null}
+                              <span className="relative rounded-full border border-white/15 bg-black/55 px-3 py-1 text-[12px] text-white/72">点击下载或拖入画布后播放</span>
+                            </div>
+                          ) : null}
                           {asset.type === "audio" ? <div className="p-3"><audio src={absoluteUploadUrl(asset.url)} controls className="w-full" /></div> : null}
                           {!["image", "video", "audio"].includes(asset.type) ? <div className="grid h-40 place-items-center text-white/34"><FileText size={30} /></div> : null}
                         </div>

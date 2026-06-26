@@ -251,7 +251,7 @@ function AssetDrawer({ onClose }: { onClose: () => void }) {
             <div className="mt-5 px-2 text-[11px] font-medium text-white/30">{folderId === undefined ? t("canvas.recentAssets") : t("canvas.currentFolderAssets")}</div>
             <div className="mt-2 grid grid-cols-3 gap-2">
               {visibleAssets.slice(0, 12).map((asset) => {
-                const src = absoluteUploadUrl(asset.thumbnailUrl || asset.url);
+                const src = absoluteUploadUrl(asset.type === "video" ? asset.posterUrl || asset.thumbnailUrl : asset.thumbnailUrl || asset.previewUrl || asset.url);
                 return (
                   <div
                     key={asset.id}
@@ -260,10 +260,10 @@ function AssetDrawer({ onClose }: { onClose: () => void }) {
                     className="drawer-media-tile"
                     title={asset.name}
                   >
-                    {asset.type === "image" && src ? <img src={src} alt="" /> : asset.type === "video" && src ? <video src={src} muted /> : <FileAudio size={20} />}
+                    {asset.type === "image" && src ? <img src={src} alt="" loading="lazy" decoding="async" /> : asset.type === "video" ? (src ? <img src={src} alt="" loading="lazy" decoding="async" /> : <Video size={20} />) : <FileAudio size={20} />}
                     <span className="drawer-resource-actions">
                       {(asset.type === "image" || asset.type === "video") && <button type="button" title="预览" onClick={() => setPreview(asset)}><Eye size={12} /></button>}
-                      <button type="button" title={t("canvas.addToCanvas")} onClick={() => addAssetNode({ assetId: asset.id, type: asset.type, url: asset.url, filePath: asset.localPath, thumbnailUrl: asset.thumbnailUrl, width: asset.width, height: asset.height, duration: asset.duration })}><Plus size={12} /></button>
+                      <button type="button" title={t("canvas.addToCanvas")} onClick={() => addAssetNode({ assetId: asset.id, type: asset.type, url: asset.url, filePath: asset.localPath, thumbnailUrl: asset.thumbnailUrl, posterUrl: asset.posterUrl, width: asset.width, height: asset.height, duration: asset.duration })}><Plus size={12} /></button>
                       <button type="button" title="下载" onClick={() => void downloadLibraryAsset(asset)}><Download size={12} /></button>
                       <button type="button" title="删除" onClick={() => void deleteAsset(asset.id)}><Trash2 size={12} /></button>
                     </span>
@@ -280,6 +280,7 @@ function AssetDrawer({ onClose }: { onClose: () => void }) {
       open={Boolean(preview)}
       type={preview?.type === "video" ? "video" : "image"}
       src={absoluteUploadUrl(preview?.url)}
+      previewSrc={absoluteUploadUrl(preview?.type === "video" ? preview.posterUrl || preview.thumbnailUrl : preview?.thumbnailUrl || preview?.previewUrl)}
       title={preview?.name}
       meta={[{ label: "尺寸", value: preview?.width && preview?.height ? `${preview.width}×${preview.height}` : undefined }]}
       onClose={() => setPreview(null)}
@@ -323,14 +324,15 @@ function HistoryDrawer({ onClose }: { onClose: () => void }) {
       <div className="grid grid-cols-3 gap-2 p-3">
         {samples.map((item, index) => {
           const src = absoluteUploadUrl(item.outputUrl);
+          const poster = absoluteUploadUrl(item.posterUrl || item.thumbnailUrl || item.previewUrl);
           const kind = item.outputUrl ? historyKind(item) : tab;
           return (
             <div key={item.id} className={`drawer-history-tile ${!src ? `is-placeholder tone-${index % 4}` : ""}`}>
-              {src && kind === "image" ? <img src={src} alt="" /> : src && kind === "video" ? <video src={src} muted /> : <span>{kind === "image" ? <ImageIcon size={19} /> : <Video size={19} />}</span>}
+              {src && kind === "image" ? <img src={absoluteUploadUrl(item.thumbnailUrl || item.previewUrl || item.outputUrl)} alt="" loading="lazy" decoding="async" /> : src && kind === "video" ? (poster ? <img src={poster} alt="" loading="lazy" decoding="async" /> : <span><Video size={19} /></span>) : <span>{kind === "image" ? <ImageIcon size={19} /> : <Video size={19} />}</span>}
               {!item.id.startsWith("mock-") && <span className={`drawer-history-status is-${item.status}`}>{item.status === "processing" ? "生成中" : item.status === "error" ? "失败" : "已完成"}</span>}
               {item.outputUrl && <span className="drawer-resource-actions">
                 <button type="button" title="预览" onClick={() => setPreview(item)}><Eye size={12} /></button>
-                <button type="button" title="加入画布" onClick={() => addAssetNode({ assetId: item.outputAssetId || item.id, type: kind === "image" ? "image" : "video", url: item.outputUrl, aspectRatio: item.aspectRatio, duration: item.duration })}><Plus size={12} /></button>
+                <button type="button" title="加入画布" onClick={() => addAssetNode({ assetId: item.outputAssetId || item.id, type: kind === "image" ? "image" : "video", url: item.outputUrl, thumbnailUrl: item.thumbnailUrl, posterUrl: item.posterUrl, aspectRatio: item.aspectRatio, duration: item.duration })}><Plus size={12} /></button>
                 <button type="button" title="下载" onClick={() => download(item)}><Download size={12} /></button>
                 <button type="button" title="删除" onClick={() => void deleteHistory(item.id)}><Trash2 size={12} /></button>
               </span>}
@@ -344,6 +346,7 @@ function HistoryDrawer({ onClose }: { onClose: () => void }) {
       open={Boolean(preview)}
       type={preview && historyKind(preview) === "image" ? "image" : "video"}
       src={absoluteUploadUrl(preview?.outputUrl)}
+      previewSrc={absoluteUploadUrl(preview && historyKind(preview) === "video" ? preview.posterUrl || preview.thumbnailUrl : preview?.thumbnailUrl || preview?.previewUrl)}
       title={preview?.modelDisplayName || "生成结果"}
       meta={[
         { label: "比例", value: preview?.aspectRatio },

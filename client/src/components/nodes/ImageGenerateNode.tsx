@@ -383,15 +383,25 @@ function ImageGenerateNodeComponent(props: NodeProps<ImageGenerateNodeData>) {
       });
       const previousOutputAssetId = props.data.outputAssetId;
       const previousOutputUrl = props.data.outputUrl;
+      const previousThumbnailUrl = props.data.thumbnailUrl;
       update(
         props.id,
         result.status === "success"
-          ? { status: "success", outputAssetId: result.outputAssetId, outputUrl: result.outputUrl, payloadSummary: result.payloadSummary }
+          ? {
+            status: "success",
+            outputAssetId: result.outputAssetId,
+            outputUrl: result.outputUrl,
+            thumbnailUrl: result.thumbnailUrl ?? result.previewUrl ?? previousThumbnailUrl,
+            previewUrl: result.previewUrl,
+            downloadableUrl: result.downloadableUrl,
+            payloadSummary: result.payloadSummary
+          }
           : result.status === "processing"
             ? {
               status: "generating",
               outputAssetId: previousOutputAssetId,
               outputUrl: previousOutputUrl,
+              thumbnailUrl: previousThumbnailUrl,
               errorCode: undefined,
               errorMessage: undefined,
               debugMessage: undefined,

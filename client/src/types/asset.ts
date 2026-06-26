@@ -13,6 +13,13 @@ export type Asset = {
   url: string;
   publicUrl?: string;
   downloadUrl?: string;
+  outputUrl?: string;
+  previewUrl?: string;
+  posterUrl?: string;
+  downloadableUrl?: string;
+  cosKey?: string;
+  thumbnailCosKey?: string;
+  posterCosKey?: string;
   size?: number;
   mimeType?: string;
   width?: number;

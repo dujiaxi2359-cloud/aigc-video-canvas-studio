@@ -9,6 +9,8 @@ export type AssetInput = {
   assetId?: string;
   url?: string;
   thumbnailUrl?: string;
+  posterUrl?: string;
+  previewUrl?: string;
   localPath?: string;
   publicUrl?: string;
   mimeType?: string;
@@ -25,6 +27,8 @@ function toAssetInput(node: Node): AssetInput {
     assetId: (data.assetId ?? data.outputAssetId ?? (Array.isArray(data.screenshots) ? (data.screenshots[0] as Record<string, unknown> | undefined)?.assetId : undefined)) as string | undefined,
     url: (data.url ?? data.imageUrl ?? data.outputUrl ?? (Array.isArray(data.screenshots) ? (data.screenshots[0] as Record<string, unknown> | undefined)?.imageUrl : undefined)) as string | undefined,
     thumbnailUrl: data.thumbnailUrl as string | undefined,
+    posterUrl: data.posterUrl as string | undefined,
+    previewUrl: data.previewUrl as string | undefined,
     localPath: data.localPath as string | undefined,
     publicUrl: data.publicUrl as string | undefined,
     mimeType: data.mimeType as string | undefined

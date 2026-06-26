@@ -139,6 +139,10 @@ export type VideoNodeData = {
   clientRequestId?: string;
   outputAssetId?: string;
   outputUrl?: string;
+  thumbnailUrl?: string;
+  posterUrl?: string;
+  previewUrl?: string;
+  downloadableUrl?: string;
   errorCode?: string;
   errorMessage?: string;
   debugMessage?: string;

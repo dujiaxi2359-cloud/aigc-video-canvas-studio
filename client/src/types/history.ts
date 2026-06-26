@@ -13,6 +13,10 @@ export type GenerationHistory = {
   status: "success" | "processing" | "error";
   outputAssetId?: string;
   outputUrl?: string;
+  thumbnailUrl?: string;
+  posterUrl?: string;
+  previewUrl?: string;
+  downloadableUrl?: string;
   errorMessage?: string;
   createdAt: number;
 };

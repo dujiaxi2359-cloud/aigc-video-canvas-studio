@@ -112,7 +112,7 @@ export function MediaLightbox({ open, type, src, previewSrc, title, meta = [], o
             }}
           />
         ) : type === "video" && src ? (
-          <video className="media-lightbox-video" src={src} controls autoPlay />
+          <video className="media-lightbox-video" src={src} poster={previewSrc} controls preload="none" />
         ) : (
           <div className="rounded-2xl border border-white/[0.08] bg-white/[0.04] px-5 py-4 text-[13px] text-amber-100">当前素材只有缩略图，无法查看高清原图。</div>
         )}
