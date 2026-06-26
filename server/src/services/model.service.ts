@@ -1424,7 +1424,8 @@ export async function syncVideoTaskUpstream(input: { localTaskId?: string; provi
     return { status: "succeeded", providerTaskId, providerStatus, providerVideoUrl, outputUrl: providerVideoUrl, progress: 100, rawResponse };
   }
 
-  if (!response.ok && providerTaskId) {
+  const pollAccessDenied = isPollAccessDeniedResponse(rawResponse, response.status);
+  if (!response.ok && providerTaskId && !pollAccessDenied) {
     await markVideoTaskStage({
       id: localTaskId,
       status: "processing",
@@ -1442,7 +1443,7 @@ export async function syncVideoTaskUpstream(input: { localTaskId?: string; provi
         pollUrl,
         retryablePollError: true,
         upstreamStatus: response.status,
-        pollAccessDenied: isPollAccessDeniedResponse(rawResponse, response.status)
+        pollAccessDenied: false
       },
       errorMessage: "上游任务已创建，当前轮询查询暂时失败，任务继续等待。"
     });
@@ -1469,11 +1470,11 @@ export async function syncVideoTaskUpstream(input: { localTaskId?: string; provi
   }
 
   if (isFailedStatus(providerStatus) || !response.ok) {
-    const pollAccessDenied = isPollAccessDeniedResponse(rawResponse, response.status);
     const errorCode = pollAccessDenied ? "MODEL_ACCESS_DENIED" : "PROVIDER_ERROR";
+    const upstreamMessage = upstreamErrorMessage(rawResponse);
     const errorMessage = pollAccessDenied
-      ? "上游任务已创建，但当前中转 API Key 无法读取该模型的任务结果。请在中转后台开通轮询/结果读取权限，或换用同一上游任务可查询的 API Key。"
-      : `上游任务状态为 ${providerStatus}`;
+      ? `中转任务查询失败：当前 API Key 无法读取该模型任务结果。${upstreamMessage ? `上游返回：${upstreamMessage}` : ""}`
+      : upstreamMessage || `上游任务状态为 ${providerStatus}`;
     await markVideoTaskStage({
       id: localTaskId,
       status: "error",
@@ -1520,6 +1521,24 @@ function isPollAccessDeniedResponse(rawResponse: unknown, statusCode?: number) {
   return statusCode === 401
     || statusCode === 403
     || /This token has no access|no access to model|model.*no access|unauthorized|forbidden|permission|access denied|invalid api key|incorrect api key|没有.*权限|无权限|未开通/i.test(text);
+}
+
+function upstreamErrorMessage(rawResponse: unknown) {
+  const payload = rawResponse && typeof rawResponse === "object" ? rawResponse as Record<string, unknown> : {};
+  const error = payload.error && typeof payload.error === "object" ? payload.error as Record<string, unknown> : undefined;
+  const candidates = [
+    error?.message,
+    error?.error_message,
+    payload.error_message,
+    payload.message,
+    payload.detail,
+    payload.reason,
+    payload.msg
+  ];
+  for (const value of candidates) {
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return undefined;
 }
 
 async function enforceVideoAspectRatio(result: ProviderGenerateResult, aspectRatio?: string, resolution?: string): Promise<ProviderGenerateResult> {

@@ -346,7 +346,9 @@ export async function updateCanvasNodeWithGenerationFailure(input: {
     const data = (node.data && typeof node.data === "object" ? node.data as Record<string, unknown> : {});
     if (
       data.status === "success"
+      || data.status === "completed"
       || data.generationStatus === "succeeded"
+      || data.generationStatus === "success"
       || typeof data.outputUrl === "string"
       || typeof data.videoUrl === "string"
       || typeof data.previewUrl === "string"
