@@ -40,6 +40,25 @@ const videoCategories: OfficialVideoCategory[] = ["text_to_video", "image_to_vid
 const videoRecoveryPollMs = 5000;
 const videoResultTimeoutMs = 30 * 60 * 1000;
 const videoResultTimeoutMessage = "上游/中转超过 30 分钟没有返回可用视频，当前任务已停止等待。请直接重试，或切换一条可用的视频中转线路。";
+const videoSuccessStatuses = new Set(["success", "succeeded", "completed", "complete", "done", "finished", "generated", "generated_success", "task_success"]);
+const videoRunningStatuses = new Set(["executing", "running", "processing", "queued", "pending", "in_progress", "submitted", "created", "generating", "started"]);
+const videoFailedStatuses = new Set(["failed", "failure", "error", "timeout", "cancelled", "canceled"]);
+
+function normalizeTaskStatus(status?: unknown) {
+  return typeof status === "string" ? status.trim().toLowerCase() : "";
+}
+
+function isVideoSuccessStatus(status?: unknown) {
+  return videoSuccessStatuses.has(normalizeTaskStatus(status));
+}
+
+function isVideoRunningStatus(status?: unknown) {
+  return videoRunningStatuses.has(normalizeTaskStatus(status));
+}
+
+function isVideoFailedStatus(status?: unknown) {
+  return videoFailedStatuses.has(normalizeTaskStatus(status));
+}
 const genericCategoryInputModes: Record<OfficialVideoCategory, VideoInputMode[]> = {
   text_to_video: ["text-to-video"],
   image_to_video: ["image-to-video"],
@@ -85,12 +104,21 @@ function taskResultVideoUrl(value: unknown): string | undefined {
     record.output_url,
     record.videoUrl,
     record.video_url,
+    record.providerVideoUrl,
+    record.provider_video_url,
+    record.previewUrl,
+    record.preview_url,
+    record.downloadableUrl,
+    record.downloadable_url,
     record.url,
     (record.metadata as Record<string, unknown> | undefined)?.url,
     (record.video as Record<string, unknown> | undefined)?.url,
     (record.output as Record<string, unknown> | undefined)?.url,
     (record.data as Record<string, unknown> | undefined)?.url,
-    (record.data as Record<string, unknown> | undefined)?.video_url
+    (record.data as Record<string, unknown> | undefined)?.video_url,
+    (record.data as Record<string, unknown> | undefined)?.output_url,
+    (record.result as Record<string, unknown> | undefined)?.video_url,
+    (record.result as Record<string, unknown> | undefined)?.output_url
   ];
   for (const candidate of candidates) {
     if (typeof candidate === "string" && /^https?:\/\//i.test(candidate)) return candidate;
@@ -499,6 +527,9 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
     () => diagnoseVideoChannel(selectedModel, allModels, resolvedInputs.imageInputs.length > 0),
     [allModels, resolvedInputs.imageInputs.length, selectedModel]
   );
+  const effectiveChannelDiagnostic = props.data.providerTaskId && props.data.status === "generating"
+    ? { ...channelDiagnostic, whyBlocked: "" }
+    : channelDiagnostic;
 
   useEffect(() => {
     if (selectedModel || !models.length) return;
@@ -801,7 +832,7 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
           item.createdAt >= startedAt - 5000
         );
         const latest = candidates[0];
-        if (latest?.status === "success" && latest.outputUrl) {
+        if (isVideoSuccessStatus(latest?.status) && latest.outputUrl) {
           update(props.id, {
             status: "success",
             outputUrl: latest.outputUrl,
@@ -822,7 +853,7 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
           recoveringRef.current = false;
           return;
         }
-        if (latest?.status === "processing") {
+        if (isVideoRunningStatus(latest?.status)) {
           update(props.id, {
             status: "generating",
             errorCode: undefined,
@@ -847,13 +878,16 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
         }
         const latestTask = await generationApi.latestTask(props.id, startedAt - 5000).catch(() => undefined);
         if (latestTask && !currentData.outputUrl) {
-          const taskStatus = String(latestTask.status || "").toLowerCase();
-          const taskUrl = latestTask.outputUrl || taskResultVideoUrl(latestTask.result);
-          if (["success", "completed", "complete", "succeeded", "done", "finished", "generated", "generated_success", "task_success"].includes(taskStatus) && taskUrl) {
+          const taskUrl = latestTask.outputUrl || latestTask.videoUrl || latestTask.cdnUrl || latestTask.previewUrl || latestTask.providerVideoUrl || taskResultVideoUrl(latestTask.result);
+          if (isVideoSuccessStatus(latestTask.status) && taskUrl) {
             update(props.id, {
               status: "success",
               outputUrl: taskUrl,
               outputAssetId: currentData.outputAssetId,
+              posterUrl: latestTask.posterUrl ?? currentData.posterUrl,
+              previewUrl: latestTask.previewUrl ?? taskUrl,
+              cdnUrl: latestTask.cdnUrl,
+              downloadableUrl: latestTask.downloadableUrl ?? taskUrl,
               errorCode: undefined,
               errorMessage: undefined,
               debugMessage: undefined,
@@ -864,7 +898,19 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
             recoveringRef.current = false;
             return;
           }
-          if (["failed", "failure", "error", "timeout", "cancelled", "canceled"].includes(taskStatus)) {
+          if (latestTask.providerTaskId && isVideoRunningStatus(latestTask.status)) {
+            update(props.id, {
+              status: "generating",
+              providerTaskId: latestTask.providerTaskId,
+              progress: latestTask.progress ?? currentData.progress,
+              errorCode: undefined,
+              errorMessage: undefined,
+              debugMessage: undefined
+            });
+            setLocalError("");
+            continue;
+          }
+          if (isVideoFailedStatus(latestTask.status)) {
             const message = latestTask.errorMessage || "上游视频任务失败。";
             update(props.id, {
               status: "error",
@@ -945,6 +991,39 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
       || summary.pendingAfterPollInterruption === true
       || summary.pendingInBackground === true
       || /已提交|排队|生成中|processing|pending|queued/i.test(`${result.errorMessage ?? ""}\n${result.debugMessage ?? ""}`);
+  }
+
+  async function syncUpstreamResult() {
+    const startedAt = props.data.generationStartedAt ?? Date.now() - videoResultTimeoutMs;
+    try {
+      const task = await generationApi.syncLatestTask(props.id, startedAt - 5000);
+      const taskUrl = task.outputUrl || task.videoUrl || task.cdnUrl || task.previewUrl || task.providerVideoUrl;
+      if (isVideoSuccessStatus(task.status) && taskUrl) {
+        update(props.id, {
+          status: "success",
+          outputUrl: taskUrl,
+          posterUrl: task.posterUrl ?? props.data.posterUrl,
+          previewUrl: task.previewUrl ?? taskUrl,
+          cdnUrl: task.cdnUrl,
+          downloadableUrl: task.downloadableUrl ?? taskUrl,
+          progress: 100,
+          errorCode: undefined,
+          errorMessage: undefined,
+          debugMessage: undefined,
+          generationStartedAt: undefined,
+          clientRequestId: undefined
+        });
+        setLocalError("");
+        return;
+      }
+      const message = task.errorMessage || "上游结果暂未返回可播放视频。";
+      setLocalError(message);
+      update(props.id, { status: "generating", errorMessage: message });
+    } catch (error) {
+      const message = humanizeError(error);
+      setLocalError(message);
+      update(props.id, { errorMessage: message });
+    }
   }
 
   useEffect(() => {
@@ -1034,8 +1113,8 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
     });
     setLocalError("");
     try {
-      if (channelDiagnostic.whyBlocked) {
-        const suggestion = channelDiagnostic.sameModelImageCapableChannels[0];
+      if (effectiveChannelDiagnostic.whyBlocked) {
+        const suggestion = effectiveChannelDiagnostic.sameModelImageCapableChannels[0];
         if (suggestion) throw new Error(`当前通道不支持图生视频，可切换到「${suggestion.label}」继续生成。`);
         throw new Error("当前模型暂无图生视频能力。");
       }
@@ -1123,20 +1202,21 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
       const previousPosterUrl = props.data.posterUrl;
       const previousThumbnailUrl = props.data.thumbnailUrl;
       const previousPreviewUrl = props.data.previewUrl;
-      const hasReturnedVideo = Boolean(result.outputUrl);
+      const returnedVideoUrl = result.outputUrl || result.videoUrl || result.cdnUrl || result.previewUrl || result.providerVideoUrl || taskResultVideoUrl(result.payloadSummary);
+      const hasReturnedVideo = Boolean(returnedVideoUrl);
       update(
         props.id,
-        (result.status === "success" || result.status === "succeeded") && hasReturnedVideo
+        isVideoSuccessStatus(result.status) && hasReturnedVideo
           ? {
             status: "success",
             outputAssetId: result.outputAssetId ?? previousOutputAssetId,
-            outputUrl: result.outputUrl ?? previousOutputUrl,
+            outputUrl: returnedVideoUrl ?? previousOutputUrl,
             posterUrl: result.posterUrl ?? result.thumbnailUrl ?? previousPosterUrl,
             thumbnailUrl: result.thumbnailUrl ?? previousThumbnailUrl,
-            previewUrl: result.previewUrl ?? previousPreviewUrl,
+            previewUrl: result.previewUrl ?? returnedVideoUrl ?? previousPreviewUrl,
             cdnUrl: result.cdnUrl,
             cosUrl: result.cosUrl,
-            downloadableUrl: result.downloadableUrl,
+            downloadableUrl: result.downloadableUrl ?? returnedVideoUrl,
             payloadSummary: result.payloadSummary,
             aspectRatio: selectedAspectRatio ?? props.data.aspectRatio,
             resolution: selectedResolution ?? props.data.resolution,
@@ -1147,7 +1227,7 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
             generationStartedAt: undefined,
             clientRequestId: undefined
           }
-          : result.status === "success" || result.status === "succeeded"
+          : isVideoSuccessStatus(result.status)
             ? {
               status: "generating",
               outputAssetId: previousOutputAssetId,
@@ -1160,7 +1240,7 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
               errorMessage: "上游已完成，正在等待视频地址回填到画布。",
               debugMessage: undefined
             }
-          : result.status === "processing"
+          : isVideoRunningStatus(result.status)
             ? {
               status: "generating",
               outputAssetId: previousOutputAssetId,
@@ -1392,14 +1472,17 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
         <div className="creation-detail-section"><strong>生成方式</strong><div className="flex flex-wrap gap-1.5">{supportedVideoCategories.map((category) => <button key={category} className={videoCategory === category ? "is-active" : ""} onClick={() => changeVideoCategory(category)}>{videoCategoryLabelForModel(selectedModel, category)}</button>)}</div></div>
         {actualOutputInfo && props.data.status === "success" && <div className="creation-detail-copy">实际输出：{actualOutputInfo.width && actualOutputInfo.height ? `${actualOutputInfo.width}×${actualOutputInfo.height}` : "未知尺寸"}{actualOutputInfo.ratio ? ` · ${actualOutputInfo.ratio}` : ""}{actualOutputInfo.duration ? ` · ${actualOutputInfo.duration.toFixed(1)}s` : ""}</div>}
         {dynamicOptions?.warningMessage && <div className="creation-detail-copy">{dynamicOptions.warningMessage}</div>}
-        {channelDiagnostic.whyBlocked && <div className="creation-detail-copy is-error">{channelDiagnostic.sameModelImageCapableChannels[0]
-          ? <>当前通道不支持图生视频。<Button className="ml-2 h-7" variant="secondary" onClick={() => update(props.id, { modelConfigId: channelDiagnostic.sameModelImageCapableChannels[0].id, errorCode: undefined, errorMessage: undefined })}>切换到 {channelDiagnostic.sameModelImageCapableChannels[0].label}</Button></>
+        {effectiveChannelDiagnostic.whyBlocked && <div className="creation-detail-copy is-error">{effectiveChannelDiagnostic.sameModelImageCapableChannels[0]
+          ? <>当前通道不支持图生视频。<Button className="ml-2 h-7" variant="secondary" onClick={() => update(props.id, { modelConfigId: effectiveChannelDiagnostic.sameModelImageCapableChannels[0].id, errorCode: undefined, errorMessage: undefined })}>切换到 {effectiveChannelDiagnostic.sameModelImageCapableChannels[0].label}</Button></>
           : "当前模型暂无图生视频能力。"}</div>}
         {staleModel && <div className="creation-detail-copy is-error">当前模型配置已失效，请重新选择模型。</div>}
         {isVeoRaiFiltered && <div className="creation-detail-copy">安全过滤：{veoRaiReasons.join("；") || "当前内容需要安全改写"}<div className="mt-2 flex gap-2"><Button className="h-7" variant="secondary" onClick={() => retryWithPrompt(veoSafePrompt || props.data.prompt)}>安全改写重试</Button><Button className="h-7" variant="ghost" onClick={switchOtherVideoModel}>切换模型</Button></div></div>}
         <PayloadSummary data={props.data.payloadSummary} />
-        <PayloadSummary data={channelDiagnostic as unknown as Record<string, unknown>} />
-        {(props.data.errorMessage || localError) && <AgentAnalyzeErrorButton nodeId={props.id} errorMessage={props.data.errorMessage || localError} nodeData={props.data as unknown as Record<string, unknown>} />}
+        <PayloadSummary data={effectiveChannelDiagnostic as unknown as Record<string, unknown>} />
+        <div className="flex flex-wrap items-center gap-2">
+          {props.data.status === "generating" && <Button type="button" variant="secondary" className="h-7 px-3 text-[11px]" onClick={() => void syncUpstreamResult()}>同步上游结果</Button>}
+          {(props.data.errorMessage || localError) && <AgentAnalyzeErrorButton nodeId={props.id} errorMessage={props.data.errorMessage || localError} nodeData={props.data as unknown as Record<string, unknown>} />}
+        </div>
       </div>}
     </div>
   );

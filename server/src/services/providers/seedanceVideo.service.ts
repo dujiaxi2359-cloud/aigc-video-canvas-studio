@@ -693,10 +693,17 @@ function isSeedanceAssetRetryableCreateFailure(payload: Record<string, unknown>)
 
 function progressValue(payload: Record<string, unknown>) {
   const direct = payload.progress ?? payload.percent ?? payload.percentage;
-  if (typeof direct === "number" && Number.isFinite(direct)) return Math.max(0, Math.min(100, Math.round(direct)));
+  if (typeof direct === "number" && Number.isFinite(direct)) {
+    const percent = direct > 0 && direct <= 1 ? direct * 100 : direct;
+    return Math.max(0, Math.min(100, Math.round(percent)));
+  }
   if (typeof direct === "string") {
     const match = direct.match(/(\d+(?:\.\d+)?)/);
-    if (match?.[1]) return Math.max(0, Math.min(100, Math.round(Number(match[1]))));
+    if (match?.[1]) {
+      const numeric = Number(match[1]);
+      const percent = numeric > 0 && numeric <= 1 && !direct.includes("%") ? numeric * 100 : numeric;
+      return Math.max(0, Math.min(100, Math.round(percent)));
+    }
   }
   const nested = record(payload.data ?? payload.result ?? payload.output);
   if (nested !== payload && Object.keys(nested).length) return progressValue(nested);

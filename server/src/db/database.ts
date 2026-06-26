@@ -684,6 +684,11 @@ export async function getDb() {
   await ensureColumn("generation_tasks", "workspace_id", "ALTER TABLE generation_tasks ADD COLUMN workspace_id TEXT");
   await ensureColumn("generation_tasks", "user_id", "ALTER TABLE generation_tasks ADD COLUMN user_id TEXT");
   await ensureColumn("generation_tasks", "provider_status", "ALTER TABLE generation_tasks ADD COLUMN provider_status TEXT");
+  await ensureColumn("generation_tasks", "provider_task_id", "ALTER TABLE generation_tasks ADD COLUMN provider_task_id TEXT");
+  await ensureColumn("generation_tasks", "canvas_node_id", "ALTER TABLE generation_tasks ADD COLUMN canvas_node_id TEXT");
+  await ensureColumn("generation_tasks", "project_id", "ALTER TABLE generation_tasks ADD COLUMN project_id TEXT");
+  await ensureColumn("generation_tasks", "provider_id", "ALTER TABLE generation_tasks ADD COLUMN provider_id TEXT");
+  await ensureColumn("generation_tasks", "model_id", "ALTER TABLE generation_tasks ADD COLUMN model_id TEXT");
   await ensureColumn("generation_tasks", "provider_video_url", "ALTER TABLE generation_tasks ADD COLUMN provider_video_url TEXT");
   await ensureColumn("generation_tasks", "output_url", "ALTER TABLE generation_tasks ADD COLUMN output_url TEXT");
   await ensureColumn("generation_tasks", "cdn_url", "ALTER TABLE generation_tasks ADD COLUMN cdn_url TEXT");
@@ -694,8 +699,13 @@ export async function getDb() {
   await ensureColumn("generation_tasks", "file_size", "ALTER TABLE generation_tasks ADD COLUMN file_size INTEGER");
   await ensureColumn("generation_tasks", "mime_type", "ALTER TABLE generation_tasks ADD COLUMN mime_type TEXT");
   await ensureColumn("generation_tasks", "completed_at", "ALTER TABLE generation_tasks ADD COLUMN completed_at INTEGER");
+  await ensureColumn("generation_tasks", "finished_at", "ALTER TABLE generation_tasks ADD COLUMN finished_at INTEGER");
   await ensureColumn("generation_tasks", "failed_stage", "ALTER TABLE generation_tasks ADD COLUMN failed_stage TEXT");
   await ensureColumn("generation_tasks", "error_code", "ALTER TABLE generation_tasks ADD COLUMN error_code TEXT");
+  await ensureColumn("generation_tasks", "storage_status", "ALTER TABLE generation_tasks ADD COLUMN storage_status TEXT");
+  await ensureColumn("generation_tasks", "storage_error", "ALTER TABLE generation_tasks ADD COLUMN storage_error TEXT");
+  await ensureColumn("generation_tasks", "raw_create_response", "ALTER TABLE generation_tasks ADD COLUMN raw_create_response TEXT");
+  await ensureColumn("generation_tasks", "repaired_at", "ALTER TABLE generation_tasks ADD COLUMN repaired_at INTEGER");
   await database.exec("CREATE INDEX IF NOT EXISTS idx_projects_workspace ON projects(workspace_id); CREATE INDEX IF NOT EXISTS idx_assets_workspace ON assets(workspace_id); CREATE INDEX IF NOT EXISTS idx_asset_folders_workspace ON asset_folders(workspace_id); CREATE INDEX IF NOT EXISTS idx_history_workspace ON generation_history(workspace_id); CREATE INDEX IF NOT EXISTS idx_model_configs_workspace ON model_configs(workspace_id)");
   const timestamp = Date.now();
   await database.run(`UPDATE model_configs SET workspace_id = COALESCE(

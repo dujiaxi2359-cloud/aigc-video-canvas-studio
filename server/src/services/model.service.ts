@@ -3,7 +3,7 @@ import path from "node:path";
 import { getDb } from "../db/database.js";
 import { createAsset } from "./asset.service.js";
 import { decryptApiKey } from "./encryption.service.js";
-import { persistGeneratedVideoToCOS, updateCanvasNodeWithGeneratedVideo, updateCanvasNodeWithGenerationFailure } from "./generatedVideoPersistence.service.js";
+import { persistGeneratedVideoToCOS, updateCanvasNodeWithGeneratedVideo, updateCanvasNodeWithGenerationFailure, updateCanvasNodeWithVideoTaskRunning } from "./generatedVideoPersistence.service.js";
 import { addHistory } from "./history.service.js";
 import { saveGenerationTask } from "./generationTask.service.js";
 import { modelCatalog } from "./modelCatalog.js";
@@ -41,7 +41,7 @@ import type { OfficialVideoMode } from "../types/videoModes.js";
 import { legacyInputModeToOfficialMode } from "../types/videoModes.js";
 import type { ProviderGenerateResult } from "./providers/providerTypes.js";
 import { isProviderError, ProviderError, rawErrorMessage } from "../utils/providerErrors.js";
-import { extractProviderTaskId, extractProviderVideoUrl, isProviderSuccessStatus, sanitizeUrlForLog } from "../utils/videoResultExtractor.js";
+import { extractProviderProgress, extractProviderTaskId, extractProviderVideoUrl, isProviderSuccessStatus, isRunningStatus, sanitizeUrlForLog } from "../utils/videoResultExtractor.js";
 import { buildPayloadSummary, logOfficialPayload } from "../utils/generationPayload.js";
 import { metadataToQualityAudit, readGeneratedFileMetadata } from "../utils/mediaMetadata.js";
 import { mapVideoDimensions, normalizeVideoAspectRatio } from "../utils/videoParams.js";
@@ -949,11 +949,17 @@ export function hasSubmittedRemoteVideoTask(error: unknown) {
   const details = error.details;
   if (!details || typeof details !== "object") return false;
   const record = details as Record<string, unknown>;
-  return [record.proxyTaskId, record.taskId, record.requestId, record.id]
+  return [record.proxyTaskId, record.taskId, record.task_id, record.parsedTaskId, record.providerTaskId, record.requestId, record.request_id, record.id, record.jobId, record.job_id]
     .some((value) => typeof value === "string" && value.length > 0);
 }
 
 function isTerminalSubmittedVideoError(error: unknown) {
+  if (hasSubmittedRemoteVideoTask(error) && isProviderError(error)) {
+    const details = error.details && typeof error.details === "object" ? error.details as Record<string, unknown> : {};
+    const failedStage = String(details.failedStage ?? "");
+    const status = String(details.providerStatus ?? details.status ?? details.task_status ?? "");
+    if (failedStage === "polling" || details.retryablePollError === true || isRunningStatus(status)) return false;
+  }
   const text = isProviderError(error)
     ? `${error.errorCode}\n${error.message}\n${error.debugMessage ?? ""}\n${safeStringify(error.details)}`
     : rawErrorMessage(error);
@@ -1143,12 +1149,37 @@ function videoTaskIdFrom(result: ProviderGenerateResult, request: GenerateVideoR
   );
 }
 
+function videoResultProgress(result: ProviderGenerateResult, fallback: number) {
+  return extractProviderProgress(result.rawResponse) ?? extractProviderProgress(result.payloadSummary) ?? fallback;
+}
+
+function videoResultProviderTaskId(result: ProviderGenerateResult, request: GenerateVideoRequest) {
+  const summary = providerSummary(result);
+  const value = summary.taskId
+    ?? summary.providerTaskId
+    ?? summary.parsedTaskId
+    ?? summary.task_id
+    ?? summary.requestId
+    ?? summary.request_id
+    ?? extractProviderTaskId(result.rawResponse);
+  return typeof value === "string" && value.trim() ? value.trim() : videoTaskIdFrom(result, request);
+}
+
+function logVideoTask(event: string, payload: Record<string, unknown>) {
+  console.info(`[video-task:${event}]`, JSON.stringify(payload));
+}
+
 async function markVideoTaskStage(input: {
   id?: string;
   status: string;
   stage: string;
   progress?: number;
   providerStatus?: string;
+  providerTaskId?: string;
+  canvasNodeId?: string;
+  projectId?: string;
+  providerId?: string;
+  modelId?: string;
   providerVideoUrl?: string;
   outputUrl?: string;
   cdnUrl?: string;
@@ -1159,16 +1190,37 @@ async function markVideoTaskStage(input: {
   fileSize?: number;
   mimeType?: string;
   completedAt?: number;
+  finishedAt?: number;
   failedStage?: string;
   errorCode?: string;
+  storageStatus?: string;
+  storageError?: string;
+  rawCreateResponse?: unknown;
+  repairedAt?: number;
   errorMessage?: string;
   result?: Record<string, unknown>;
 }) {
   if (!input.id) return;
+  logVideoTask(input.stage, {
+    localTaskId: input.id,
+    providerTaskId: input.providerTaskId,
+    canvasNodeId: input.canvasNodeId,
+    providerId: input.providerId,
+    modelId: input.modelId,
+    status: input.status,
+    providerStatus: input.providerStatus,
+    progress: input.progress,
+    hasVideoUrl: Boolean(input.providerVideoUrl || input.outputUrl)
+  });
   await saveGenerationTask({
     id: input.id,
     status: input.status,
     providerStatus: input.providerStatus,
+    providerTaskId: input.providerTaskId,
+    canvasNodeId: input.canvasNodeId,
+    projectId: input.projectId,
+    providerId: input.providerId,
+    modelId: input.modelId,
     providerVideoUrl: input.providerVideoUrl,
     outputUrl: input.outputUrl,
     cdnUrl: input.cdnUrl,
@@ -1179,8 +1231,13 @@ async function markVideoTaskStage(input: {
     fileSize: input.fileSize,
     mimeType: input.mimeType,
     completedAt: input.completedAt,
+    finishedAt: input.finishedAt,
     failedStage: input.failedStage,
     errorCode: input.errorCode,
+    storageStatus: input.storageStatus,
+    storageError: input.storageError,
+    rawCreateResponse: input.rawCreateResponse,
+    repairedAt: input.repairedAt,
     errorMessage: input.errorMessage,
     progress: input.progress,
     stage: input.stage,
@@ -1428,6 +1485,10 @@ export async function generateVideo(input: GenerateVideoRequest) {
         id: inputForGeneration.clientRequestId ?? inputForGeneration.nodeId,
         status: "processing",
         stage: "create_started",
+        canvasNodeId: inputForGeneration.nodeId,
+        projectId: inputForGeneration.projectId,
+        providerId,
+        modelId: modelName,
         progress: 0,
         result: {
           provider: providerId,
@@ -1441,13 +1502,28 @@ export async function generateVideo(input: GenerateVideoRequest) {
           pollEndpoint: videoRoute.pollEndpoint
         }
       });
+      logVideoTask("create", {
+        localTaskId: inputForGeneration.clientRequestId ?? inputForGeneration.nodeId,
+        canvasNodeId: inputForGeneration.nodeId,
+        providerId,
+        modelId: modelName,
+        capability: videoRoute.actualCapability
+      });
       result = await callVideoProvider({ model, providerParams, capabilities });
+      const createdProviderTaskId = videoResultProviderTaskId(result, inputForGeneration);
+      const createdProgress = videoResultProgress(result, result.status === "processing" ? 10 : 80);
       await markVideoTaskStage({
-        id: videoTaskIdFrom(result, inputForGeneration),
+        id: createdProviderTaskId,
         status: "processing",
         stage: "create_success",
         providerStatus: result.status === "processing" ? "processing" : "succeeded",
-        progress: result.status === "processing" ? 10 : 80,
+        providerTaskId: createdProviderTaskId,
+        canvasNodeId: inputForGeneration.nodeId,
+        projectId: inputForGeneration.projectId,
+        providerId,
+        modelId: modelName,
+        progress: createdProgress,
+        rawCreateResponse: result.rawResponse,
         result: {
           provider: providerId,
           modelId: modelName,
@@ -1457,20 +1533,38 @@ export async function generateVideo(input: GenerateVideoRequest) {
           nodeId: inputForGeneration.nodeId,
           projectId: inputForGeneration.projectId,
           createRawResponse: result.rawResponse,
-          parsedTaskId: videoTaskIdFrom(result, inputForGeneration)
+          parsedTaskId: createdProviderTaskId
         }
       });
+      logVideoTask("provider-created", {
+        localTaskId: createdProviderTaskId,
+        providerTaskId: createdProviderTaskId,
+        status: result.status,
+        progress: createdProgress
+      });
+      await updateCanvasNodeWithVideoTaskRunning({
+        projectId: inputForGeneration.projectId,
+        nodeId: inputForGeneration.nodeId,
+        providerTaskId: createdProviderTaskId,
+        progress: createdProgress
+      }).catch((canvasError) => console.warn("[video running canvas update failed]", rawErrorMessage(canvasError)));
       if (result.status === "processing") {
         const payloadSummary = {
           ...preflightSummary,
           ...(result.payloadSummary && typeof result.payloadSummary === "object" ? result.payloadSummary as Record<string, unknown> : {})
         };
-        const pendingTaskId = videoTaskIdFrom(result, inputForGeneration);
+        const pendingTaskId = createdProviderTaskId;
         await markVideoTaskStage({
           id: pendingTaskId,
           status: "processing",
           stage: "polling",
           providerStatus: "processing",
+          providerTaskId: pendingTaskId,
+          canvasNodeId: inputForGeneration.nodeId,
+          projectId: inputForGeneration.projectId,
+          providerId,
+          modelId: modelName,
+          progress: createdProgress,
           result: {
             ...payloadSummary,
             provider: providerId,
@@ -1510,6 +1604,11 @@ export async function generateVideo(input: GenerateVideoRequest) {
       status: "processing",
       stage: "provider_succeeded",
       providerStatus: "succeeded",
+      providerTaskId: taskId,
+      canvasNodeId: activeInputForGeneration.nodeId,
+      projectId: activeInputForGeneration.projectId,
+      providerId: activeModel.provider_id ?? "",
+      modelId: activeModel.model_name ?? activeModel.id,
       progress: 85,
       result: {
         provider: activeModel.provider_id ?? "",
@@ -1523,18 +1622,46 @@ export async function generateVideo(input: GenerateVideoRequest) {
       }
     });
     const providerVideoUrl = ensureProviderVideoUrl(result);
+    const providerFallbackUrl = providerVideoUrl || result.outputUrl || "";
     await markVideoTaskStage({
       id: taskId,
       status: "processing",
       stage: "provider_result_parsed",
       providerStatus: "succeeded",
+      providerTaskId: taskId,
+      canvasNodeId: activeInputForGeneration.nodeId,
+      projectId: activeInputForGeneration.projectId,
+      providerId: activeModel.provider_id ?? "",
+      modelId: activeModel.model_name ?? activeModel.id,
       providerVideoUrl,
+      outputUrl: providerFallbackUrl,
+      previewUrl: providerFallbackUrl,
+      downloadableUrl: providerFallbackUrl,
       progress: 88,
       result: {
         parsedTaskId: taskId,
         parsedVideoUrl: providerVideoUrl ? sanitizeUrlForLog(providerVideoUrl) : undefined,
         providerVideoUrl: providerVideoUrl ? sanitizeUrlForLog(providerVideoUrl) : undefined
       }
+    });
+    await updateCanvasNodeWithGeneratedVideo({
+      projectId: activeInputForGeneration.projectId,
+      nodeId: activeInputForGeneration.nodeId,
+      outputUrl: providerFallbackUrl,
+      previewUrl: providerFallbackUrl,
+      downloadableUrl: providerFallbackUrl
+    });
+    logVideoTask("success", {
+      localTaskId: taskId,
+      providerTaskId: taskId,
+      providerVideoUrl: sanitizeUrlForLog(providerVideoUrl),
+      outputUrl: sanitizeUrlForLog(providerFallbackUrl)
+    });
+    logVideoTask("canvas-sync", {
+      localTaskId: taskId,
+      canvasNodeId: activeInputForGeneration.nodeId,
+      nodeStatus: "completed",
+      nodeOutputUrl: sanitizeUrlForLog(providerFallbackUrl)
     });
     let asset;
     if (result.localPath) {
@@ -1573,59 +1700,164 @@ export async function generateVideo(input: GenerateVideoRequest) {
         status: "processing",
         stage: "downloading_video",
         providerStatus: "succeeded",
+        providerTaskId: taskId,
+        canvasNodeId: activeInputForGeneration.nodeId,
+        projectId: activeInputForGeneration.projectId,
+        providerId: activeModel.provider_id ?? "",
+        modelId: activeModel.model_name ?? activeModel.id,
         providerVideoUrl,
         progress: 90
       });
-      const persisted = await persistGeneratedVideoToCOS({
-        providerVideoUrl,
-        taskId,
-        userId: undefined,
-        workspaceId: undefined,
-        providerId: activeModel.provider_id ?? "",
-        modelId: activeModel.id,
-        nodeId: activeInputForGeneration.nodeId,
-        projectId: activeInputForGeneration.projectId,
-        prompt: activeInputForGeneration.prompt,
-        negativePrompt: activeInputForGeneration.negativePrompt,
-        generationParams: providerSummary(result)
-      });
-      asset = persisted.asset;
-      result = {
-        ...result,
-        outputUrl: persisted.outputUrl,
-        localPath: persisted.localPath,
-        payloadSummary: {
-          ...providerSummary(result),
-          providerVideoUrl: sanitizeUrlForLog(providerVideoUrl),
-          cosObjectKey: persisted.cosObjectKey,
+      logVideoTask("storage-transfer-start", { localTaskId: taskId, providerVideoUrl: sanitizeUrlForLog(providerVideoUrl) });
+      try {
+        const persisted = await persistGeneratedVideoToCOS({
+          providerVideoUrl,
+          taskId,
+          userId: undefined,
+          workspaceId: undefined,
+          providerId: activeModel.provider_id ?? "",
+          modelId: activeModel.id,
+          nodeId: activeInputForGeneration.nodeId,
+          projectId: activeInputForGeneration.projectId,
+          prompt: activeInputForGeneration.prompt,
+          negativePrompt: activeInputForGeneration.negativePrompt,
+          generationParams: providerSummary(result)
+        });
+        asset = persisted.asset;
+        result = {
+          ...result,
+          outputUrl: persisted.outputUrl,
+          localPath: persisted.localPath,
+          payloadSummary: {
+            ...providerSummary(result),
+            providerVideoUrl: sanitizeUrlForLog(providerVideoUrl),
+            cosObjectKey: persisted.cosObjectKey,
+            fileSize: persisted.fileSize,
+            mimeType: persisted.mimeType
+          }
+        };
+        await markVideoTaskStage({
+          id: taskId,
+          status: "processing",
+          stage: "cos_uploaded",
+          providerStatus: "succeeded",
+          providerTaskId: taskId,
+          canvasNodeId: activeInputForGeneration.nodeId,
+          projectId: activeInputForGeneration.projectId,
+          providerId: activeModel.provider_id ?? "",
+          modelId: activeModel.model_name ?? activeModel.id,
+          providerVideoUrl,
+          outputUrl: persisted.outputUrl,
+          cdnUrl: persisted.cdnUrl,
+          posterUrl: persisted.posterUrl,
+          previewUrl: persisted.previewUrl,
+          downloadableUrl: persisted.downloadableUrl,
+          cosKey: persisted.cosObjectKey,
           fileSize: persisted.fileSize,
-          mimeType: persisted.mimeType
-        }
-      };
+          mimeType: persisted.mimeType,
+          storageStatus: "success",
+          progress: 96,
+          result: {
+            providerVideoUrl: sanitizeUrlForLog(providerVideoUrl),
+            cosUploadStatus: persisted.cosUploadStatus,
+            cosObjectKey: persisted.cosObjectKey,
+            finalOutputUrl: persisted.outputUrl,
+            cdnUrl: persisted.cdnUrl,
+            cosUrl: persisted.cosUrl
+          }
+        });
+        logVideoTask("storage-transfer-success", { localTaskId: taskId, cosKey: persisted.cosObjectKey, cdnUrl: persisted.cdnUrl });
+      } catch (storageError) {
+        await markVideoTaskStage({
+          id: taskId,
+          status: "succeeded",
+          stage: "storage_transfer_failed",
+          providerStatus: "succeeded",
+          providerTaskId: taskId,
+          canvasNodeId: activeInputForGeneration.nodeId,
+          projectId: activeInputForGeneration.projectId,
+          providerId: activeModel.provider_id ?? "",
+          modelId: activeModel.model_name ?? activeModel.id,
+          providerVideoUrl,
+          outputUrl: providerFallbackUrl,
+          previewUrl: providerFallbackUrl,
+          downloadableUrl: providerFallbackUrl,
+          storageStatus: "failed",
+          storageError: rawErrorMessage(storageError),
+          completedAt: Date.now(),
+          finishedAt: Date.now(),
+          progress: 100,
+          result: {
+            providerVideoUrl: sanitizeUrlForLog(providerVideoUrl),
+            finalOutputUrl: sanitizeUrlForLog(providerFallbackUrl),
+            cosUploadStatus: "failed",
+            storageError: rawErrorMessage(storageError),
+            storageWarning: "视频已生成成功，但 COS/CDN 转存失败，当前使用上游视频地址播放。"
+          }
+        });
+        logVideoTask("storage-transfer-failed", { localTaskId: taskId, providerVideoUrl: sanitizeUrlForLog(providerVideoUrl), error: rawErrorMessage(storageError) });
+      }
+    }
+    if (!asset && providerFallbackUrl) {
+      const completedAt = Date.now();
       await markVideoTaskStage({
         id: taskId,
-        status: "processing",
-        stage: "cos_uploaded",
+        status: "succeeded",
+        stage: "succeeded",
         providerStatus: "succeeded",
+        providerTaskId: taskId,
+        canvasNodeId: activeInputForGeneration.nodeId,
+        projectId: activeInputForGeneration.projectId,
+        providerId: activeModel.provider_id ?? "",
+        modelId: activeModel.model_name ?? activeModel.id,
         providerVideoUrl,
-        outputUrl: persisted.outputUrl,
-        cdnUrl: persisted.cdnUrl,
-        posterUrl: persisted.posterUrl,
-        previewUrl: persisted.previewUrl,
-        downloadableUrl: persisted.downloadableUrl,
-        cosKey: persisted.cosObjectKey,
-        fileSize: persisted.fileSize,
-        mimeType: persisted.mimeType,
-        progress: 96,
+        outputUrl: providerFallbackUrl,
+        previewUrl: providerFallbackUrl,
+        downloadableUrl: providerFallbackUrl,
+        completedAt,
+        finishedAt: completedAt,
+        progress: 100,
         result: {
+          provider: activeModel.provider_id ?? "",
+          modelId: activeModel.model_name ?? activeModel.id,
+          capability: videoRoute?.actualCapability ?? "video",
+          routing: videoRoute,
+          parsedTaskId: taskId,
+          parsedVideoUrl: sanitizeUrlForLog(providerVideoUrl),
           providerVideoUrl: sanitizeUrlForLog(providerVideoUrl),
-          cosUploadStatus: persisted.cosUploadStatus,
-          cosObjectKey: persisted.cosObjectKey,
-          finalOutputUrl: persisted.outputUrl,
-          cdnUrl: persisted.cdnUrl,
-          cosUrl: persisted.cosUrl
+          finalOutputUrl: sanitizeUrlForLog(providerFallbackUrl),
+          outputUrl: sanitizeUrlForLog(providerFallbackUrl),
+          canvasUpdated: true
         }
       });
+      await addHistory({
+        generationType: "video",
+        projectId: activeInputForGeneration.projectId,
+        nodeId: activeInputForGeneration.nodeId,
+        modelConfigId: activeModel.id,
+        modelDisplayName: activeModel.display_name,
+        inputMode: activeInputForGeneration.inputMode,
+        prompt: activeInputForGeneration.prompt,
+        duration: activeInputForGeneration.duration,
+        aspectRatio: activeInputForGeneration.aspectRatio,
+        resolution: activeInputForGeneration.resolution,
+        status: "success",
+        outputUrl: providerFallbackUrl,
+        previewUrl: providerFallbackUrl,
+        downloadableUrl: providerFallbackUrl
+      }).catch((historyError) => console.warn("[video provider-url history failed]", rawErrorMessage(historyError)));
+      return {
+        status: "success" as const,
+        outputUrl: providerFallbackUrl,
+        previewUrl: providerFallbackUrl,
+        downloadableUrl: providerFallbackUrl,
+        payloadSummary: {
+          ...preflightSummary,
+          ...providerSummary(result),
+          providerVideoUrl: sanitizeUrlForLog(providerVideoUrl),
+          storageStatus: "pending_or_failed_provider_url_fallback"
+        }
+      };
     }
     if (!asset) {
       throw new ProviderError(
@@ -1643,6 +1875,11 @@ export async function generateVideo(input: GenerateVideoRequest) {
       status: "processing",
       stage: "cos_uploaded",
       providerStatus: "succeeded",
+      providerTaskId: taskId,
+      canvasNodeId: activeInputForGeneration.nodeId,
+      projectId: activeInputForGeneration.projectId,
+      providerId: activeModel.provider_id ?? "",
+      modelId: activeModel.model_name ?? activeModel.id,
       providerVideoUrl,
       outputUrl: finalOutputUrl,
       cdnUrl: asset.cdnUrl,
@@ -1696,6 +1933,11 @@ export async function generateVideo(input: GenerateVideoRequest) {
       status: "processing",
       stage: "history_saved",
       providerStatus: "succeeded",
+      providerTaskId: taskId,
+      canvasNodeId: activeInputForGeneration.nodeId,
+      projectId: activeInputForGeneration.projectId,
+      providerId: activeModel.provider_id ?? "",
+      modelId: activeModel.model_name ?? activeModel.id,
       providerVideoUrl,
       outputUrl: finalOutputUrl,
       cdnUrl: asset.cdnUrl,
@@ -1740,6 +1982,11 @@ export async function generateVideo(input: GenerateVideoRequest) {
       status: "succeeded",
       stage: "succeeded",
       providerStatus: "succeeded",
+      providerTaskId: taskId,
+      canvasNodeId: activeInputForGeneration.nodeId,
+      projectId: activeInputForGeneration.projectId,
+      providerId: activeModel.provider_id ?? "",
+      modelId: activeModel.model_name ?? activeModel.id,
       providerVideoUrl,
       outputUrl: finalOutputUrl,
       cdnUrl: asset.cdnUrl,
@@ -1750,6 +1997,8 @@ export async function generateVideo(input: GenerateVideoRequest) {
       fileSize: asset.size,
       mimeType: asset.mimeType,
       completedAt,
+      finishedAt: completedAt,
+      storageStatus: "success",
       progress: 100,
       result: {
         provider: activeModel.provider_id ?? "",
@@ -1791,11 +2040,22 @@ export async function generateVideo(input: GenerateVideoRequest) {
     const failedTaskId = String(errorDetails.parsedTaskId ?? errorDetails.taskId ?? input.clientRequestId ?? input.nodeId);
     if (hasSubmittedRemoteVideoTask(error) && !isTerminalSubmittedVideoError(error)) {
       const details = errorDetails;
+      logVideoTask("diagnosis-ignored", {
+        localTaskId: failedTaskId,
+        providerTaskId: failedTaskId,
+        diagnosisError: meta.errorMessage,
+        reason: "provider task already created"
+      });
       await markVideoTaskStage({
         id: failedTaskId,
         status: "processing",
         stage: "polling",
         providerStatus: "processing",
+        providerTaskId: failedTaskId,
+        canvasNodeId: input.nodeId,
+        projectId: input.projectId,
+        providerId: model.provider_id ?? "",
+        modelId: model.model_name ?? model.id,
         progress: 35,
         result: {
           ...details,
@@ -1809,6 +2069,12 @@ export async function generateVideo(input: GenerateVideoRequest) {
           pendingAfterPollInterruption: true
         }
       });
+      await updateCanvasNodeWithVideoTaskRunning({
+        projectId: input.projectId,
+        nodeId: input.nodeId,
+        providerTaskId: failedTaskId,
+        progress: 35
+      }).catch((canvasError) => console.warn("[video polling canvas update failed]", rawErrorMessage(canvasError)));
       await addHistory({
         generationType: "video",
         projectId: input.projectId,
@@ -1838,6 +2104,11 @@ export async function generateVideo(input: GenerateVideoRequest) {
       status: "error",
       stage: "failed",
       providerStatus: typeof errorDetails.providerStatus === "string" ? errorDetails.providerStatus : "failed",
+      providerTaskId: typeof errorDetails.providerTaskId === "string" ? errorDetails.providerTaskId : typeof errorDetails.parsedTaskId === "string" ? errorDetails.parsedTaskId : typeof errorDetails.taskId === "string" ? errorDetails.taskId : undefined,
+      canvasNodeId: input.nodeId,
+      projectId: input.projectId,
+      providerId: model.provider_id ?? "",
+      modelId: model.model_name ?? model.id,
       failedStage,
       errorCode: meta.errorCode,
       errorMessage: meta.errorMessage,

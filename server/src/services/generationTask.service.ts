@@ -6,6 +6,11 @@ interface GenerationTaskRow {
   id: string;
   status: string;
   provider_status?: string;
+  provider_task_id?: string;
+  canvas_node_id?: string;
+  project_id?: string;
+  provider_id?: string;
+  model_id?: string;
   provider_video_url?: string;
   output_url?: string;
   cdn_url?: string;
@@ -16,8 +21,13 @@ interface GenerationTaskRow {
   file_size?: number;
   mime_type?: string;
   completed_at?: number;
+  finished_at?: number;
   failed_stage?: string;
   error_code?: string;
+  storage_status?: string;
+  storage_error?: string;
+  raw_create_response?: string;
+  repaired_at?: number;
   progress: number;
   result_json?: string;
   error_message?: string;
@@ -30,6 +40,11 @@ function toGenerationTask(row: GenerationTaskRow) {
     id: row.id,
     status: row.status,
     providerStatus: row.provider_status,
+    providerTaskId: row.provider_task_id,
+    canvasNodeId: row.canvas_node_id,
+    projectId: row.project_id,
+    providerId: row.provider_id,
+    modelId: row.model_id,
     providerVideoUrl: row.provider_video_url,
     outputUrl: row.output_url,
     cdnUrl: row.cdn_url,
@@ -40,8 +55,13 @@ function toGenerationTask(row: GenerationTaskRow) {
     fileSize: row.file_size,
     mimeType: row.mime_type,
     completedAt: row.completed_at,
+    finishedAt: row.finished_at,
     failedStage: row.failed_stage,
     errorCode: row.error_code,
+    storageStatus: row.storage_status,
+    storageError: row.storage_error,
+    rawCreateResponse: row.raw_create_response ? JSON.parse(row.raw_create_response) as unknown : undefined,
+    repairedAt: row.repaired_at,
     progress: row.progress,
     result: row.result_json ? JSON.parse(row.result_json) as unknown : undefined,
     errorMessage: row.error_message,
@@ -66,11 +86,12 @@ export async function getLatestGenerationTaskForNode(nodeId: string, since?: num
     `SELECT * FROM generation_tasks
      WHERE workspace_id = ?
        AND created_at >= ?
-       AND result_json LIKE ?
+       AND (canvas_node_id = ? OR result_json LIKE ?)
      ORDER BY updated_at DESC
      LIMIT 1`,
     workspace.id,
     createdAfter,
+    nodeId,
     `%${nodeId.replace(/[%_]/g, "")}%`
   );
   return row ? toGenerationTask(row) : undefined;
@@ -80,6 +101,11 @@ export async function saveGenerationTask(input: {
   id: string;
   status: string;
   providerStatus?: string;
+  providerTaskId?: string;
+  canvasNodeId?: string;
+  projectId?: string;
+  providerId?: string;
+  modelId?: string;
   providerVideoUrl?: string;
   outputUrl?: string;
   cdnUrl?: string;
@@ -90,8 +116,13 @@ export async function saveGenerationTask(input: {
   fileSize?: number;
   mimeType?: string;
   completedAt?: number;
+  finishedAt?: number;
   failedStage?: string;
   errorCode?: string;
+  storageStatus?: string;
+  storageError?: string;
+  rawCreateResponse?: unknown;
+  repairedAt?: number;
   stage?: string;
   progress?: number;
   result?: unknown;
@@ -108,15 +139,26 @@ export async function saveGenerationTask(input: {
   const mergedResult = previousResult && nextResult && typeof previousResult === "object" && typeof nextResult === "object"
     ? { ...previousResult as Record<string, unknown>, ...nextResult as Record<string, unknown> }
     : nextResult ?? previousResult;
+  const shouldClearStaleError = input.errorMessage === undefined
+    && ["processing", "success", "succeeded", "completed"].includes(input.status)
+    && Boolean(input.providerTaskId || input.providerVideoUrl || input.outputUrl);
+  const nextErrorMessage = shouldClearStaleError ? null : input.errorMessage ?? existing?.error_message;
   await db.run(
     `INSERT INTO generation_tasks (
-       id, workspace_id, user_id, status, provider_status, provider_video_url, output_url, cdn_url, poster_url, preview_url, downloadable_url, cos_key, file_size, mime_type,
-       completed_at, failed_stage, error_code, progress, result_json, error_message, created_at, updated_at
+       id, workspace_id, user_id, status, provider_status, provider_task_id, canvas_node_id, project_id, provider_id, model_id,
+       provider_video_url, output_url, cdn_url, poster_url, preview_url, downloadable_url, cos_key, file_size, mime_type,
+       completed_at, finished_at, failed_stage, error_code, storage_status, storage_error, raw_create_response, repaired_at,
+       progress, result_json, error_message, created_at, updated_at
      )
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(id) DO UPDATE SET
        status = excluded.status,
        provider_status = excluded.provider_status,
+       provider_task_id = excluded.provider_task_id,
+       canvas_node_id = excluded.canvas_node_id,
+       project_id = excluded.project_id,
+       provider_id = excluded.provider_id,
+       model_id = excluded.model_id,
        provider_video_url = excluded.provider_video_url,
        output_url = excluded.output_url,
        cdn_url = excluded.cdn_url,
@@ -127,8 +169,13 @@ export async function saveGenerationTask(input: {
        file_size = excluded.file_size,
        mime_type = excluded.mime_type,
        completed_at = excluded.completed_at,
+       finished_at = excluded.finished_at,
        failed_stage = excluded.failed_stage,
        error_code = excluded.error_code,
+       storage_status = excluded.storage_status,
+       storage_error = excluded.storage_error,
+       raw_create_response = excluded.raw_create_response,
+       repaired_at = excluded.repaired_at,
        progress = excluded.progress,
        result_json = excluded.result_json,
        error_message = excluded.error_message,
@@ -138,6 +185,11 @@ export async function saveGenerationTask(input: {
     user.id,
     input.status,
     input.providerStatus ?? existing?.provider_status,
+    input.providerTaskId ?? existing?.provider_task_id,
+    input.canvasNodeId ?? existing?.canvas_node_id,
+    input.projectId ?? existing?.project_id,
+    input.providerId ?? existing?.provider_id,
+    input.modelId ?? existing?.model_id,
     input.providerVideoUrl ?? existing?.provider_video_url,
     input.outputUrl ?? existing?.output_url,
     input.cdnUrl ?? existing?.cdn_url,
@@ -148,11 +200,16 @@ export async function saveGenerationTask(input: {
     input.fileSize ?? existing?.file_size,
     input.mimeType ?? existing?.mime_type,
     input.completedAt ?? existing?.completed_at,
+    input.finishedAt ?? existing?.finished_at,
     input.failedStage ?? existing?.failed_stage,
     input.errorCode ?? existing?.error_code,
+    input.storageStatus ?? existing?.storage_status,
+    input.storageError ?? existing?.storage_error,
+    input.rawCreateResponse === undefined ? existing?.raw_create_response : JSON.stringify(input.rawCreateResponse),
+    input.repairedAt ?? existing?.repaired_at,
     input.progress ?? existing?.progress ?? 0,
     mergedResult === undefined ? undefined : JSON.stringify(mergedResult),
-    input.errorMessage ?? existing?.error_message,
+    nextErrorMessage,
     timestamp,
     timestamp
   );

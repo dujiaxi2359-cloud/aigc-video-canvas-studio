@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { extractProviderStatus, extractProviderTaskId, extractProviderVideoUrl, isProviderSuccessStatus, sanitizeUrlForLog } from "../utils/videoResultExtractor.js";
+import { extractProviderProgress, extractProviderStatus, extractProviderTaskId, extractProviderVideoUrl, isProviderRunningStatus, isProviderSuccessStatus, sanitizeUrlForLog } from "../utils/videoResultExtractor.js";
 
 const videoUrl = "https://cdn.example.com/result.mp4?token=secret";
 
@@ -20,6 +20,9 @@ const cases: Array<[string, unknown]> = [
   ["data.outputUrl", { data: { outputUrl: videoUrl } }],
   ["data.preview_url", { data: { preview_url: videoUrl } }],
   ["data.download_url", { data: { download_url: videoUrl } }],
+  ["data.content.video_url", { data: { content: { video_url: videoUrl } } }],
+  ["data.data.output_url", { data: { data: { output_url: videoUrl } } }],
+  ["content.video_url", { content: { video_url: videoUrl } }],
   ["result.url", { result: { url: videoUrl } }],
   ["result.video_url", { result: { video_url: videoUrl } }],
   ["result.videoUrl", { result: { videoUrl: videoUrl } }],
@@ -31,7 +34,9 @@ const cases: Array<[string, unknown]> = [
   ["video.video_url", { video: { video_url: videoUrl } }],
   ["videos[0].url", { videos: [{ url: videoUrl }] }],
   ["videos[0].video_url", { videos: [{ video_url: videoUrl }] }],
+  ["data.videos[0].url", { data: { videos: [{ url: videoUrl }] } }],
   ["output[0].url", { output: [{ url: videoUrl }] }],
+  ["data.output[0].url", { data: { output: [{ url: videoUrl }] } }],
   ["outputs[0].url", { outputs: [{ url: videoUrl }] }],
   ["data[0].url", { data: [{ url: videoUrl }] }]
 ];
@@ -47,6 +52,10 @@ assert.equal(extractProviderStatus({ data: { task_status: "generated_success" } 
 assert.equal(isProviderSuccessStatus({ status: "succeeded" }), true);
 assert.equal(isProviderSuccessStatus({ result: { taskStatus: "task_success" } }), true);
 assert.equal(isProviderSuccessStatus({ data: { state: "failed" } }), false);
+assert.equal(isProviderRunningStatus({ status: "executing" }), true);
+assert.equal(extractProviderProgress({ progress: 30 }), 30);
+assert.equal(extractProviderProgress({ data: { progress: "30%" } }), 30);
+assert.equal(extractProviderProgress({ task: { progress: 0.3 } }), 30);
 assert.equal(sanitizeUrlForLog(videoUrl), "https://cdn.example.com/result.mp4?***");
 
 console.log("Video result extractor tests passed");

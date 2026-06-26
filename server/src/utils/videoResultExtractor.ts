@@ -17,6 +17,18 @@ const VIDEO_URL_PATHS = [
   ["data", "previewUrl"],
   ["data", "download_url"],
   ["data", "downloadUrl"],
+  ["data", "content", "video_url"],
+  ["data", "content", "videoUrl"],
+  ["data", "content", "url"],
+  ["data", "data", "content", "video_url"],
+  ["data", "data", "content", "videoUrl"],
+  ["data", "data", "output_url"],
+  ["data", "data", "outputUrl"],
+  ["data", "data", "video_url"],
+  ["data", "data", "videoUrl"],
+  ["content", "video_url"],
+  ["content", "videoUrl"],
+  ["content", "url"],
   ["result", "url"],
   ["result", "video_url"],
   ["result", "videoUrl"],
@@ -30,8 +42,12 @@ const VIDEO_URL_PATHS = [
   ["video", "video_url"],
   ["videos", 0, "url"],
   ["videos", 0, "video_url"],
+  ["data", "videos", 0, "url"],
+  ["data", "videos", 0, "video_url"],
   ["output", 0, "url"],
   ["outputs", 0, "url"],
+  ["data", "output", 0, "url"],
+  ["data", "outputs", 0, "url"],
   ["data", 0, "url"]
 ] as const;
 
@@ -65,6 +81,25 @@ const STATUS_PATHS = [
   ["result", "task_status"],
   ["result", "taskStatus"]
 ] as const;
+
+const PROGRESS_PATHS = [
+  ["progress"],
+  ["percent"],
+  ["percentage"],
+  ["data", "progress"],
+  ["data", "percent"],
+  ["data", "percentage"],
+  ["result", "progress"],
+  ["result", "percent"],
+  ["result", "percentage"],
+  ["task", "progress"],
+  ["task", "percent"],
+  ["task", "percentage"]
+] as const;
+
+const SUCCESS_STATUSES = new Set(["success", "succeeded", "completed", "complete", "done", "finished", "generated", "generated_success", "task_success"]);
+const RUNNING_STATUSES = new Set(["executing", "running", "processing", "queued", "pending", "in_progress", "submitted", "created", "generating", "started"]);
+const FAILED_STATUSES = new Set(["failed", "failure", "error", "canceled", "cancelled", "timeout", "failed"]);
 
 function valueAtPath(source: unknown, path: readonly (string | number)[]) {
   let current = source;
@@ -101,9 +136,53 @@ export function extractProviderStatus(source: unknown) {
   return firstStringAt(STATUS_PATHS, source)?.toLowerCase();
 }
 
+function normalizeStatus(status?: unknown) {
+  return typeof status === "string" ? status.trim().toLowerCase() : "";
+}
+
+export function isSuccessStatus(status?: unknown) {
+  return SUCCESS_STATUSES.has(normalizeStatus(status));
+}
+
+export function isRunningStatus(status?: unknown) {
+  return RUNNING_STATUSES.has(normalizeStatus(status));
+}
+
+export function isFailedStatus(status?: unknown) {
+  return FAILED_STATUSES.has(normalizeStatus(status));
+}
+
+export function extractProviderProgress(source: unknown) {
+  for (const path of PROGRESS_PATHS) {
+    const value = valueAtPath(source, path);
+    if (typeof value === "number" && Number.isFinite(value)) {
+      const percent = value > 0 && value <= 1 ? value * 100 : value;
+      return Math.max(0, Math.min(100, Math.round(percent)));
+    }
+    if (typeof value === "string") {
+      const match = value.match(/(\d+(?:\.\d+)?)/);
+      if (match?.[1]) {
+        const numeric = Number(match[1]);
+        const percent = numeric > 0 && numeric <= 1 && !value.includes("%") ? numeric * 100 : numeric;
+        return Math.max(0, Math.min(100, Math.round(percent)));
+      }
+    }
+  }
+  return undefined;
+}
+
 export function isProviderSuccessStatus(source: unknown) {
-  const status = extractProviderStatus(source);
-  return Boolean(status && ["success", "succeeded", "completed", "complete", "done", "finished", "generated", "generated_success", "task_success"].includes(status));
+  return isSuccessStatus(extractProviderStatus(source));
+}
+
+export function isProviderRunningStatus(source: unknown) {
+  return isRunningStatus(extractProviderStatus(source));
+}
+
+export function isVideoUrl(value?: string) {
+  if (!value) return false;
+  if (/^https?:\/\//i.test(value) && /\.(mp4|webm|mov|m4v|m3u8)(?:[?#]|$)/i.test(value)) return true;
+  return /^https?:\/\//i.test(value) && /video|download|preview|output|file|cdn/i.test(value);
 }
 
 export function sanitizeUrlForLog(url?: string) {
