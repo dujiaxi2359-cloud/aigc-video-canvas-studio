@@ -10,7 +10,6 @@ import { readGeneratedFileMetadata } from "../utils/mediaMetadata.js";
 import type { Asset, AssetFolder } from "../types/asset.js";
 import { requireRequestContext } from "./requestContext.js";
 import {
-  cachedSignedCosUrl,
   cdnUrlForCosKey,
   deleteCosFile,
   downloadCosFileToLocal,
@@ -93,8 +92,8 @@ function publicThumbnailUrl(fileName: string) {
   return `/uploads/assets/thumbnails/${path.basename(fileName)}`;
 }
 
-function previewEndpointUrl(assetId: string) {
-  return `/api/assets/${encodeURIComponent(assetId)}/preview`;
+function isStorageSignedAccessPath(value?: string | null) {
+  return Boolean(value?.startsWith("/api/storage/signed-url"));
 }
 
 function displayUrlForStorageKey(input: { storageKey?: string; cdnUrl?: string; publicUrl?: string; url?: string; cosUrl?: string }) {
@@ -128,12 +127,14 @@ function toAsset(row: AssetRow): Asset {
   const cosDownloadUrl = storageKey ? storageAccessPath(storageKey, { disposition: "attachment" }) : undefined;
   const thumbnailUrl = row.thumbnail_path
     || (row.thumbnail_key ? cdnUrlForCosKey(row.thumbnail_key) || storageAccessPath(row.thumbnail_key, { disposition: "inline" }) : undefined)
-    || (row.type === "image" ? previewEndpointUrl(row.id) : undefined);
+    || (row.type === "image" ? urls.cdnUrl || row.public_url : undefined);
   const posterUrl = row.poster_url
     || (row.poster_key ? cdnUrlForCosKey(row.poster_key) || storageAccessPath(row.poster_key, { disposition: "inline" }) : undefined);
   const previewUrl = row.preview_url
     || (row.preview_key ? cdnUrlForCosKey(row.preview_key) || storageAccessPath(row.preview_key, { disposition: "inline" }) : undefined);
-  const downloadableUrl = row.downloadable_url || row.download_url || cosDownloadUrl || urls.displayUrl;
+  const savedDownloadableUrl = isStorageSignedAccessPath(row.downloadable_url) ? undefined : row.downloadable_url;
+  const savedDownloadUrl = isStorageSignedAccessPath(row.download_url) ? undefined : row.download_url;
+  const downloadableUrl = savedDownloadableUrl || urls.displayUrl || savedDownloadUrl || cosDownloadUrl;
   return {
     id: row.id,
     name: row.name || row.original_name,
@@ -184,27 +185,15 @@ function toAsset(row: AssetRow): Asset {
 
 async function hydrateCosAsset(asset: Asset): Promise<Asset> {
   if (!asset.storageKey || !isCosConfigured()) return asset;
-  try {
-    const [cosUrl, downloadUrl] = await Promise.all([
-      cachedSignedCosUrl({ fileKey: asset.storageKey, expiresSeconds: 1800 }),
-      cachedSignedCosUrl({
-        fileKey: asset.storageKey,
-        expiresSeconds: 1800,
-        responseContentDisposition: `attachment; filename*=UTF-8''${encodeURIComponent(asset.fileName || asset.originalName || "asset")}`
-      })
-    ]);
-    return {
-      ...asset,
-      url: asset.cdnUrl || asset.publicUrl || asset.url || cosUrl,
-      outputUrl: asset.cdnUrl || asset.outputUrl || asset.publicUrl || asset.url || cosUrl,
-      cosUrl: asset.cosUrl || cosUrl,
-      downloadUrl,
-      downloadableUrl: asset.downloadableUrl || downloadUrl,
-      thumbnailUrl: asset.thumbnailUrl || (asset.type === "image" ? previewEndpointUrl(asset.id) : undefined)
-    };
-  } catch {
-    return asset;
-  }
+  const displayUrl = asset.cdnUrl || asset.publicUrl || asset.url;
+  return {
+    ...asset,
+    url: displayUrl,
+    outputUrl: asset.cdnUrl || asset.outputUrl || asset.publicUrl || asset.url,
+    downloadUrl: asset.downloadableUrl || asset.cdnUrl || asset.downloadUrl || asset.url,
+    downloadableUrl: asset.downloadableUrl || asset.cdnUrl || asset.url,
+    thumbnailUrl: asset.thumbnailUrl || (asset.type === "image" ? asset.cdnUrl || asset.publicUrl : undefined)
+  };
 }
 
 function toFolder(row: AssetRow): AssetFolder {
@@ -388,14 +377,14 @@ export async function createAsset(input: CreateAssetInput & { id?: string }) {
     cdnUrl = cdnUrlForCosKey(stored.fileKey);
     url = cdnUrl || stored.url;
     downloadUrl = stored.downloadUrl;
-    downloadableUrl = downloadableUrl || stored.downloadUrl;
+    downloadableUrl = downloadableUrl || cdnUrl || url;
   }
   if (storageKey) {
     cosUrl = cosUrl || storageAccessPath(storageKey, { disposition: "inline" });
     cdnUrl = cdnUrl || cdnUrlForCosKey(storageKey);
     url = cdnUrl || input.publicUrl || url || cosUrl;
     downloadUrl = downloadUrl || storageAccessPath(storageKey, { disposition: "attachment" });
-    downloadableUrl = downloadableUrl || downloadUrl;
+    downloadableUrl = downloadableUrl || cdnUrl || url || downloadUrl;
   }
 
   await db.run(

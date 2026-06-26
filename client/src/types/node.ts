@@ -148,6 +148,7 @@ export type VideoNodeData = {
   status: "idle" | "generating" | "success" | "error";
   generationStartedAt?: number;
   clientRequestId?: string;
+  assetId?: string;
   outputAssetId?: string;
   outputUrl?: string;
   thumbnailUrl?: string;

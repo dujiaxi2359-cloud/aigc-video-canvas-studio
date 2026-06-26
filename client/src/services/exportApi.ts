@@ -80,10 +80,13 @@ export function triggerBlobDownload(blob: Blob, filename: string) {
 }
 
 export async function downloadAsset(url: string, filename: string) {
-  const endpoint = new URL(apiUrl("/api/assets/download"), window.location.origin);
-  endpoint.searchParams.set("url", url);
-  endpoint.searchParams.set("filename", filename);
-  await downloadBlob(await fetch(endpoint), filename);
+  const anchor = document.createElement("a");
+  anchor.href = apiUrl(url);
+  anchor.download = filename;
+  anchor.rel = "noopener";
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
 }
 
 export function exportProjectJson(project: ExportProject) {

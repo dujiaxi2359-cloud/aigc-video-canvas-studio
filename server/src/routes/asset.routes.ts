@@ -8,14 +8,15 @@ import {
   createFolder,
   deleteAsset,
   deleteFolder,
-  getAssetDownloadInfo,
+  getAsset,
   getAssetPreviewInfo,
   listAssets,
   listFolders,
   updateAsset,
   updateFolder
 } from "../services/asset.service.js";
-import { contentTypeForFilename, extensionFromUrl, readAssetBytes, resolveLocalUploadPath, sanitizeFilename } from "../utils/exportFiles.js";
+import { contentTypeForFilename, resolveLocalUploadPath } from "../utils/exportFiles.js";
+import { signedCdnUrlForCosKey } from "../services/storage/cosStorage.service.js";
 
 const uploadRoot = process.env.UPLOAD_DIR ?? "./uploads";
 const tempDir = path.resolve(process.cwd(), uploadRoot, "tmp");
@@ -25,43 +26,58 @@ const upload = multer({ dest: tempDir });
 
 export const assetRouter = Router();
 
+function normalizeSignedUrlPurpose(value: unknown) {
+  const purpose = String(value || "preview");
+  return purpose === "play" || purpose === "download" ? purpose : "preview";
+}
+
 assetRouter.get("/download", async (req, res) => {
-  try {
-    const url = String(req.query.url || "");
-    if (!url) return res.status(400).json({ status: "error", errorCode: "DOWNLOAD_FAILED", errorMessage: "缺少下载地址。" });
-
-    const rawFilename = String(req.query.filename || `aigc_asset${extensionFromUrl(url)}`);
-    const filename = sanitizeFilename(rawFilename);
-    const data = await readAssetBytes(url);
-
-    res.setHeader("Content-Type", contentTypeForFilename(filename));
-    res.setHeader("Content-Disposition", `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`);
-    res.send(data);
-  } catch (error) {
-    const message = error instanceof Error && error.message === "REMOTE_ASSET_DOWNLOAD_FAILED" ? "远程素材下载失败，请检查链接是否过期。" : "素材下载失败。";
-    res.status(400).json({ status: "error", errorCode: "DOWNLOAD_FAILED", errorMessage: message });
-  }
+  res.status(410).json({
+    status: "error",
+    errorCode: "BACKEND_FILE_PROXY_DISABLED",
+    errorMessage: "后端文件流代理已禁用，请使用 /api/assets/:assetId/signed-url 获取 CDN 签名 URL。"
+  });
 });
 
 assetRouter.post("/download", async (req, res) => {
+  res.status(410).json({
+    status: "error",
+    errorCode: "BACKEND_FILE_PROXY_DISABLED",
+    errorMessage: "后端文件流代理已禁用，请使用 /api/assets/:assetId/signed-url 获取 CDN 签名 URL。"
+  });
+});
+
+assetRouter.post("/:id/signed-url", async (req, res) => {
   try {
-    const url = String(req.body?.url || "");
-    if (!url) return res.status(400).json({ status: "error", errorCode: "DOWNLOAD_FAILED", errorMessage: "缺少下载地址。" });
-
-    const rawFilename = String(req.body?.filename || `aigc_asset${extensionFromUrl(url)}`);
-    const filename = sanitizeFilename(rawFilename);
-    const data = await readAssetBytes(url);
-
-    res.setHeader("Content-Type", contentTypeForFilename(filename));
-    res.setHeader("Content-Disposition", `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`);
-    res.send(data);
+    const asset = await getAsset(req.params.id);
+    if (!asset?.storageKey) {
+      return res.status(404).json({ status: "error", errorCode: "ASSET_CDN_KEY_MISSING", errorMessage: "素材不存在或缺少 COS 对象 Key。" });
+    }
+    const purpose = normalizeSignedUrlPurpose(req.body?.purpose);
+    const signed = signedCdnUrlForCosKey({
+      fileKey: asset.storageKey,
+      purpose,
+      expiresSeconds: Number(req.body?.expiresIn || req.body?.expiresSeconds || 0)
+    });
+    res.json({
+      signedUrl: signed.signedUrl,
+      expiresAt: signed.expiresAt,
+      deliveryProvider: signed.deliveryProvider,
+      assetId: asset.id,
+      purpose
+    });
   } catch (error) {
-    const message = error instanceof Error && error.message === "REMOTE_ASSET_DOWNLOAD_FAILED"
-      ? "远程素材下载失败，请检查链接是否过期。"
-      : error instanceof Error && (error as NodeJS.ErrnoException).code === "ENOENT"
-        ? "本地素材文件不存在，请重新生成或上传素材。"
-        : "素材下载失败。";
-    res.status(400).json({ status: "error", errorCode: "DOWNLOAD_FAILED", errorMessage: message });
+    const code = error instanceof Error ? error.message : "ASSET_SIGNED_URL_FAILED";
+    const status = code === "ASSET_NOT_FOUND" ? 404 : code === "CDN_NOT_CONFIGURED" || code === "CDN_AUTH_KEY_REQUIRED" ? 503 : 400;
+    res.status(status).json({
+      status: "error",
+      errorCode: code,
+      errorMessage: code === "CDN_NOT_CONFIGURED"
+        ? "CDN 尚未配置，无法生成 CDN 签名访问 URL。"
+        : code === "CDN_AUTH_KEY_REQUIRED"
+          ? "CDN URL 鉴权已开启，但缺少鉴权 Key。"
+          : "生成 CDN 签名访问 URL 失败。"
+    });
   }
 });
 
@@ -178,15 +194,18 @@ assetRouter.get("/:id/preview", async (req, res) => {
 
 assetRouter.get("/:id/download", async (req, res) => {
   try {
-    const info = await getAssetDownloadInfo(req.params.id);
-    if (!info.localPath) throw new Error("ASSET_FILE_MISSING");
-    res.setHeader("Content-Type", info.contentType);
-    res.setHeader("Content-Disposition", `attachment; filename*=UTF-8''${encodeURIComponent(info.filename)}`);
-    fs.createReadStream(info.localPath).pipe(res);
+    const asset = await getAsset(req.params.id);
+    if (!asset?.storageKey) throw new Error("ASSET_CDN_KEY_MISSING");
+    const signed = signedCdnUrlForCosKey({
+      fileKey: asset.storageKey,
+      purpose: "download",
+      expiresSeconds: Number(req.query.expiresIn || req.query.expiresSeconds || 0)
+    });
+    res.redirect(302, signed.signedUrl);
   } catch (error) {
     const code = error instanceof Error ? error.message : "DOWNLOAD_FAILED";
-    const message = code === "ASSET_NOT_FOUND" ? "素材不存在。" : code === "ASSET_FILE_MISSING" ? "素材记录存在，但本地文件丢失。" : "下载失败。";
-    res.status(code === "ASSET_NOT_FOUND" ? 404 : 400).json({ status: "error", errorCode: code, errorMessage: message });
+    const message = code === "ASSET_NOT_FOUND" ? "素材不存在。" : code === "CDN_NOT_CONFIGURED" ? "CDN 尚未配置，无法下载。" : "生成下载签名 URL 失败。";
+    res.status(code === "ASSET_NOT_FOUND" ? 404 : code === "CDN_NOT_CONFIGURED" ? 503 : 400).json({ status: "error", errorCode: code, errorMessage: message });
   }
 });
 

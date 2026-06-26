@@ -1287,6 +1287,7 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
   ) : (
     <MediaPreview
       type="video"
+      assetId={props.data.outputAssetId || props.data.assetId}
       title={props.data.title}
       outputUrl={outputIsVideo ? props.data.outputUrl : undefined}
       posterUrl={posterUrl}

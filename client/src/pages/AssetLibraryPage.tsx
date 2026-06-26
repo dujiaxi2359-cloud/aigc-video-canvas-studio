@@ -5,6 +5,7 @@ import { Card } from "../components/common/Card";
 import { Input } from "../components/common/Input";
 import { Select } from "../components/common/Select";
 import { assetApi } from "../services/assetApi";
+import { downloadAssetById } from "../services/downloadApi";
 import { useAssetStore } from "../store/assetStore";
 import type { Asset, AssetType } from "../types/asset";
 import { absoluteUploadUrl } from "../utils/file";
@@ -41,8 +42,8 @@ function formatSize(size?: number) {
   return `${size} B`;
 }
 
-function downloadAsset(asset: Asset) {
-  window.location.href = assetApi.downloadUrl(asset.id);
+async function downloadAsset(asset: Asset) {
+  await downloadAssetById(asset.id, asset.name || "aigc_asset");
 }
 
 export function AssetLibraryPage({ onNavigate }: { onNavigate: (page: Page, projectId?: string) => void }) {
@@ -328,7 +329,7 @@ export function AssetLibraryPage({ onNavigate }: { onNavigate: (page: Page, proj
                         </div>
 
                         <div className="mt-3 flex items-center gap-1.5 border-t border-white/[0.07] pt-3">
-                          <button title="下载" type="button" onClick={() => downloadAsset(asset)} className="grid h-8 w-8 shrink-0 place-items-center rounded-[7px] bg-white/[0.05] text-white/52 hover:bg-white/[0.1] hover:text-white"><Download size={13} /></button>
+                          <button title="下载" type="button" onClick={() => void downloadAsset(asset)} className="grid h-8 w-8 shrink-0 place-items-center rounded-[7px] bg-white/[0.05] text-white/52 hover:bg-white/[0.1] hover:text-white"><Download size={13} /></button>
                           <button title={t("assets.rename")} type="button" onClick={() => { const name = window.prompt("素材名称", asset.name); if (name) run("素材已重命名", () => renameAsset(asset.id, name)); }} className="grid h-8 w-8 shrink-0 place-items-center rounded-[7px] bg-white/[0.05] text-white/52 hover:bg-white/[0.1] hover:text-white"><Edit3 size={13} /></button>
                           <button title="复制路径" type="button" onClick={() => navigator.clipboard.writeText(asset.localPath || asset.url)} className="grid h-8 w-8 shrink-0 place-items-center rounded-[7px] bg-white/[0.05] text-white/52 hover:bg-white/[0.1] hover:text-white"><Copy size={13} /></button>
                           <button title="复制 URL" type="button" onClick={() => navigator.clipboard.writeText(asset.publicUrl || absoluteUploadUrl(asset.url))} className="grid h-8 w-8 shrink-0 place-items-center rounded-[7px] bg-white/[0.05] text-white/52 hover:bg-white/[0.1] hover:text-white"><Link2 size={13} /></button>

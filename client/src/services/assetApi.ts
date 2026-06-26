@@ -11,6 +11,15 @@ export type AssetListQuery = {
   sortOrder?: string;
 };
 
+export type AssetSignedUrlPurpose = "preview" | "play" | "download";
+export type AssetSignedUrlResponse = {
+  signedUrl: string;
+  expiresAt: number;
+  deliveryProvider: "tencent_cdn";
+  assetId: string;
+  purpose: AssetSignedUrlPurpose;
+};
+
 export const assetApi = {
   list: (query: AssetListQuery = {}) => api.get<Asset[]>("/api/assets", {
     params: Object.fromEntries(Object.entries(query).map(([key, value]) => [key, value == null ? undefined : String(value)]))
@@ -28,6 +37,8 @@ export const assetApi = {
   },
   importGenerated: (input: { url: string; name?: string; nodeId?: string; projectId?: string; prompt?: string }) =>
     api.post<Asset>("/api/assets/import-generated", input),
+  signedUrl: (id: string, input: { purpose: AssetSignedUrlPurpose; expiresIn?: number }) =>
+    api.post<AssetSignedUrlResponse>(`/api/assets/${id}/signed-url`, input),
   update: (id: string, input: { name?: string; folderId?: string | null }) => api.patch<Asset>(`/api/assets/${id}`, input),
   remove: (id: string) => api.delete(`/api/assets/${id}`),
   downloadUrl: (id: string) => apiUrl(`/api/assets/${id}/download`)

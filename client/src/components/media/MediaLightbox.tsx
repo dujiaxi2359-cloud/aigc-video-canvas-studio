@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Copy, Download, Maximize2, Minus, Plus, RotateCcw, X } from "lucide-react";
+import { assetApi } from "../../services/assetApi";
 
 type MediaLightboxProps = {
   open: boolean;
   type: "image" | "video";
+  assetId?: string;
   src?: string;
   previewSrc?: string;
   title?: string;
@@ -12,11 +14,12 @@ type MediaLightboxProps = {
   onClose: () => void;
 };
 
-export function MediaLightbox({ open, type, src, previewSrc, title, meta = [], onClose }: MediaLightboxProps) {
+export function MediaLightbox({ open, type, assetId, src, previewSrc, title, meta = [], onClose }: MediaLightboxProps) {
   const [scale, setScale] = useState(1);
   const [fitToScreen, setFitToScreen] = useState(true);
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [displaySrc, setDisplaySrc] = useState("");
+  const [signedSrc, setSignedSrc] = useState("");
   const dragRef = useRef<{ x: number; y: number; originX: number; originY: number } | null>(null);
   const visibleMeta = useMemo(() => meta.filter((item) => item.value !== undefined && item.value !== null && item.value !== ""), [meta]);
 
@@ -26,43 +29,54 @@ export function MediaLightbox({ open, type, src, previewSrc, title, meta = [], o
     setFitToScreen(true);
     setPosition({ x: 0, y: 0 });
     setDisplaySrc(previewSrc || src || "");
+    setSignedSrc("");
+    if (assetId) {
+      assetApi.signedUrl(assetId, { purpose: type === "video" ? "play" : "preview" })
+        .then((result) => {
+          setSignedSrc(result.signedUrl);
+          if (type === "video") setDisplaySrc(result.signedUrl);
+        })
+        .catch((error) => window.dispatchEvent(new CustomEvent("studio:toast", { detail: error instanceof Error ? error.message : "生成 CDN 签名预览 URL 失败。" })));
+    }
     function onKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") onClose();
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [open, onClose, previewSrc, src]);
+  }, [assetId, open, onClose, previewSrc, src, type]);
 
   useEffect(() => {
-    if (!open || type !== "image" || !src || src === displaySrc) return;
+    const highResSrc = signedSrc || (assetId ? "" : src);
+    if (!open || type !== "image" || !highResSrc || highResSrc === displaySrc) return;
     let cancelled = false;
     const image = new Image();
     image.decoding = "async";
     image.onload = () => {
-      if (!cancelled) setDisplaySrc(src);
+      if (!cancelled) setDisplaySrc(highResSrc);
     };
-    image.src = src;
+    image.src = highResSrc;
     return () => {
       cancelled = true;
     };
-  }, [displaySrc, open, src, type]);
+  }, [displaySrc, open, signedSrc, src, type]);
 
   if (!open) return null;
 
-  const canShowHighRes = Boolean(src);
+  const resolvedSrc = signedSrc || (assetId ? "" : src);
+  const canShowHighRes = Boolean(resolvedSrc);
 
-  function download() {
-    if (!src) return;
+  async function download() {
+    if (!resolvedSrc) return;
     const link = document.createElement("a");
-    link.href = src;
+    link.href = assetId ? (await assetApi.signedUrl(assetId, { purpose: "download" })).signedUrl : resolvedSrc;
     link.download = title || (type === "image" ? "image" : "video");
     link.rel = "noopener";
     link.click();
   }
 
   async function copyLink() {
-    if (!src) return;
-    await navigator.clipboard.writeText(src);
+    if (!resolvedSrc) return;
+    await navigator.clipboard.writeText(resolvedSrc);
   }
 
   const content = (
@@ -111,8 +125,8 @@ export function MediaLightbox({ open, type, src, previewSrc, title, meta = [], o
               dragRef.current = null;
             }}
           />
-        ) : type === "video" && src ? (
-          <video className="media-lightbox-video" src={src} poster={previewSrc} controls preload="none" />
+        ) : type === "video" && resolvedSrc ? (
+          <video className="media-lightbox-video" src={resolvedSrc} poster={previewSrc} controls preload="none" />
         ) : (
           <div className="rounded-2xl border border-white/[0.08] bg-white/[0.04] px-5 py-4 text-[13px] text-amber-100">当前素材只有缩略图，无法查看高清原图。</div>
         )}
@@ -128,8 +142,8 @@ export function MediaLightbox({ open, type, src, previewSrc, title, meta = [], o
             <button className="media-lightbox-tool" type="button" onClick={() => { setFitToScreen(true); setScale(1); setPosition({ x: 0, y: 0 }); }} title="重置"><RotateCcw size={15} /></button>
           </>
         )}
-        <button className="media-lightbox-tool" type="button" onClick={copyLink} disabled={!src} title="复制链接"><Copy size={15} /></button>
-        <button className="media-lightbox-tool" type="button" onClick={download} disabled={!src} title="下载"><Download size={15} /></button>
+        <button className="media-lightbox-tool" type="button" onClick={copyLink} disabled={!resolvedSrc} title="复制链接"><Copy size={15} /></button>
+        <button className="media-lightbox-tool" type="button" onClick={download} disabled={!resolvedSrc} title="下载"><Download size={15} /></button>
         <button className="media-lightbox-tool" type="button" onClick={onClose} title="关闭"><X size={15} /></button>
       </div>
     </div>

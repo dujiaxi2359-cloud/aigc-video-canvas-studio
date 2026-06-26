@@ -49,7 +49,7 @@ function historyKind(item: GenerationHistory) {
   return /\.(png|jpe?g|webp)(\?|$)/.test(value) || value.includes("image") ? "image" : "video";
 }
 
-async function downloadLibraryAsset(asset: Asset) {
+  async function downloadLibraryAsset(asset: Asset) {
   try {
     await downloadAssetById(asset.id, asset.name || "aigc_asset");
   } catch (error) {
@@ -280,6 +280,7 @@ function AssetDrawer({ onClose }: { onClose: () => void }) {
     <MediaLightbox
       open={Boolean(preview)}
       type={preview?.type === "video" ? "video" : "image"}
+      assetId={preview?.id}
       src={absoluteUploadUrl(preview?.type === "video" ? videoPlayableUrl(preview) : imageOriginalUrl(preview || {}))}
       previewSrc={absoluteUploadUrl(preview?.type === "video" ? videoPosterUrl(preview) : imageDisplayUrl(preview || {}))}
       title={preview?.name}
@@ -309,11 +310,16 @@ function HistoryDrawer({ onClose }: { onClose: () => void }) {
   const samples = visible.length ? visible : Array.from({ length: 6 }, (_, index) => ({ id: `mock-${index}`, outputUrl: "", modelDisplayName: "Moon｜Tv" } as GenerationHistory));
 
   function download(item: GenerationHistory) {
+    const filename = `${item.modelDisplayName || "generation"}-${item.id}`;
+    if (item.outputAssetId) {
+      void downloadAssetById(item.outputAssetId, filename);
+      return;
+    }
     const url = mediaDownloadUrl(item);
     if (!url) return;
     const link = document.createElement("a");
     link.href = absoluteUploadUrl(url) || "";
-    link.download = `${item.modelDisplayName || "generation"}-${item.id}`;
+    link.download = filename;
     link.click();
   }
 
@@ -347,6 +353,7 @@ function HistoryDrawer({ onClose }: { onClose: () => void }) {
     <MediaLightbox
       open={Boolean(preview)}
       type={preview && historyKind(preview) === "image" ? "image" : "video"}
+      assetId={preview?.outputAssetId}
       src={absoluteUploadUrl(preview && historyKind(preview) === "video" ? videoPlayableUrl(preview) : imageOriginalUrl(preview || {}))}
       previewSrc={absoluteUploadUrl(preview && historyKind(preview) === "video" ? videoPosterUrl(preview) : imageDisplayUrl(preview || {}))}
       title={preview?.modelDisplayName || "生成结果"}

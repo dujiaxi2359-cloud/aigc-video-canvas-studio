@@ -84,6 +84,26 @@ TENCENT_CDN_BASE_URL=https://your-cdn-domain.example.com
 `USE_CDN_FOR_PUBLIC_ASSETS=false` can be set to force-disable CDN delivery.
 When omitted, `TENCENT_CDN_BASE_URL` enables CDN URL generation automatically.
 
+For private playback/download, the browser should request a short-lived URL
+only at interaction time:
+
+```http
+POST /api/assets/:assetId/signed-url
+```
+
+Supported `purpose` values are `preview`, `play`, and `download`. The API
+returns a temporary CDN URL and never proxies the file stream through the
+application server.
+
+Tencent CDN URL authentication can be enabled with:
+
+```bash
+TENCENT_CDN_AUTH_ENABLED=true
+TENCENT_CDN_AUTH_KEY=...
+TENCENT_CDN_AUTH_TYPE=type_a
+TENCENT_CDN_AUTH_EXPIRES_SECONDS=1800
+```
+
 This keeps the future migration path clean: moving to standard COS private
 read/write, CDN origin authentication, and CDN URL authentication should only
 change CDN/COS configuration and signing policy, not Moon's asset model. The

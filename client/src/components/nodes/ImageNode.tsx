@@ -205,7 +205,7 @@ export function ImageNode(props: NodeProps<ImageNodeData>) {
       floatingToolbar={floatingToolbar}
       hideInlineControls={Boolean(floatingToolbar)}
       preview={
-        props.data.url ? <MediaPreview type="image" title={props.data.title} previewUrl={props.data.previewUrl || previewUrl} originalUrl={props.data.url} thumbnailUrl={props.data.thumbnailUrl} cdnUrl={props.data.cdnUrl} cosUrl={props.data.cosUrl} downloadableUrl={props.data.downloadableUrl} aspectRatio={ratio} className="creation-media-preview" showInlineActions={false} /> :
+        props.data.url ? <MediaPreview type="image" assetId={props.data.assetId} title={props.data.title} previewUrl={props.data.previewUrl || previewUrl} originalUrl={props.data.url} thumbnailUrl={props.data.thumbnailUrl} cdnUrl={props.data.cdnUrl} cosUrl={props.data.cosUrl} downloadableUrl={props.data.downloadableUrl} aspectRatio={ratio} className="creation-media-preview" showInlineActions={false} /> :
         <label className="creation-upload-preview">
           <ImagePlus size={30} /><span>图片素材</span><small>点击或拖入上传</small>
           <input hidden type="file" accept="image/*" onChange={(event) => onFile(event.target.files?.[0])} />

@@ -481,7 +481,7 @@ function ImageGenerateNodeComponent(props: NodeProps<ImageGenerateNodeData>) {
   const displayOutputUrl = props.data.outputUrl || props.data.url;
   const displayThumbnailUrl = props.data.thumbnailUrl;
   const preview = imageModels.length === 0 ? <div className="creation-preview-empty"><ImagePlus size={29} /><span>请先配置图片模型</span></div> : (
-    <MediaPreview type="image" title={props.data.title} outputUrl={displayOutputUrl} thumbnailUrl={displayThumbnailUrl} previewUrl={props.data.previewUrl} cdnUrl={props.data.cdnUrl} cosUrl={props.data.cosUrl} downloadableUrl={props.data.downloadableUrl} aspectRatio={aspectRatioCss(displayRatio)} className="creation-media-preview" showInlineActions={false}>
+    <MediaPreview type="image" assetId={props.data.outputAssetId} title={props.data.title} outputUrl={displayOutputUrl} thumbnailUrl={displayThumbnailUrl} previewUrl={props.data.previewUrl} cdnUrl={props.data.cdnUrl} cosUrl={props.data.cosUrl} downloadableUrl={props.data.downloadableUrl} aspectRatio={aspectRatioCss(displayRatio)} className="creation-media-preview" showInlineActions={false}>
       <div className={`creation-preview-empty ${props.data.status === "error" ? "is-error" : ""}`}><ImagePlus size={28} /><span>{props.data.status === "generating" ? "正在生成图片" : props.data.status === "error" ? "图片生成失败" : "图片预览"}</span></div>
     </MediaPreview>
   );

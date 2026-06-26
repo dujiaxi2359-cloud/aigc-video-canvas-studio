@@ -4,9 +4,11 @@ import { absoluteUploadUrl } from "../../utils/file";
 import { MediaLightbox } from "./MediaLightbox";
 import { useLazyResource } from "../../utils/useLazyResource";
 import { imageDisplayUrl, imageOriginalUrl, mediaDownloadUrl, videoPlayableUrl, videoPosterUrl } from "../../utils/mediaUrls";
+import { assetApi } from "../../services/assetApi";
 
 type MediaPreviewProps = {
   type: "image" | "video";
+  assetId?: string;
   title?: string;
   previewUrl?: string;
   originalUrl?: string;
@@ -29,9 +31,11 @@ function ratioToCss(ratio?: string) {
   return ratio.replace(":", " / ");
 }
 
-export function MediaPreview({ type, title, previewUrl, originalUrl, outputUrl, thumbnailUrl, posterUrl, cdnUrl, cosUrl, downloadableUrl, aspectRatio, className = "", showInlineActions = true, onVideoMetadata, children, meta }: MediaPreviewProps) {
+export function MediaPreview({ type, assetId, title, previewUrl, originalUrl, outputUrl, thumbnailUrl, posterUrl, cdnUrl, cosUrl, downloadableUrl, aspectRatio, className = "", showInlineActions = true, onVideoMetadata, children, meta }: MediaPreviewProps) {
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [videoRequested, setVideoRequested] = useState(false);
+  const [signedPlaySrc, setSignedPlaySrc] = useState("");
+  const [signedPreviewSrc, setSignedPreviewSrc] = useState("");
   const [videoError, setVideoError] = useState("");
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const lazy = useLazyResource<HTMLDivElement>(true);
@@ -49,7 +53,7 @@ export function MediaPreview({ type, title, previewUrl, originalUrl, outputUrl, 
     return absoluteUploadUrl(selected);
   }, [cdnUrl, cosUrl, originalUrl, outputUrl, previewUrl, thumbnailUrl, type]);
   const downloadSrc = useMemo(() => absoluteUploadUrl(mediaDownloadUrl({ downloadableUrl, originalUrl, outputUrl, previewUrl, thumbnailUrl, cdnUrl, cosUrl })), [cdnUrl, cosUrl, downloadableUrl, originalUrl, outputUrl, previewUrl, thumbnailUrl]);
-  const videoSrc = type === "video" && videoRequested ? highResSrc : "";
+  const videoSrc = type === "video" && videoRequested ? signedPlaySrc || highResSrc : "";
 
   useEffect(() => {
     if (type !== "video") return;
@@ -61,14 +65,41 @@ export function MediaPreview({ type, title, previewUrl, originalUrl, outputUrl, 
       video.load();
     }
     setVideoRequested(false);
+    setSignedPlaySrc("");
   }, [lazy.visible, type]);
+
+  async function getSignedUrl(purpose: "preview" | "play" | "download", fallback: string) {
+    if (!assetId) return fallback;
+    const result = await assetApi.signedUrl(assetId, { purpose });
+    return result.signedUrl;
+  }
+
+  async function openLightbox(event?: React.MouseEvent) {
+    event?.preventDefault();
+    event?.stopPropagation();
+    if (!previewSrc && !highResSrc) return;
+    if (assetId) {
+      try {
+        setSignedPreviewSrc(await getSignedUrl(type === "video" ? "play" : "preview", highResSrc));
+      } catch (error) {
+        window.dispatchEvent(new CustomEvent("studio:toast", { detail: error instanceof Error ? error.message : "生成 CDN 签名预览 URL 失败。" }));
+      }
+    }
+    setLightboxOpen(true);
+  }
 
   async function playVideo(event: React.MouseEvent<HTMLButtonElement>) {
     event.preventDefault();
     event.stopPropagation();
     if (!highResSrc) return;
     setVideoError("");
-    setVideoRequested(true);
+    try {
+      setSignedPlaySrc(await getSignedUrl("play", highResSrc));
+      setVideoRequested(true);
+    } catch (error) {
+      setVideoError(error instanceof Error ? error.message : "生成 CDN 签名播放 URL 失败。");
+      return;
+    }
     window.requestAnimationFrame(() => {
       const video = videoRef.current;
       if (!video) return;
@@ -77,15 +108,19 @@ export function MediaPreview({ type, title, previewUrl, originalUrl, outputUrl, 
     });
   }
 
-  function download(event: React.MouseEvent<HTMLButtonElement>) {
+  async function download(event: React.MouseEvent<HTMLButtonElement>) {
     event.preventDefault();
     event.stopPropagation();
     if (!downloadSrc) return;
-    const link = document.createElement("a");
-    link.href = downloadSrc;
-    link.download = title || (type === "image" ? "image" : "video");
-    link.rel = "noopener";
-    link.click();
+    try {
+      const link = document.createElement("a");
+      link.href = await getSignedUrl("download", downloadSrc);
+      link.download = title || (type === "image" ? "image" : "video");
+      link.rel = "noopener";
+      link.click();
+    } catch (error) {
+      window.dispatchEvent(new CustomEvent("studio:toast", { detail: error instanceof Error ? error.message : "生成 CDN 签名下载 URL 失败。" }));
+    }
   }
 
   return (
@@ -96,14 +131,10 @@ export function MediaPreview({ type, title, previewUrl, originalUrl, outputUrl, 
         onClick={(event) => {
           if (allowNodeDrag) return;
           if (type !== "image" || (!previewSrc && !highResSrc)) return;
-          event.preventDefault();
-          event.stopPropagation();
-          setLightboxOpen(true);
+          void openLightbox(event);
         }}
         onDoubleClick={(event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          if (previewSrc || highResSrc) setLightboxOpen(true);
+          if (previewSrc || highResSrc) void openLightbox(event);
         }}
       >
         <div
@@ -146,7 +177,7 @@ export function MediaPreview({ type, title, previewUrl, originalUrl, outputUrl, 
         </div>
         {showInlineActions && (previewSrc || highResSrc) && (
           <div className="media-actions">
-            <button type="button" className="media-action-button" title={type === "image" ? "查看原图" : "全屏查看"} onClick={(event) => { event.preventDefault(); event.stopPropagation(); setLightboxOpen(true); }}>
+            <button type="button" className="media-action-button" title={type === "image" ? "查看原图" : "全屏查看"} onClick={(event) => void openLightbox(event)}>
               <Maximize2 size={14} />
             </button>
             <button type="button" className="media-action-button" title={type === "image" ? "下载图片" : "下载视频"} onClick={download}>
@@ -155,7 +186,7 @@ export function MediaPreview({ type, title, previewUrl, originalUrl, outputUrl, 
           </div>
         )}
       </div>
-      <MediaLightbox open={lightboxOpen} type={type} src={highResSrc} previewSrc={previewSrc} title={title} meta={meta} onClose={() => setLightboxOpen(false)} />
+      <MediaLightbox open={lightboxOpen} type={type} src={signedPreviewSrc || highResSrc} previewSrc={previewSrc} title={title} meta={meta} onClose={() => { setLightboxOpen(false); setSignedPreviewSrc(""); }} />
     </>
   );
 }

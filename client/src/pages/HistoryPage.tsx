@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Download, Image, Search, Trash2, Video } from "lucide-react";
-import { downloadAsset } from "../services/downloadApi";
+import { downloadAsset, downloadAssetById } from "../services/downloadApi";
 import { useHistoryStore } from "../store/historyStore";
 import type { GenerationHistory } from "../types/history";
 import { absoluteUploadUrl } from "../utils/file";
@@ -37,10 +37,11 @@ export function HistoryPage() {
 
   async function downloadHistory(item: GenerationHistory) {
     const downloadUrl = mediaDownloadUrl(item);
-    if (!downloadUrl) return;
+    if (!downloadUrl && !item.outputAssetId) return;
     const ext = /\.(png|jpe?g|webp|mp4|webm|mov|m4v)(\?|$)/i.exec(downloadUrl)?.[1] ?? "bin";
     try {
-      await downloadAsset(downloadUrl, `aigc_history_${item.modelDisplayName || item.id}.${ext}`);
+      if (item.outputAssetId) await downloadAssetById(item.outputAssetId, `aigc_history_${item.modelDisplayName || item.id}.${ext}`);
+      else await downloadAsset(downloadUrl, `aigc_history_${item.modelDisplayName || item.id}.${ext}`);
       setStatus("下载已开始");
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "下载失败");

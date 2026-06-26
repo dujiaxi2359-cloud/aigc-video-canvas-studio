@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import crypto from "node:crypto";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import COS from "cos-nodejs-sdk-v5";
@@ -125,6 +126,72 @@ export function cdnUrlForCosKey(fileKey?: string | null) {
 
 export function publicDeliveryProviderForCosKey(fileKey?: string | null) {
   return cdnUrlForCosKey(fileKey) ? "tencent_cdn" : "tencent_cos";
+}
+
+function cdnAuthEnabled() {
+  return /^(1|true|yes|on)$/i.test(String(process.env.TENCENT_CDN_AUTH_ENABLED || "").trim());
+}
+
+function cdnAuthExpiresSeconds(input?: number) {
+  const requested = Number(input || 0);
+  const configured = Number(process.env.TENCENT_CDN_AUTH_EXPIRES_SECONDS || 1800);
+  const value = Number.isFinite(requested) && requested > 0 ? requested : configured;
+  return Math.min(Math.max(Math.floor(value), 60), 60 * 60);
+}
+
+function md5(value: string) {
+  return crypto.createHash("md5").update(value).digest("hex");
+}
+
+function appendQuery(url: string, params: Record<string, string | number>) {
+  const parsed = new URL(url);
+  for (const [key, value] of Object.entries(params)) parsed.searchParams.set(key, String(value));
+  return parsed.toString();
+}
+
+export function signedCdnUrlForCosKey(input: {
+  fileKey?: string | null;
+  expiresSeconds?: number;
+  purpose?: "preview" | "play" | "download";
+}) {
+  if (!input.fileKey) throw new Error("CDN_FILE_KEY_REQUIRED");
+  const unsignedUrl = cdnUrlForCosKey(input.fileKey);
+  if (!unsignedUrl) throw new Error("CDN_NOT_CONFIGURED");
+  const expiresSeconds = cdnAuthExpiresSeconds(input.expiresSeconds);
+  const issuedAt = Math.floor(Date.now() / 1000);
+  const expiresAt = (issuedAt + expiresSeconds) * 1000;
+  if (!cdnAuthEnabled()) return { signedUrl: unsignedUrl, expiresAt, deliveryProvider: "tencent_cdn" as const };
+
+  const key = (process.env.TENCENT_CDN_AUTH_KEY || "").trim();
+  if (!key) throw new Error("CDN_AUTH_KEY_REQUIRED");
+  const parsed = new URL(unsignedUrl);
+  const resourcePath = parsed.pathname;
+  const authType = String(process.env.TENCENT_CDN_AUTH_TYPE || "type_a").trim().toLowerCase();
+  const signParam = process.env.TENCENT_CDN_AUTH_SIGN_PARAM || "sign";
+  const timeParam = process.env.TENCENT_CDN_AUTH_TIME_PARAM || "t";
+
+  if (authType === "type_d") {
+    const timestamp = String(issuedAt);
+    return {
+      signedUrl: appendQuery(unsignedUrl, { [signParam]: md5(`${key}${resourcePath}${timestamp}`), [timeParam]: timestamp }),
+      expiresAt,
+      deliveryProvider: "tencent_cdn" as const
+    };
+  }
+
+  const timestamp = String(issuedAt);
+  const rand = crypto.randomBytes(8).toString("hex");
+  const uid = process.env.TENCENT_CDN_AUTH_UID || "0";
+  return {
+    signedUrl: appendQuery(unsignedUrl, {
+      [signParam]: md5(`${resourcePath}-${timestamp}-${rand}-${uid}-${key}`),
+      [timeParam]: timestamp,
+      rand,
+      uid
+    }),
+    expiresAt,
+    deliveryProvider: "tencent_cdn" as const
+  };
 }
 
 function todayPath() {
