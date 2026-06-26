@@ -1765,24 +1765,6 @@ export async function generateVideoWithSeedance(params: SeedanceProviderParams):
           }
         });
         if (!pollResponse.ok) {
-          if (modelAccessDenied(task) || pollResponse.status === 401 || pollResponse.status === 403) {
-            throw new ProviderError(
-              "MODEL_ACCESS_DENIED",
-              `当前中转 API Key 的套餐、分组或上游渠道没有模型「${params.modelName}」的轮询/结果读取权限。请在中转后台开通该模型，或换用已授权的 API Key。`,
-              preview(task),
-              {
-                failedStage: "polling",
-                taskId: id,
-                parsedTaskId: id,
-                pollEndpoint: pollResult.endpoint,
-                model: params.modelName,
-                provider: params.providerId,
-                apiBaseUrl: params.videoRequestConfig?.baseUrl ?? params.apiBaseUrl,
-                upstreamStatus: pollResponse.status,
-                rawResponse: task
-              }
-            );
-          }
           await saveGenerationTask({
             id,
             ...taskPersistenceContext(params, id),
@@ -1792,7 +1774,8 @@ export async function generateVideoWithSeedance(params: SeedanceProviderParams):
               ...task,
               pollEndpoint: pollResult.endpoint,
               retryablePollError: true,
-              upstreamStatus: pollResponse.status
+              upstreamStatus: pollResponse.status,
+              pollAccessDenied: modelAccessDenied(task) || pollResponse.status === 401 || pollResponse.status === 403
             },
             errorMessage: `${routeLabel}任务已创建，查询暂时失败，正在继续等待。`
           });

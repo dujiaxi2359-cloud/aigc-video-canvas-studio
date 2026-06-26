@@ -1433,6 +1433,31 @@ export async function syncVideoTaskUpstream(input: { localTaskId?: string; provi
     return { status: "succeeded", providerTaskId, providerStatus, providerVideoUrl, outputUrl: providerVideoUrl, progress: 100, rawResponse };
   }
 
+  if (!response.ok && providerTaskId) {
+    await markVideoTaskStage({
+      id: localTaskId,
+      status: "processing",
+      stage: "sync_upstream_retryable_poll_error",
+      providerStatus,
+      providerTaskId,
+      canvasNodeId,
+      projectId,
+      providerId: model.provider_id,
+      modelId: model.id,
+      progress,
+      result: {
+        rawResponse,
+        syncUpstream: true,
+        pollUrl,
+        retryablePollError: true,
+        upstreamStatus: response.status
+      },
+      errorMessage: "上游查询暂时失败，任务继续等待。"
+    });
+    await updateCanvasNodeWithVideoTaskRunning({ projectId, nodeId: canvasNodeId, providerTaskId, progress });
+    return { status: "processing", providerTaskId, providerStatus, progress, rawResponse };
+  }
+
   if (isRunningStatus(providerStatus) || response.ok) {
     await markVideoTaskStage({
       id: localTaskId,
