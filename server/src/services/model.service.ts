@@ -1555,7 +1555,27 @@ async function enforceVideoAspectRatio(result: ProviderGenerateResult, aspectRat
       }
     };
   }
-  const ensured = await ensureVideoAspectRatio(result.localPath, aspectRatio, resolution);
+  let ensured: Awaited<ReturnType<typeof ensureVideoAspectRatio>>;
+  try {
+    ensured = await ensureVideoAspectRatio(result.localPath, aspectRatio, resolution);
+  } catch (error) {
+    console.warn("[video-task:aspect-ratio-transform-failed]", {
+      aspectRatio,
+      resolution,
+      localPath: result.localPath,
+      error: error instanceof Error ? error.message : String(error)
+    });
+    return {
+      ...result,
+      payloadSummary: {
+        ...(result.payloadSummary && typeof result.payloadSummary === "object" ? result.payloadSummary as Record<string, unknown> : {}),
+        requestedAspectRatio: normalizeVideoAspectRatio(aspectRatio),
+        outputAspectRatioTransformed: false,
+        outputAspectRatioFitMode: "transform_failed_keep_original",
+        deliveryWarning: "上游已成功生成视频，但本地比例裁剪失败。画布保留原视频，未将任务标记失败。"
+      }
+    };
+  }
   if (!ensured) return result;
   if (!ensured.transformed) {
     return {
