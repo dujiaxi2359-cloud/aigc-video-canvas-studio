@@ -189,6 +189,8 @@ export async function saveGenerationTask(input: {
     && ["processing", "success", "succeeded", "completed"].includes(input.status)
     && Boolean(input.providerTaskId || input.providerVideoUrl || input.outputUrl);
   const nextErrorMessage = shouldClearStaleError ? null : input.errorMessage ?? existing?.error_message;
+  const nextFailedStage = shouldClearStaleError ? null : input.failedStage ?? existing?.failed_stage;
+  const nextErrorCode = shouldClearStaleError ? null : input.errorCode ?? existing?.error_code;
   await db.run(
     `INSERT INTO generation_tasks (
        id, workspace_id, user_id, status, provider_status, provider_task_id, canvas_node_id, project_id, provider_id, model_id,
@@ -247,8 +249,8 @@ export async function saveGenerationTask(input: {
     input.mimeType ?? existing?.mime_type,
     input.completedAt ?? existing?.completed_at,
     input.finishedAt ?? existing?.finished_at,
-    input.failedStage ?? existing?.failed_stage,
-    input.errorCode ?? existing?.error_code,
+    nextFailedStage,
+    nextErrorCode,
     input.storageStatus ?? existing?.storage_status,
     input.storageError ?? existing?.storage_error,
     input.rawCreateResponse === undefined ? existing?.raw_create_response : JSON.stringify(input.rawCreateResponse),
