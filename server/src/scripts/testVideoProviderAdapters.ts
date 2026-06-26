@@ -1603,12 +1603,12 @@ assert(
   "Seedance asset upload may fall back only when the relay does not provide an asset endpoint"
 );
 assert(
-  seedanceAssetUploadShouldFallback(new ProviderError("SEEDANCE_ASSET_UPLOAD_FAILED", "Seedance 素材库接口调用失败：This token has no access to model seedance-asset", "{\"message\":\"This token has no access to model seedance-asset\"}", { upstreamStatus: 403 })),
-  "Seedance asset upload should fall back to public URLs when the current relay key has no seedance-asset permission"
+  !seedanceAssetUploadShouldFallback(new ProviderError("ASSET_UPLOAD_AUTH_FAILED", "当前模型需要素材库上传，但素材上传接口认证失败，请检查该模型所属 provider 的 API Key 和 asset endpoint 配置。", "{\"message\":\"This token has no access to model seedance-asset\"}", { upstreamStatus: 403 })),
+  "Seedance provider_asset auth failures must not fall back to public URLs"
 );
 assert(
-  seedanceAssetUploadShouldFallback(new ProviderError("SEEDANCE_ASSET_UPLOAD_FAILED", "Seedance 素材库接口调用失败：分组 auto 下模型 seedance-asset 的可用渠道不存在 (retry)", "{\"message\":\"分组 auto 下模型 seedance-asset 的可用渠道不存在 (retry)\"}", { upstreamStatus: 400 })),
-  "Seedance asset upload should fall back when the relay auto group has no seedance-asset channel"
+  !seedanceAssetUploadShouldFallback(new ProviderError("ASSET_UPLOAD_AUTH_FAILED", "当前模型需要素材库上传，但素材上传接口认证失败，请检查该模型所属 provider 的 API Key 和 asset endpoint 配置。", "{\"message\":\"分组 auto 下模型 seedance-asset 的可用渠道不存在 (retry)\"}", { upstreamStatus: 400 })),
+  "Seedance provider_asset channel access failures must not fall back to public URLs"
 );
 assert(
   seedanceAssetUploadShouldFallback(new ProviderError("SEEDANCE_ASSET_UPLOAD_FAILED", "Seedance 素材库接口调用失败：fail_to_fetch_task", "{\"model\":\"seedance-asset\",\"status_code\":502,\"code\":\"fail_to_fetch_task\"}", { upstreamStatus: 502 })),
@@ -1626,6 +1626,51 @@ assert(
   isRetryableSeedancePollFailure(new Response("{}", { status: 400 }), { message: "Panic detected, error: assignment to entry in nil map. Please contact us" }),
   "Seedance poll should keep waiting when the relay query endpoint returns a transient server panic"
 );
+const klingOpenAiVideoTransportConfig = resolveVideoRequestConfig({
+  providerId: "kling",
+  modelName: "kling-3.0-omni",
+  apiBaseUrl: "https://relay.example/v1",
+  apiKey: "sk-test",
+  prompt: "产品展示",
+  inputMode: "reference-to-video",
+  imageAssetIds: ["asset_1"]
+} as never, {
+  providerType: "openai_compatible",
+  endpointFamily: "openai_videos",
+  apiFamily: "openai_videos",
+  inputModes: ["text-to-video", "reference-to-video"],
+  supportedInputs: ["text", "image", "reference_image"],
+  imageTransport: "url_or_asset",
+  openaiCompatibleConfig: {
+    videoCreateEndpoint: "/v1/videos",
+    videoPollEndpoint: "/v1/videos/{taskId}",
+    videoPollMethod: "GET"
+  }
+});
+assert(klingOpenAiVideoTransportConfig.apiFamily === "openai_videos", "Kling OpenAI-compatible video should stay on the configured openai_videos family");
+assert(klingOpenAiVideoTransportConfig.assetTransport === "direct_url", "Kling must not use provider_asset unless explicitly configured");
+const explicitSeedanceAssetTransportConfig = resolveVideoRequestConfig({
+  providerId: "seedance",
+  modelName: "seedance-2.0",
+  apiBaseUrl: "https://relay.example/v1",
+  apiKey: "sk-test",
+  prompt: "产品展示",
+  inputMode: "reference-to-video",
+  imageAssetIds: ["asset_1"]
+} as never, {
+  providerType: "openai_compatible",
+  endpointFamily: "openai_video_create",
+  apiFamily: "seedance2_native",
+  inputModes: ["text-to-video", "reference-to-video"],
+  supportedInputs: ["text", "image", "reference_image"],
+  imageTransport: "url_or_asset",
+  assetTransport: "provider_asset",
+  assetProvider: "seedance_asset",
+  assetGroupCreateEndpoint: "/v1/seedance/asset/CreateAssetGroup",
+  assetCreateEndpoint: "/v1/seedance/asset/CreateAsset"
+});
+assert(explicitSeedanceAssetTransportConfig.assetTransport === "provider_asset", "Seedance Asset Flow should only be enabled by explicit provider_asset config");
+assert(explicitSeedanceAssetTransportConfig.assetProvider === "seedance_asset", "Seedance Asset Flow should keep the configured seedance_asset provider");
 const seedanceNativeBody = buildProxyBody({
   modelName: "doubao-seedance-2-0-260128",
   prompt: "介绍这款产品",

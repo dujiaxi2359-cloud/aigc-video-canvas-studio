@@ -56,6 +56,14 @@ export type VideoRequestConfig = {
   supportedInputs: VideoSupportedInput[];
   imageTransport: VideoImageTransport;
   videoTransport: VideoTransport;
+  assetTransport: "direct_url" | "cdn_url" | "openai_content_image_url" | "provider_asset";
+  assetProvider?: "seedance_asset" | "custom_asset";
+  assetGroupCreateEndpoint?: string;
+  assetCreateEndpoint?: string;
+  assetUploadAuthMode?: "bearer" | "api-key" | "none";
+  assetUrlScheme?: string;
+  assetIdPath?: string;
+  tokenSource?: "provider.apiKey";
   imageField?: string;
   videoField?: string;
   supportedAspectRatios: string[];
@@ -310,6 +318,14 @@ export function resolveVideoRequestConfig(params: VideoProviderParams, capabilit
       supportedInputs: supports,
       imageTransport,
       videoTransport: effectiveCapabilities.videoTransport ?? (apiFamily === "omni_fast_v2v" ? "url_or_base64_json" : supports.includes("video") ? "url_or_base64_json" : "unsupported"),
+      assetTransport: effectiveCapabilities.assetTransport ?? "direct_url",
+      assetProvider: effectiveCapabilities.assetProvider,
+      assetGroupCreateEndpoint: effectiveCapabilities.assetGroupCreateEndpoint,
+      assetCreateEndpoint: effectiveCapabilities.assetCreateEndpoint,
+      assetUploadAuthMode: effectiveCapabilities.assetUploadAuthMode,
+      assetUrlScheme: effectiveCapabilities.assetUrlScheme,
+      assetIdPath: effectiveCapabilities.assetIdPath,
+      tokenSource: effectiveCapabilities.tokenSource,
       imageField: effectiveCapabilities.imageField
         ?? (apiFamily === "omni_fast" ? "first_image_url" : apiFamily === "doubao_seedance15" ? "first_frame_image" : apiFamily === "aigc_video_json" ? "image" : params.inputMode === "reference-to-video" ? "images" : "image"),
       videoField: effectiveCapabilities.videoField ?? (apiFamily === "omni_fast_v2v" ? "video" : "video"),
@@ -356,6 +372,14 @@ export function resolveVideoRequestConfig(params: VideoProviderParams, capabilit
     supportedInputs: supportedInputs(effectiveCapabilities),
     imageTransport,
     videoTransport: effectiveCapabilities.videoTransport ?? (apiFamily === "omni_fast_v2v" ? "url_or_base64_json" : "unsupported"),
+    assetTransport: effectiveCapabilities.assetTransport ?? "direct_url",
+    assetProvider: effectiveCapabilities.assetProvider,
+    assetGroupCreateEndpoint: effectiveCapabilities.assetGroupCreateEndpoint,
+    assetCreateEndpoint: effectiveCapabilities.assetCreateEndpoint,
+    assetUploadAuthMode: effectiveCapabilities.assetUploadAuthMode,
+    assetUrlScheme: effectiveCapabilities.assetUrlScheme,
+    assetIdPath: effectiveCapabilities.assetIdPath,
+    tokenSource: effectiveCapabilities.tokenSource,
     imageField: effectiveCapabilities.imageField
       ?? (apiFamily === "omni_fast" ? "first_image_url" : apiFamily === "doubao_seedance15" ? "first_frame_image" : apiFamily === "aigc_video_json" ? "image" : apiFamily === "zhipu_video" ? "image_url" : apiFamily === "agnes_video" ? "image" : undefined),
     videoField: effectiveCapabilities.videoField ?? (apiFamily === "omni_fast_v2v" ? "video" : undefined),
@@ -404,6 +428,12 @@ export function validateVideoRequestConfig(params: VideoProviderParams, capabili
   if ((config.apiFamily === "omni_fast" || config.apiFamily === "unified_video_create") && currentInput !== "text" && config.imageTransport !== "url") {
     throw new Error("当前接口族图生视频需要先上传素材并传公网 URL。");
   }
+  if (config.assetTransport === "provider_asset") {
+    if (!config.assetProvider) throw new Error("素材库传输已开启，但 assetProvider 未配置。");
+    if (config.assetProvider === "seedance_asset" && (!config.assetGroupCreateEndpoint || !config.assetCreateEndpoint)) {
+      throw new Error("Seedance 素材库传输已开启，但 asset endpoint 未配置。");
+    }
+  }
   if (config.apiFamily === "omni_fast_v2v" && !params.videoAssetIds?.length) {
     throw new Error("Omni-fast-v2v 需要连接一个公网 MP4 视频素材。");
   }
@@ -419,6 +449,8 @@ export function validateVideoRequestConfig(params: VideoProviderParams, capabili
     pollEndpoint: config.pollEndpoint,
     requestFormat: config.requestFormat,
     imageTransport: config.imageTransport,
+    assetTransport: config.assetTransport,
+    assetProvider: config.assetProvider,
     authType: config.authType,
     apiKey: maskKey(params.apiKey),
     model: params.modelName,

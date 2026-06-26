@@ -302,6 +302,30 @@ function seedanceAssetEndpoint(params: SeedanceProviderParams, path: string) {
   return joinUrl(seedanceAssetBaseUrl(params), path);
 }
 
+function configuredSeedanceAssetEndpoint(params: SeedanceProviderParams, endpoint: string | undefined, fallbackPath: string) {
+  const configured = endpoint?.trim() || fallbackPath;
+  if (/^https?:\/\//i.test(configured)) return configured;
+  return seedanceAssetEndpoint(params, configured);
+}
+
+function usesProviderAssetTransport(params: SeedanceProviderParams) {
+  return params.videoRequestConfig?.assetTransport === "provider_asset";
+}
+
+function usesSeedanceAssetProvider(params: SeedanceProviderParams) {
+  return usesProviderAssetTransport(params) && params.videoRequestConfig?.assetProvider === "seedance_asset";
+}
+
+function seedanceAssetUploadAuthFailed(status: number, payload: Record<string, unknown>) {
+  if (status === 401 || status === 403) return true;
+  return /invalid token|unauthorized|forbidden|no access|access denied|permission|无权限|未授权|未开通|token.*无效/i.test(JSON.stringify(payload));
+}
+
+function seedanceAssetUrl(params: SeedanceProviderParams, assetId: string) {
+  const scheme = params.videoRequestConfig?.assetUrlScheme?.trim() || "asset://{assetId}";
+  return scheme.replace(/\{assetId\}/g, assetId).replace(/\{id\}/g, assetId);
+}
+
 export function seedanceAuthorizationValues(apiKey: string) {
   const trimmed = apiKey.trim();
   if (/^bearer\s+/i.test(trimmed)) return [trimmed, trimmed.replace(/^bearer\s+/i, "")];
@@ -337,10 +361,19 @@ async function seedanceAssetRequest(params: SeedanceProviderParams, endpoint: st
     if (response.ok && !seedanceBusinessFailed(lastPayload)) return lastPayload;
   }
   throw new ProviderError(
-    "SEEDANCE_ASSET_UPLOAD_FAILED",
-    `Seedance 素材库接口调用失败：${upstreamFriendlyErrorMessage("Seedance", lastPayload)}`,
+    seedanceAssetUploadAuthFailed(lastStatus, lastPayload) ? "ASSET_UPLOAD_AUTH_FAILED" : "ASSET_UPLOAD_FAILED",
+    seedanceAssetUploadAuthFailed(lastStatus, lastPayload)
+      ? "当前模型需要素材库上传，但素材上传接口认证失败，请检查该模型所属 provider 的 API Key 和 asset endpoint 配置。"
+      : `Seedance 素材库接口调用失败：${upstreamFriendlyErrorMessage("Seedance", lastPayload)}`,
     preview(lastPayload),
-    { endpoint, upstreamStatus: lastStatus }
+    {
+      endpoint,
+      upstreamStatus: lastStatus,
+      rawResponse: lastPayload,
+      assetTransport: "provider_asset",
+      assetProvider: "seedance_asset",
+      tokenSource: "provider.apiKey"
+    }
   );
 }
 
@@ -390,7 +423,17 @@ function seedanceAssetType(type: "Image" | "Video" | "Audio") {
 }
 
 async function createSeedanceAssetGroup(params: SeedanceProviderParams) {
-  const endpoint = seedanceAssetEndpoint(params, "/v1/seedance/asset/CreateAssetGroup");
+  if (!usesSeedanceAssetProvider(params)) {
+    throw new ProviderError(
+      "ASSET_UPLOAD_NOT_CONFIGURED",
+      "当前模型未显式配置 provider_asset + seedance_asset，禁止调用 Seedance 素材库。"
+    );
+  }
+  const endpoint = configuredSeedanceAssetEndpoint(
+    params,
+    params.videoRequestConfig?.assetGroupCreateEndpoint,
+    "/v1/seedance/asset/CreateAssetGroup"
+  );
   const name = `aigc-${params.nodeId || "video"}-${Date.now()}`;
   const payload = await seedanceAssetRequest(params, endpoint, {
     Name: name,
@@ -398,13 +441,17 @@ async function createSeedanceAssetGroup(params: SeedanceProviderParams) {
   });
   const groupId = seedanceAssetGroupId(payload);
   if (!groupId) {
-    throw new ProviderError("SEEDANCE_ASSET_UPLOAD_FAILED", "Seedance 素材库没有返回素材组 ID。", preview(payload), { endpoint, response: payload });
+    throw new ProviderError("ASSET_UPLOAD_FAILED", "Seedance 素材库没有返回素材组 ID。", preview(payload), { endpoint, response: payload, assetTransport: "provider_asset", assetProvider: "seedance_asset" });
   }
   return groupId;
 }
 
 async function uploadSeedanceAsset(params: SeedanceProviderParams, groupId: string, url: string, type: "Image" | "Video" | "Audio", index: number) {
-  const endpoint = seedanceAssetEndpoint(params, "/v1/seedance/asset/CreateAsset");
+  const endpoint = configuredSeedanceAssetEndpoint(
+    params,
+    params.videoRequestConfig?.assetCreateEndpoint,
+    "/v1/seedance/asset/CreateAsset"
+  );
   const payload = await seedanceAssetRequest(params, endpoint, {
     GroupId: groupId,
     URL: url,
@@ -417,12 +464,12 @@ async function uploadSeedanceAsset(params: SeedanceProviderParams, groupId: stri
   // asset://{Id} in /v1/video/generations. GetAsset is not part of the
   // public contract for every relay, so strict active polling is opt-in.
   if (taskId && process.env.SEEDANCE_ASSET_REQUIRE_ACTIVE === "true") {
-    return `asset://${await waitForSeedanceAssetActive(params, taskId, assetId, type, index)}`;
+    return seedanceAssetUrl(params, await waitForSeedanceAssetActive(params, taskId, assetId, type, index));
   }
   if (!assetId) {
-    throw new ProviderError("SEEDANCE_ASSET_UPLOAD_FAILED", "Seedance 素材上传没有返回 asset ID。", preview(payload), { endpoint, response: payload });
+    throw new ProviderError("ASSET_UPLOAD_FAILED", "Seedance 素材上传没有返回 asset ID。", preview(payload), { endpoint, response: payload, assetTransport: "provider_asset", assetProvider: "seedance_asset" });
   }
-  return `asset://${assetId}`;
+  return seedanceAssetUrl(params, assetId);
 }
 
 async function waitForSeedanceAssetActive(params: SeedanceProviderParams, taskId: string, fallbackAssetId: string | undefined, type: "Image" | "Video" | "Audio", index: number) {
@@ -437,19 +484,19 @@ async function waitForSeedanceAssetActive(params: SeedanceProviderParams, taskId
     if (status === "active" && assetId) return assetId;
     if (status === "failed" || status === "error") {
       throw new ProviderError(
-        "SEEDANCE_ASSET_UPLOAD_FAILED",
+        "ASSET_UPLOAD_FAILED",
         `Seedance 素材库处理失败：第 ${index + 1} 个 ${type} 素材没有转为 Active。`,
         preview(latestPayload),
-        { endpoint, taskId, response: latestPayload }
+        { endpoint, taskId, response: latestPayload, assetTransport: "provider_asset", assetProvider: "seedance_asset" }
       );
     }
     await sleep(delayMs);
   }
   throw new ProviderError(
-    "SEEDANCE_ASSET_UPLOAD_FAILED",
+    "ASSET_UPLOAD_FAILED",
     `Seedance 素材库处理超时：第 ${index + 1} 个 ${type} 素材长时间未 Active。`,
     preview(latestPayload),
-    { endpoint, taskId, response: latestPayload }
+    { endpoint, taskId, response: latestPayload, assetTransport: "provider_asset", assetProvider: "seedance_asset" }
   );
 }
 
@@ -475,8 +522,8 @@ export function seedanceAssetUploadShouldFallback(error: unknown) {
   const text = error instanceof ProviderError
     ? `${error.message}\n${error.debugMessage ?? ""}\n${preview(error.details)}`
     : rawErrorMessage(error);
-  if (/no access to model\s+seedance-asset|seedance-asset.*(?:no access|unauthorized|forbidden|无权限|未开通|不可用)/i.test(text)) return true;
-  if (/seedance-asset.*(?:可用渠道不存在|渠道不存在|分组.*不存在|没有.*渠道)|(?:可用渠道不存在|渠道不存在).*seedance-asset/i.test(text)) return true;
+  if (/no access to model\s+seedance-asset|seedance-asset.*(?:no access|unauthorized|forbidden|无权限|未开通|不可用)/i.test(text)) return false;
+  if (/seedance-asset.*(?:可用渠道不存在|渠道不存在|分组.*不存在|没有.*渠道)|(?:可用渠道不存在|渠道不存在).*seedance-asset/i.test(text)) return false;
   if (/seedance-asset/i.test(text) && /fail_to_fetch_task|failed?\s+to\s+fetch\s+task|task.*(?:not\s+ready|not\s+found|not\s+exist)|任务.*(?:不存在|查询失败|暂未|稍后)/i.test(text)) return true;
   return /not found|not support|unsupported|method not allowed/i.test(text);
 }
@@ -1380,10 +1427,27 @@ export async function generateVideoWithSeedance(params: SeedanceProviderParams):
     if (requiresPublicImageUrl(apiFamily) && !["url", "url_or_asset"].includes(params.imageTransport ?? "") && images.length) {
       throw new ProviderError("PUBLIC_URL_REQUIRED", "当前视频接口族要求图片先上传到公网 URL，不能传本地文件或 base64。");
     }
-    if (apiFamily === "seedance2_native" && params.imageTransport === "url_or_asset") {
-      images = await uploadSeedanceAssetsIfAvailable(params, images, "Image");
-      videos = await uploadSeedanceAssetsIfAvailable(params, videos, "Video");
-      audios = await uploadSeedanceAssetsIfAvailable(params, audios, "Audio");
+    if (usesProviderAssetTransport(params) && !usesSeedanceAssetProvider(params)) {
+      throw new ProviderError(
+        "ASSET_UPLOAD_FAILED",
+        "当前模型配置了 provider_asset 素材传输，但 assetProvider 不受支持。",
+        undefined,
+        {
+          providerId: params.providerId,
+          modelId: params.modelName,
+          upstreamModelId: params.modelName,
+          capability: params.inputMode,
+          assetTransport: params.videoRequestConfig?.assetTransport,
+          assetProvider: params.videoRequestConfig?.assetProvider,
+          videoCreateEndpoint: params.videoRequestConfig?.createEndpoint,
+          videoPollEndpoint: params.videoRequestConfig?.pollEndpoint
+        }
+      );
+    }
+    if (usesSeedanceAssetProvider(params)) {
+      images = await uploadSeedanceAssets(params, images, "Image");
+      videos = await uploadSeedanceAssets(params, videos, "Video");
+      audios = await uploadSeedanceAssets(params, audios, "Audio");
       if (hasSeedanceAssetReferences(images, videos, audios)) {
         await sleep(seedanceAssetReadyDelayMs());
       }
@@ -1445,6 +1509,8 @@ export async function generateVideoWithSeedance(params: SeedanceProviderParams):
       hasImages: imageCount > 0,
       hasVideo: videos.length > 0,
       imageTransport: params.imageTransport,
+      assetTransport: params.videoRequestConfig?.assetTransport ?? "direct_url",
+      assetProvider: params.videoRequestConfig?.assetProvider,
       inputType: imageCount ? "image" : videos.length ? "video" : "text",
       duration: seconds,
       aspectRatio: normalizedRatio,

@@ -14,6 +14,9 @@ export type VideoInputMode =
   | "reference-to-video"
   | "video-to-video";
 
+export type VideoAssetTransport = "direct_url" | "cdn_url" | "openai_content_image_url" | "provider_asset";
+export type VideoAssetProvider = "seedance_asset" | "custom_asset";
+
 export type TextInputMode = "text";
 
 export type ModelInputMode = TextInputMode | ImageInputMode | VideoInputMode;
@@ -113,6 +116,14 @@ export type ModelCapabilities = {
     supportedInputs?: ModelCapabilities["supportedInputs"];
     imageTransport?: ModelCapabilities["imageTransport"];
     videoTransport?: ModelCapabilities["videoTransport"];
+    assetTransport?: ModelCapabilities["assetTransport"];
+    assetProvider?: ModelCapabilities["assetProvider"];
+    assetGroupCreateEndpoint?: string;
+    assetCreateEndpoint?: string;
+    assetUploadAuthMode?: ModelCapabilities["assetUploadAuthMode"];
+    assetUrlScheme?: string;
+    assetIdPath?: string;
+    tokenSource?: ModelCapabilities["tokenSource"];
     imageField?: string;
     videoField?: string;
   };
@@ -136,6 +147,14 @@ export type ModelCapabilities = {
   supportedInputs?: Array<"text" | "image" | "first_frame" | "reference_image" | "first_last_frame" | "video">;
   imageTransport?: "url" | "url_or_asset" | "base64_json" | "multipart_file" | "unsupported";
   videoTransport?: "url" | "url_or_asset" | "url_or_base64_json" | "base64_json" | "multipart_file" | "unsupported";
+  assetTransport?: VideoAssetTransport;
+  assetProvider?: VideoAssetProvider;
+  assetGroupCreateEndpoint?: string;
+  assetCreateEndpoint?: string;
+  assetUploadAuthMode?: "bearer" | "api-key" | "none";
+  assetUrlScheme?: string;
+  assetIdPath?: string;
+  tokenSource?: "provider.apiKey";
   imageField?: string;
   videoField?: string;
   supportedAspectRatios?: string[];
