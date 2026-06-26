@@ -1472,6 +1472,14 @@ export async function syncVideoTaskUpstream(input: { localTaskId?: string; provi
   const localTaskId = String(task.id);
   const canvasNodeId = stringFrom(task.canvas_node_id) ?? stringFrom(input.canvasNodeId);
   const projectId = stringFrom(task.project_id);
+  const syncTaskConfigSnapshot = {
+    modelConfigId: stringFrom(task.model_config_id) ?? model.id,
+    upstreamModelId: upstreamModelForPoll ?? upstreamModelName(model, capabilities, model.model_name),
+    apiBaseUrl: apiBaseUrlForPoll,
+    encryptedApiKeySnapshot: encryptedApiKeyForPoll,
+    capabilitiesJsonSnapshot: capabilitiesJsonForPoll
+  };
+  const syncTaskModelId = stringFrom(task.model_id) ?? model.model_name ?? model.id;
   logVideoTask("sync-upstream", {
     localTaskId,
     providerTaskId,
@@ -1486,7 +1494,7 @@ export async function syncVideoTaskUpstream(input: { localTaskId?: string; provi
       projectId,
       canvasNodeId,
       providerId: model.provider_id,
-      modelId: model.id,
+      modelId: syncTaskModelId,
       providerVideoUrl,
       outputUrl: providerVideoUrl,
       previewUrl: providerVideoUrl,
@@ -1526,7 +1534,8 @@ export async function syncVideoTaskUpstream(input: { localTaskId?: string; provi
       canvasNodeId,
       projectId,
       providerId: model.provider_id,
-      modelId: model.id,
+      modelId: syncTaskModelId,
+      ...syncTaskConfigSnapshot,
       progress,
       result: {
         rawResponse,
@@ -1552,7 +1561,8 @@ export async function syncVideoTaskUpstream(input: { localTaskId?: string; provi
       canvasNodeId,
       projectId,
       providerId: model.provider_id,
-      modelId: model.id,
+      modelId: syncTaskModelId,
+      ...syncTaskConfigSnapshot,
       progress,
       result: { rawResponse, syncUpstream: true, pollUrl }
     });
@@ -1575,7 +1585,8 @@ export async function syncVideoTaskUpstream(input: { localTaskId?: string; provi
       canvasNodeId,
       projectId,
       providerId: model.provider_id,
-      modelId: model.id,
+      modelId: syncTaskModelId,
+      ...syncTaskConfigSnapshot,
       failedStage: "polling",
       errorCode,
       errorMessage,
