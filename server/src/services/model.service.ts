@@ -1433,7 +1433,7 @@ export async function syncVideoTaskUpstream(input: { localTaskId?: string; provi
     return { status: "succeeded", providerTaskId, providerStatus, providerVideoUrl, outputUrl: providerVideoUrl, progress: 100, rawResponse };
   }
 
-  if (!response.ok && providerTaskId) {
+  if (!response.ok && providerTaskId && !isPollAccessDeniedResponse(rawResponse, response.status)) {
     await markVideoTaskStage({
       id: localTaskId,
       status: "processing",
@@ -1477,6 +1477,11 @@ export async function syncVideoTaskUpstream(input: { localTaskId?: string; provi
   }
 
   if (isFailedStatus(providerStatus) || !response.ok) {
+    const pollAccessDenied = isPollAccessDeniedResponse(rawResponse, response.status);
+    const errorCode = pollAccessDenied ? "MODEL_ACCESS_DENIED" : "PROVIDER_ERROR";
+    const errorMessage = pollAccessDenied
+      ? "上游任务已创建，但当前中转 API Key 无法读取该模型的任务结果。请在中转后台开通轮询/结果读取权限，或换用同一上游任务可查询的 API Key。"
+      : `上游任务状态为 ${providerStatus}`;
     await markVideoTaskStage({
       id: localTaskId,
       status: "error",
@@ -1488,12 +1493,12 @@ export async function syncVideoTaskUpstream(input: { localTaskId?: string; provi
       providerId: model.provider_id,
       modelId: model.id,
       failedStage: "polling",
-      errorCode: "PROVIDER_ERROR",
-      errorMessage: `上游任务状态为 ${providerStatus}`,
+      errorCode,
+      errorMessage,
       progress: 100,
       result: { rawResponse, syncUpstream: true, pollUrl }
     });
-    await updateCanvasNodeWithGenerationFailure({ projectId, nodeId: canvasNodeId, errorMessage: `上游任务状态为 ${providerStatus}`, errorCode: "PROVIDER_ERROR", failedStage: "polling" });
+    await updateCanvasNodeWithGenerationFailure({ projectId, nodeId: canvasNodeId, errorMessage, errorCode, failedStage: "polling" });
     return { status: "error", providerTaskId, providerStatus, progress: 100, rawResponse };
   }
 
@@ -1516,6 +1521,13 @@ function ensureProviderVideoUrl(result: ProviderGenerateResult) {
     );
   }
   return providerVideoUrl;
+}
+
+function isPollAccessDeniedResponse(rawResponse: unknown, statusCode?: number) {
+  const text = safeStringify(rawResponse);
+  return statusCode === 401
+    || statusCode === 403
+    || /This token has no access|no access to model|model.*no access|unauthorized|forbidden|permission|access denied|invalid api key|incorrect api key|没有.*权限|无权限|未开通/i.test(text);
 }
 
 async function enforceVideoAspectRatio(result: ProviderGenerateResult, aspectRatio?: string, resolution?: string): Promise<ProviderGenerateResult> {
