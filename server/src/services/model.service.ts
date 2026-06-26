@@ -1424,7 +1424,7 @@ export async function syncVideoTaskUpstream(input: { localTaskId?: string; provi
     return { status: "succeeded", providerTaskId, providerStatus, providerVideoUrl, outputUrl: providerVideoUrl, progress: 100, rawResponse };
   }
 
-  if (!response.ok && providerTaskId && !isPollAccessDeniedResponse(rawResponse, response.status)) {
+  if (!response.ok && providerTaskId) {
     await markVideoTaskStage({
       id: localTaskId,
       status: "processing",
@@ -1441,9 +1441,10 @@ export async function syncVideoTaskUpstream(input: { localTaskId?: string; provi
         syncUpstream: true,
         pollUrl,
         retryablePollError: true,
-        upstreamStatus: response.status
+        upstreamStatus: response.status,
+        pollAccessDenied: isPollAccessDeniedResponse(rawResponse, response.status)
       },
-      errorMessage: "上游查询暂时失败，任务继续等待。"
+      errorMessage: "上游任务已创建，当前轮询查询暂时失败，任务继续等待。"
     });
     await updateCanvasNodeWithVideoTaskRunning({ projectId, nodeId: canvasNodeId, providerTaskId, progress });
     return { status: "processing", providerTaskId, providerStatus, progress, rawResponse };

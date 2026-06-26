@@ -134,7 +134,6 @@ export async function finalizeVideoResult(input: FinalizeVideoResultInput) {
       reason: "CANVAS_UPDATE_FAILED",
       error: rawErrorMessage(error)
     });
-    throw error;
   }
 
   finalizerLog("completed", {
