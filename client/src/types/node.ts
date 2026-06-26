@@ -154,11 +154,13 @@ export type VideoNodeData = {
   outputAssetId?: string;
   outputUrl?: string;
   videoUrl?: string;
+  providerVideoUrl?: string;
   thumbnailUrl?: string;
   posterUrl?: string;
   previewUrl?: string;
   cdnUrl?: string;
   cosUrl?: string;
+  downloadUrl?: string;
   downloadableUrl?: string;
   errorCode?: string;
   errorMessage?: string;

@@ -772,7 +772,8 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
     const currentCategory = categoryForOfficialVideoMode(selectedVideoMode);
     if (currentCategory !== videoCategory && supportedVideoCategories.includes(currentCategory)) setVideoCategory(currentCategory);
   }, [selectedVideoMode, supportedVideoCategories, videoCategory]);
-  const nodeVideoUrl = props.data.videoUrl || props.data.outputUrl || props.data.previewUrl;
+  const nodeVideoUrl = props.data.cdnUrl || props.data.outputUrl || props.data.videoUrl || props.data.providerVideoUrl || props.data.previewUrl;
+  const nodeDownloadUrl = props.data.cdnUrl || props.data.downloadableUrl || props.data.downloadUrl || props.data.outputUrl || props.data.videoUrl || props.data.providerVideoUrl || props.data.previewUrl;
   const outputUrl = absoluteUploadUrl(nodeVideoUrl);
   const outputIsVideo = Boolean(nodeVideoUrl);
   const posterUrl = props.data.posterUrl || props.data.thumbnailUrl;
@@ -1396,12 +1397,13 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
       assetId={props.data.outputAssetId || props.data.assetId}
       title={props.data.title}
       outputUrl={outputIsVideo ? outputUrl : undefined}
+      providerVideoUrl={props.data.providerVideoUrl}
       posterUrl={posterUrl}
       thumbnailUrl={props.data.thumbnailUrl}
       previewUrl={props.data.previewUrl}
       cdnUrl={props.data.cdnUrl}
       cosUrl={props.data.cosUrl}
-      downloadableUrl={props.data.downloadableUrl}
+      downloadableUrl={nodeDownloadUrl}
       aspectRatio={aspectRatioCss(displayRatio)}
       className="creation-media-preview"
       showInlineActions={false}
@@ -1513,7 +1515,7 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
     </div>
   );
 
-  return <CreationNodeFrame id={props.id} type={props.type} selected={props.selected} title={props.data.title || "Video"} ratio={displayRatio} status={frameStatus} statusLabel={frameStatusLabel} preview={preview} toolbar={<MediaPreviewActions kind="video" url={outputIsVideo ? outputUrl : undefined} assetId={props.data.outputAssetId} title={props.data.title} nodeId={props.id} onSaved={(assetId) => update(props.id, { outputAssetId: assetId })} />} dock={dock} />;
+  return <CreationNodeFrame id={props.id} type={props.type} selected={props.selected} title={props.data.title || "Video"} ratio={displayRatio} status={frameStatus} statusLabel={frameStatusLabel} preview={preview} toolbar={<MediaPreviewActions kind="video" url={outputIsVideo ? absoluteUploadUrl(nodeDownloadUrl) : undefined} assetId={props.data.outputAssetId} title={props.data.title} nodeId={props.id} onSaved={(assetId) => update(props.id, { outputAssetId: assetId })} />} dock={dock} />;
 }
 
 export const VideoNode = memo(VideoNodeComponent);

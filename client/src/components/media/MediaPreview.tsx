@@ -11,6 +11,7 @@ type MediaPreviewProps = {
   assetId?: string;
   title?: string;
   previewUrl?: string;
+  providerVideoUrl?: string;
   originalUrl?: string;
   outputUrl?: string;
   thumbnailUrl?: string;
@@ -31,7 +32,7 @@ function ratioToCss(ratio?: string) {
   return ratio.replace(":", " / ");
 }
 
-export function MediaPreview({ type, assetId, title, previewUrl, originalUrl, outputUrl, thumbnailUrl, posterUrl, cdnUrl, cosUrl, downloadableUrl, aspectRatio, className = "", showInlineActions = true, onVideoMetadata, children, meta }: MediaPreviewProps) {
+export function MediaPreview({ type, assetId, title, previewUrl, providerVideoUrl, originalUrl, outputUrl, thumbnailUrl, posterUrl, cdnUrl, cosUrl, downloadableUrl, aspectRatio, className = "", showInlineActions = true, onVideoMetadata, children, meta }: MediaPreviewProps) {
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [videoRequested, setVideoRequested] = useState(false);
   const [signedPlaySrc, setSignedPlaySrc] = useState("");
@@ -49,10 +50,10 @@ export function MediaPreview({ type, assetId, title, previewUrl, originalUrl, ou
   const highResSrc = useMemo(() => {
     const selected = type === "image"
       ? imageOriginalUrl({ originalUrl, outputUrl, previewUrl, thumbnailUrl, cdnUrl, cosUrl })
-      : videoPlayableUrl({ originalUrl, outputUrl, previewUrl, thumbnailUrl, cdnUrl, cosUrl });
+      : videoPlayableUrl({ originalUrl, outputUrl, previewUrl, providerVideoUrl, thumbnailUrl, cdnUrl, cosUrl });
     return absoluteUploadUrl(selected);
-  }, [cdnUrl, cosUrl, originalUrl, outputUrl, previewUrl, thumbnailUrl, type]);
-  const downloadSrc = useMemo(() => absoluteUploadUrl(mediaDownloadUrl({ downloadableUrl, originalUrl, outputUrl, previewUrl, thumbnailUrl, cdnUrl, cosUrl })), [cdnUrl, cosUrl, downloadableUrl, originalUrl, outputUrl, previewUrl, thumbnailUrl]);
+  }, [cdnUrl, cosUrl, originalUrl, outputUrl, previewUrl, providerVideoUrl, thumbnailUrl, type]);
+  const downloadSrc = useMemo(() => absoluteUploadUrl(mediaDownloadUrl({ downloadableUrl, originalUrl, outputUrl, providerVideoUrl, previewUrl, thumbnailUrl, cdnUrl, cosUrl })), [cdnUrl, cosUrl, downloadableUrl, originalUrl, outputUrl, previewUrl, providerVideoUrl, thumbnailUrl]);
   const videoSrc = type === "video" && videoRequested ? signedPlaySrc || highResSrc : "";
 
   useEffect(() => {
