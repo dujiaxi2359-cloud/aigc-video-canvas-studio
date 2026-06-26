@@ -958,6 +958,7 @@ export function hasSubmittedRemoteVideoTask(error: unknown) {
 function isTerminalSubmittedVideoError(error: unknown) {
   if (hasSubmittedRemoteVideoTask(error) && isProviderError(error)) {
     const details = error.details && typeof error.details === "object" ? error.details as Record<string, unknown> : {};
+    if (details.pollAccessDenied === true) return true;
     const failedStage = String(details.failedStage ?? "");
     const status = String(details.providerStatus ?? details.status ?? details.task_status ?? "");
     if (failedStage === "polling" || details.retryablePollError === true || isRunningStatus(status)) return false;

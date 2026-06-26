@@ -11,6 +11,8 @@ const cases: Array<[string, unknown]> = [
   ["outputUrl", { outputUrl: videoUrl }],
   ["preview_url", { preview_url: videoUrl }],
   ["previewUrl", { previewUrl: videoUrl }],
+  ["result_url", { result_url: videoUrl }],
+  ["resultUrl", { resultUrl: videoUrl }],
   ["download_url", { download_url: videoUrl }],
   ["downloadUrl", { downloadUrl: videoUrl }],
   ["data.url", { data: { url: videoUrl } }],
@@ -19,6 +21,7 @@ const cases: Array<[string, unknown]> = [
   ["data.output_url", { data: { output_url: videoUrl } }],
   ["data.outputUrl", { data: { outputUrl: videoUrl } }],
   ["data.preview_url", { data: { preview_url: videoUrl } }],
+  ["data.result_url", { data: { result_url: videoUrl } }],
   ["data.download_url", { data: { download_url: videoUrl } }],
   ["data.content.video_url", { data: { content: { video_url: videoUrl } } }],
   ["data.data.output_url", { data: { data: { output_url: videoUrl } } }],
@@ -29,6 +32,7 @@ const cases: Array<[string, unknown]> = [
   ["result.output_url", { result: { output_url: videoUrl } }],
   ["result.outputUrl", { result: { outputUrl: videoUrl } }],
   ["result.preview_url", { result: { preview_url: videoUrl } }],
+  ["result.result_url", { result: { result_url: videoUrl } }],
   ["result.download_url", { result: { download_url: videoUrl } }],
   ["video.url", { video: { url: videoUrl } }],
   ["video.video_url", { video: { video_url: videoUrl } }],
@@ -38,7 +42,8 @@ const cases: Array<[string, unknown]> = [
   ["output[0].url", { output: [{ url: videoUrl }] }],
   ["data.output[0].url", { data: { output: [{ url: videoUrl }] } }],
   ["outputs[0].url", { outputs: [{ url: videoUrl }] }],
-  ["data[0].url", { data: [{ url: videoUrl }] }]
+  ["data[0].url", { data: [{ url: videoUrl }] }],
+  ["relay task record result_url", { result_url: videoUrl, status: "SUCCESS", data: { video_url: "https://cdn.example.com/fallback.mp4" } }]
 ];
 
 for (const [name, payload] of cases) {
