@@ -2,6 +2,7 @@ import { useEffect, type ElementType } from "react";
 import { Clapperboard, FileText, Film, Image, Layers3, Music, ScrollText, Sparkles, Upload } from "lucide-react";
 import { useCanvasStore } from "../../store/canvasStore";
 import type { WorkflowNodeType } from "../../types/node";
+import { director3DEnabled } from "../../config/featureFlags";
 
 const items: Array<{ type: WorkflowNodeType; label: string; description: string; icon: ElementType; group: "创作节点" | "辅助工具" | "添加资源" }> = [
   { type: "text", label: "文本", description: "脚本、广告词、品牌文案", icon: FileText, group: "创作节点" },
@@ -39,6 +40,7 @@ export function AddNodeMenu({ open, onClose, nodePosition, menuPosition }: { ope
 
   if (!open) return null;
   const style = floatingMenuStyle(menuPosition);
+  const visibleItems = director3DEnabled ? items : items.filter((item) => item.type !== "director_3d");
 
   return (
     <div data-add-node-menu="true" style={style} className={`canvas-add-node-menu pointer-events-auto fixed z-[9999] max-h-[calc(100vh-96px)] w-[268px] overflow-auto rounded-[18px] border border-white/[0.1] bg-[#1c1c1e]/[0.94] p-2.5 shadow-[0_28px_90px_rgba(0,0,0,0.58)] backdrop-blur-2xl ${menuPosition ? "" : "left-[78px] top-1/2 -translate-y-1/2"}`}>
@@ -46,7 +48,7 @@ export function AddNodeMenu({ open, onClose, nodePosition, menuPosition }: { ope
       {(["创作节点", "辅助工具", "添加资源"] as const).map((group) => (
         <div key={group} className="mb-2">
           <div className="px-2 py-1.5 text-[11px] font-medium text-white/35">{group}</div>
-          {items.filter((item) => item.group === group).map((item) => {
+          {visibleItems.filter((item) => item.group === group).map((item) => {
             const Icon = item.icon;
             return (
               <button

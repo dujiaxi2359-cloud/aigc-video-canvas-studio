@@ -1,5 +1,6 @@
 import { Clapperboard, FileText, Film, Image, Layers3, Music, ScrollText, Sparkles } from "lucide-react";
 import type { WorkflowNodeType } from "../../types/node";
+import { director3DEnabled } from "../../config/featureFlags";
 
 export type ConnectionCreateMenuState = {
   sourceId: string;
@@ -33,11 +34,12 @@ const options: Record<WorkflowNodeType, { recommended: WorkflowNodeType[]; more:
 };
 
 function MenuGroup({ title, items, onSelect }: { title: string; items: WorkflowNodeType[]; onSelect: (type: WorkflowNodeType) => void }) {
+  const visibleItems = director3DEnabled ? items : items.filter((type) => type !== "director_3d");
   return (
     <div>
       <div className="mb-1 mt-2 px-1 text-[11px] font-medium text-[#7d8796]">{title}</div>
       <div className="space-y-1">
-        {items.map((type) => {
+        {visibleItems.map((type) => {
           const Icon = meta[type].icon;
           return (
             <button key={type} type="button" className="nodrag nopan flex h-[42px] w-full items-center gap-3 rounded-xl px-2 text-left text-[13px] text-[#cfd6e1] transition hover:bg-white/[0.05] hover:text-white" onClick={() => onSelect(type)}>

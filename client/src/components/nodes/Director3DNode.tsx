@@ -5,6 +5,7 @@ import { BaseNodeCard } from "./BaseNodeCard";
 import { Button } from "../common/Button";
 import { useCanvasStore } from "../../store/canvasStore";
 import type { Director3DNodeData } from "../../types/node";
+import { director3DEnabled } from "../../config/featureFlags";
 
 const Director3DWorkspace = lazy(() => import("../director3d/Director3DWorkspace").then((module) => ({ default: module.Director3DWorkspace })));
 
@@ -46,12 +47,19 @@ export function Director3DNode(props: NodeProps<Director3DNodeData>) {
             <span><ImageIcon size={13} /> {props.data.screenshots?.length ?? 0} 张截图</span>
           </div>
           {props.data.errorMessage && <div className="director-node-error">{props.data.errorMessage}</div>}
-          <Button className="nodrag nopan mt-2 h-10 w-full rounded-full bg-cyan-300 text-slate-950 hover:bg-cyan-200" onClick={() => setOpen(true)}>
-            <Maximize2 size={16} /> 打开导演台
+          <Button
+            className="nodrag nopan mt-2 h-10 w-full rounded-full bg-cyan-300 text-slate-950 hover:bg-cyan-200 disabled:cursor-not-allowed disabled:opacity-55"
+            disabled={!director3DEnabled}
+            onClick={() => {
+              if (!director3DEnabled) return;
+              setOpen(true);
+            }}
+          >
+            <Maximize2 size={16} /> {director3DEnabled ? "打开导演台" : "云端暂未开放"}
           </Button>
         </div>
       </BaseNodeCard>
-      {open && (
+      {director3DEnabled && open && (
         <div className="director3d-overlay nodrag nopan">
           <Suspense fallback={<div className="director3d-loading"><Loader2 className="animate-spin" size={24} /> 正在打开 3D 导演台…</div>}>
             <Director3DWorkspace

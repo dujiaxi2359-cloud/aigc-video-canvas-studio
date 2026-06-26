@@ -8,6 +8,7 @@ import { useAgentStore } from "../store/agentStore";
 import { useCanvasStore } from "../store/canvasStore";
 import { useProjectStore } from "../store/projectStore";
 import { projectApi } from "../services/projectApi";
+import { director3DEnabled } from "../config/featureFlags";
 
 export function CanvasPage({ onNavigate }: { onNavigate: (page: Page, projectId?: string) => void }) {
   const [drawer, setDrawer] = useState<DrawerName>(null);
@@ -100,6 +101,7 @@ export function CanvasPage({ onNavigate }: { onNavigate: (page: Page, projectId?
     };
     const quickAdd = (event: Event) => {
       const type = (event as CustomEvent<string>).detail;
+      if (type === "director_3d" && !director3DEnabled) return;
       if (["text", "image", "video", "imageGenerate", "director_3d"].includes(type)) addNode(type as "text" | "image" | "video" | "imageGenerate" | "director_3d");
     };
     const closeOnEscape = (event: KeyboardEvent) => {
