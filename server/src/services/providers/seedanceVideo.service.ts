@@ -710,6 +710,16 @@ function progressValue(payload: Record<string, unknown>) {
   return undefined;
 }
 
+function taskPersistenceContext(params: SeedanceProviderParams, taskIdValue?: string) {
+  return {
+    providerTaskId: taskIdValue,
+    canvasNodeId: params.nodeId,
+    projectId: params.projectId,
+    providerId: params.providerId,
+    modelId: params.modelName
+  };
+}
+
 function configuredResult(payload: Record<string, unknown>, config?: VideoRequestConfig) {
   if (!config?.resultField) return payload;
   const result = payload[config.resultField];
@@ -1634,6 +1644,7 @@ export async function generateVideoWithSeedance(params: SeedanceProviderParams):
       }
       await saveGenerationTask({
         id,
+        ...taskPersistenceContext(params, id),
         status: configuredStatus(task, params.videoRequestConfig) || "submitted",
         result: {
           provider: params.videoRequestConfig?.provider ?? "seedance",
@@ -1662,7 +1673,7 @@ export async function generateVideoWithSeedance(params: SeedanceProviderParams):
         const status = configuredStatus(task, params.videoRequestConfig);
         if (isFailedStatus(status)) {
           const friendlyMessage = upstreamFriendlyErrorMessage(routeLabel, task);
-          await saveGenerationTask({ id, status: "failed", result: task, errorMessage: friendlyMessage });
+          await saveGenerationTask({ id, ...taskPersistenceContext(params, id), status: "failed", result: task, errorMessage: friendlyMessage });
           throw new ProviderError("VEO_OPERATION_FAILED", `${routeLabel}任务失败：${friendlyMessage}`, preview(task));
         }
         if (isCompletedStatus(status)) completedSeenAt ??= Date.now();
@@ -1672,6 +1683,7 @@ export async function generateVideoWithSeedance(params: SeedanceProviderParams):
           const pendingMessage = `${routeLabel}任务已提交，超过 ${minutes} 分钟仍在排队/生成中，请稍后查看任务结果。`;
           await saveGenerationTask({
             id,
+            ...taskPersistenceContext(params, id),
             status: "processing",
             progress: progressValue(task),
             result: {
@@ -1710,6 +1722,7 @@ export async function generateVideoWithSeedance(params: SeedanceProviderParams):
             const message = rawErrorMessage(pollError);
             await saveGenerationTask({
               id,
+              ...taskPersistenceContext(params, id),
               status: "processing",
               progress: progressValue(task),
               result: {
@@ -1729,6 +1742,7 @@ export async function generateVideoWithSeedance(params: SeedanceProviderParams):
         if (isRetryableSeedancePollFailure(pollResponse, task)) {
           await saveGenerationTask({
             id,
+            ...taskPersistenceContext(params, id),
             status: "processing",
             progress: progressValue(task),
             result: {
@@ -1742,6 +1756,7 @@ export async function generateVideoWithSeedance(params: SeedanceProviderParams):
         }
         await saveGenerationTask({
           id,
+          ...taskPersistenceContext(params, id),
           status: configuredStatus(task, params.videoRequestConfig) || "processing",
           progress: progressValue(task),
           result: {
@@ -1770,6 +1785,7 @@ export async function generateVideoWithSeedance(params: SeedanceProviderParams):
           }
           await saveGenerationTask({
             id,
+            ...taskPersistenceContext(params, id),
             status: "processing",
             progress: progressValue(task),
             result: {
@@ -1784,13 +1800,13 @@ export async function generateVideoWithSeedance(params: SeedanceProviderParams):
         }
         remoteUrl = videoUrl(configuredResult(task, params.videoRequestConfig));
       }
-      if (remoteUrl) await saveGenerationTask({ id, status: "success", progress: 100, result: task });
+      if (remoteUrl) await saveGenerationTask({ id, ...taskPersistenceContext(params, id), status: "success", progress: 100, result: task });
     }
 
     if (!remoteUrl) {
       if (id && apiFamily === "openai_videos" && params.videoRequestConfig?.requestFormat === "multipart") {
         const saved = await downloadOpenAiVideoContent(params, id);
-        await saveGenerationTask({ id, status: "success", progress: 100, result: { ...task, contentEndpoint: openAiVideoContentEndpoint(params, id) } });
+        await saveGenerationTask({ id, ...taskPersistenceContext(params, id), status: "success", progress: 100, result: { ...task, contentEndpoint: openAiVideoContentEndpoint(params, id) } });
         return {
           status: "success",
           outputUrl: saved.outputUrl,
@@ -1810,7 +1826,7 @@ export async function generateVideoWithSeedance(params: SeedanceProviderParams):
           }
         };
       }
-      if (id) await saveGenerationTask({ id, status: "completed_without_video_url", result: task, errorMessage: `${routeLabel}任务已完成，但响应中没有视频 URL。` });
+      if (id) await saveGenerationTask({ id, ...taskPersistenceContext(params, id), status: "completed_without_video_url", result: task, errorMessage: `${routeLabel}任务已完成，但响应中没有视频 URL。` });
       throw new ProviderError("VEO_OPERATION_NO_VIDEO_IN_RESPONSE", `${routeLabel}任务已完成，但响应中没有视频 URL。`, preview(task), {
         endpoint,
         taskId: id,

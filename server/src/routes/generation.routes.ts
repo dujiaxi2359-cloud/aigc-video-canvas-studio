@@ -1,10 +1,8 @@
 import { Router } from "express";
-import { getGenerationTask, getLatestGenerationTaskForNode, saveGenerationTask } from "../services/generationTask.service.js";
-import { generateImage, generateText, generateVideo } from "../services/model.service.js";
+import { getGenerationTask, getLatestGenerationTaskForNode } from "../services/generationTask.service.js";
+import { generateImage, generateText, generateVideo, syncVideoTaskUpstream } from "../services/model.service.js";
 import { isProviderError } from "../utils/providerErrors.js";
 import { assertCreditsAvailable, assertWorkspaceFeature, consumeCredits } from "../services/billing.service.js";
-import { updateCanvasNodeWithGeneratedVideo } from "../services/generatedVideoPersistence.service.js";
-import { extractProviderVideoUrl, isSuccessStatus, sanitizeUrlForLog } from "../utils/videoResultExtractor.js";
 
 export const generationRouter = Router();
 
@@ -297,66 +295,23 @@ generationRouter.get("/tasks/:id", async (req, res) => {
 
 generationRouter.post("/tasks/sync-latest", async (req, res) => {
   const nodeId = typeof req.body?.nodeId === "string" ? req.body.nodeId.trim() : "";
-  const since = typeof req.body?.since === "number" ? req.body.since : undefined;
   if (!nodeId) {
     res.status(400).json({ status: "error", errorMessage: "缺少节点 ID。" });
     return;
   }
-  const task = await getLatestGenerationTaskForNode(nodeId, since);
-  if (!task) {
-    res.status(404).json({ status: "error", errorMessage: "未找到该节点对应的上游任务。" });
-    return;
+  const result = await syncVideoTaskUpstream({ canvasNodeId: nodeId });
+  res.json({ ...result, syncStatus: "synced" });
+});
+
+generationRouter.post("/video/sync-upstream", async (req, res) => {
+  try {
+    const result = await syncVideoTaskUpstream({
+      localTaskId: typeof req.body?.localTaskId === "string" ? req.body.localTaskId : undefined,
+      providerTaskId: typeof req.body?.providerTaskId === "string" ? req.body.providerTaskId : undefined,
+      canvasNodeId: typeof req.body?.canvasNodeId === "string" ? req.body.canvasNodeId : typeof req.body?.nodeId === "string" ? req.body.nodeId : undefined
+    });
+    res.json({ ...result, syncStatus: "synced" });
+  } catch (error) {
+    res.status(400).json(generationError(error));
   }
-  const videoUrl = task.outputUrl
-    || task.previewUrl
-    || task.providerVideoUrl
-    || extractProviderVideoUrl(task.result)
-    || extractProviderVideoUrl(task.rawCreateResponse);
-  if (!videoUrl) {
-    res.json({ ...task, syncStatus: "not_ready", errorMessage: "上游任务还没有可解析的视频地址。" });
-    return;
-  }
-  const now = Date.now();
-  await saveGenerationTask({
-    id: task.id,
-    status: "succeeded",
-    providerStatus: isSuccessStatus(task.providerStatus) ? task.providerStatus : "succeeded",
-    providerTaskId: task.providerTaskId ?? task.id,
-    canvasNodeId: task.canvasNodeId ?? nodeId,
-    projectId: task.projectId,
-    providerId: task.providerId,
-    modelId: task.modelId,
-    providerVideoUrl: task.providerVideoUrl ?? videoUrl,
-    outputUrl: task.outputUrl ?? videoUrl,
-    previewUrl: task.previewUrl ?? videoUrl,
-    downloadableUrl: task.downloadableUrl ?? videoUrl,
-    progress: 100,
-    completedAt: task.completedAt ?? now,
-    finishedAt: task.finishedAt ?? now,
-    repairedAt: now,
-    result: {
-      ...(task.result && typeof task.result === "object" ? task.result as Record<string, unknown> : {}),
-      repairedFromStoredTask: true,
-      repairedVideoUrl: sanitizeUrlForLog(videoUrl)
-    },
-    errorMessage: undefined
-  });
-  await updateCanvasNodeWithGeneratedVideo({
-    projectId: task.projectId,
-    nodeId,
-    outputUrl: task.outputUrl ?? videoUrl,
-    posterUrl: task.posterUrl,
-    previewUrl: task.previewUrl ?? videoUrl,
-    downloadableUrl: task.downloadableUrl ?? videoUrl,
-    cdnUrl: task.cdnUrl
-  });
-  res.json({
-    ...task,
-    status: "succeeded",
-    progress: 100,
-    outputUrl: task.outputUrl ?? videoUrl,
-    previewUrl: task.previewUrl ?? videoUrl,
-    providerVideoUrl: task.providerVideoUrl ?? videoUrl,
-    syncStatus: "repaired"
-  });
 });

@@ -70,6 +70,52 @@ function toGenerationTask(row: GenerationTaskRow) {
   };
 }
 
+function isRunningTaskStatus(status: string) {
+  return /^(processing|running|queued|pending|submitted|created|executing|in_progress)$/i.test(status);
+}
+
+async function syncCanvasRunningStateFromTask(input: {
+  projectId?: string;
+  canvasNodeId?: string;
+  providerTaskId?: string;
+  progress?: number;
+  status: string;
+}) {
+  if (!input.projectId || !input.canvasNodeId || !input.providerTaskId || !isRunningTaskStatus(input.status)) return;
+  const db = await getDb();
+  const { workspace } = requireRequestContext();
+  const project = await db.get<{ id: string; nodes_json: string }>(
+    "SELECT id, nodes_json FROM projects WHERE id = ? AND workspace_id = ?",
+    input.projectId,
+    workspace.id
+  );
+  if (!project) return;
+  let didUpdate = false;
+  const nodes = JSON.parse(project.nodes_json) as Array<Record<string, unknown>>;
+  const nextNodes = nodes.map((node) => {
+    if (node.id !== input.canvasNodeId) return node;
+    didUpdate = true;
+    const data = (node.data && typeof node.data === "object" ? node.data as Record<string, unknown> : {});
+    return {
+      ...node,
+      data: {
+        ...data,
+        status: "generating",
+        generationStatus: "processing",
+        providerTaskId: input.providerTaskId,
+        progress: input.progress ?? data.progress ?? 0,
+        loading: true,
+        error: undefined,
+        errorCode: undefined,
+        errorMessage: undefined,
+        debugMessage: undefined
+      }
+    };
+  });
+  if (!didUpdate) return;
+  await db.run("UPDATE projects SET nodes_json = ?, updated_at = ? WHERE id = ? AND workspace_id = ?", JSON.stringify(nextNodes), now(), input.projectId, workspace.id);
+}
+
 export async function getGenerationTask(id: string) {
   const db = await getDb();
   const row = await db.get<GenerationTaskRow>("SELECT * FROM generation_tasks WHERE id = ? AND workspace_id = ?", id, requireRequestContext().workspace.id);
@@ -213,4 +259,11 @@ export async function saveGenerationTask(input: {
     timestamp,
     timestamp
   );
+  await syncCanvasRunningStateFromTask({
+    projectId: input.projectId ?? existing?.project_id,
+    canvasNodeId: input.canvasNodeId ?? existing?.canvas_node_id,
+    providerTaskId: input.providerTaskId ?? existing?.provider_task_id,
+    progress: input.progress ?? existing?.progress ?? 0,
+    status: input.status
+  });
 }

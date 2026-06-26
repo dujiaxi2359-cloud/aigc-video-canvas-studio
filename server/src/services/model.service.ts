@@ -6,6 +6,7 @@ import { decryptApiKey } from "./encryption.service.js";
 import { persistGeneratedVideoToCOS, updateCanvasNodeWithGeneratedVideo, updateCanvasNodeWithGenerationFailure, updateCanvasNodeWithVideoTaskRunning } from "./generatedVideoPersistence.service.js";
 import { addHistory } from "./history.service.js";
 import { saveGenerationTask } from "./generationTask.service.js";
+import { requireRequestContext } from "./requestContext.js";
 import { modelCatalog } from "./modelCatalog.js";
 import { getInternalModelConfig, listModelConfigs } from "./modelConfig.service.js";
 import { calculateAvailableImageOptions, calculateAvailableVideoOptions } from "./modelCapability.service.js";
@@ -29,7 +30,7 @@ import { generateVideoWithSeedance } from "./providers/seedanceVideo.service.js"
 import { generateImageWithZhipu } from "./providers/zhipuImage.service.js";
 import { isZhipuOfficialEndpoint } from "./providers/zhipuProtocol.js";
 import { isGeminiImageModel, isQwenImageEditModel, normalizeImageCapabilities, qwenTextModelForEdit, resolveImageEndpointFamily } from "./imageCapabilityNormalization.js";
-import { channelSupportsImage, resolveVideoRequestConfig, shouldUseProxyVideoAdapter, validateVideoRequestConfig } from "./providers/videoRequestAdapter.js";
+import { channelSupportsImage, joinUrl, resolveVideoRequestConfig, shouldUseProxyVideoAdapter, validateVideoRequestConfig } from "./providers/videoRequestAdapter.js";
 import { deriveCapabilityKinds, resolveProviderType } from "./providers/openaiCompatibleProtocol.js";
 import { resolveProviderApiBaseUrl } from "./providers/providerBaseUrl.js";
 import { isGrokLikeVideoModel, isVeoLikeVideoModel, normalizeVideoCapabilities } from "./videoCapabilityNormalization.js";
@@ -41,7 +42,7 @@ import type { OfficialVideoMode } from "../types/videoModes.js";
 import { legacyInputModeToOfficialMode } from "../types/videoModes.js";
 import type { ProviderGenerateResult } from "./providers/providerTypes.js";
 import { isProviderError, ProviderError, rawErrorMessage } from "../utils/providerErrors.js";
-import { extractProviderProgress, extractProviderTaskId, extractProviderVideoUrl, isProviderSuccessStatus, isRunningStatus, sanitizeUrlForLog } from "../utils/videoResultExtractor.js";
+import { extractProviderProgress, extractProviderStatus, extractProviderTaskId, extractProviderVideoUrl, isFailedStatus, isProviderSuccessStatus, isRunningStatus, isSuccessStatus, sanitizeUrlForLog } from "../utils/videoResultExtractor.js";
 import { buildPayloadSummary, logOfficialPayload } from "../utils/generationPayload.js";
 import { metadataToQualityAudit, readGeneratedFileMetadata } from "../utils/mediaMetadata.js";
 import { mapVideoDimensions, normalizeVideoAspectRatio } from "../utils/videoParams.js";
@@ -1245,6 +1246,235 @@ async function markVideoTaskStage(input: {
   });
 }
 
+function stringFrom(value: unknown) {
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function objectFrom(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" ? value as Record<string, unknown> : {};
+}
+
+function materializeGenericPollUrl(config: ReturnType<typeof validateVideoRequestConfig>, providerTaskId: string) {
+  const endpointTemplate = config.pollEndpoint || "/v1/videos/{taskId}";
+  const encoded = encodeURIComponent(providerTaskId);
+  const replaced = endpointTemplate
+    .replace(/\{taskId\}/g, encoded)
+    .replace(/\{task_id\}/g, encoded)
+    .replace(/\{id\}/g, encoded)
+    .replace(/\{video_id\}/g, encoded)
+    .replace(/\{job_id\}/g, encoded);
+  if (/^https?:\/\//i.test(replaced)) return replaced;
+  if (config.pollIdLocation === "query" && !/[?&](?:id|task_id|taskId|video_id|job_id)=/i.test(replaced)) {
+    const separator = replaced.includes("?") ? "&" : "?";
+    return joinUrl(config.baseUrl, `${replaced}${separator}${config.pollBodyKey ?? "id"}=${encoded}`);
+  }
+  return joinUrl(config.baseUrl, replaced);
+}
+
+async function findVideoTaskForSync(input: { localTaskId?: string; providerTaskId?: string; canvasNodeId?: string }) {
+  const db = await getDb();
+  const { workspace } = requireRequestContext();
+  return db.get<any>(
+    `SELECT * FROM generation_tasks
+     WHERE workspace_id = ?
+       AND (
+         (? IS NOT NULL AND id = ?)
+         OR (? IS NOT NULL AND provider_task_id = ?)
+         OR (? IS NOT NULL AND canvas_node_id = ?)
+       )
+     ORDER BY updated_at DESC
+     LIMIT 1`,
+    workspace.id,
+    input.localTaskId ?? null,
+    input.localTaskId ?? null,
+    input.providerTaskId ?? null,
+    input.providerTaskId ?? null,
+    input.canvasNodeId ?? null,
+    input.canvasNodeId ?? null
+  );
+}
+
+async function findModelForVideoTask(task: any, result: Record<string, unknown>) {
+  const db = await getDb();
+  const { workspace } = requireRequestContext();
+  const candidateIds = [
+    stringFrom(task.model_id),
+    stringFrom(result.modelConfigId),
+    stringFrom(result.model_config_id)
+  ].filter(Boolean) as string[];
+  for (const id of candidateIds) {
+    const row = await getInternalModelConfig(id);
+    if (row) return row;
+  }
+  const providerId = stringFrom(task.provider_id) ?? stringFrom(result.provider);
+  const modelName = stringFrom(task.model_id) ?? stringFrom(result.modelId) ?? stringFrom(result.modelName) ?? stringFrom(result.model);
+  return db.get<any>(
+    `SELECT * FROM model_configs
+     WHERE workspace_id = ?
+       AND category = 'video'
+       AND (? IS NULL OR provider_id = ?)
+       AND (? IS NULL OR model_name = ? OR id = ?)
+     ORDER BY updated_at DESC
+     LIMIT 1`,
+    workspace.id,
+    providerId ?? null,
+    providerId ?? null,
+    modelName ?? null,
+    modelName ?? null,
+    modelName ?? null
+  );
+}
+
+export async function syncVideoTaskUpstream(input: { localTaskId?: string; providerTaskId?: string; canvasNodeId?: string }) {
+  const task = await findVideoTaskForSync(input);
+  if (!task) throw new ProviderError("PROVIDER_ERROR", "未找到可同步的视频任务。");
+  let result: Record<string, unknown> = {};
+  try {
+    result = objectFrom(task.result_json ? JSON.parse(task.result_json) : undefined);
+  } catch {
+    result = {};
+  }
+  const providerTaskId = stringFrom(task.provider_task_id)
+    ?? stringFrom(result.providerTaskId)
+    ?? stringFrom(result.parsedTaskId)
+    ?? stringFrom(result.taskId)
+    ?? stringFrom(result.task_id)
+    ?? stringFrom(input.providerTaskId);
+  if (!providerTaskId) throw new ProviderError("PROVIDER_RESULT_EMPTY", "当前任务缺少 provider_task_id，无法同步上游结果。");
+  const model = await findModelForVideoTask(task, result);
+  if (!model) throw new ProviderError("MODEL_NOT_FOUND", "未找到该任务对应的视频模型配置，无法同步上游结果。");
+
+  const capabilities = normalizeVideoCapabilities(JSON.parse(model.capabilities_json) as ModelCapabilities, model.provider_id, model.model_name);
+  const request: GenerateVideoRequest = {
+    nodeId: stringFrom(task.canvas_node_id) ?? stringFrom(input.canvasNodeId) ?? "",
+    projectId: stringFrom(task.project_id),
+    modelConfigId: model.id,
+    inputMode: "text-to-video",
+    videoMode: "text_to_video",
+    prompt: stringFrom(result.prompt)
+      ?? stringFrom(result.finalPrompt)
+      ?? stringFrom(objectFrom(result.request).prompt)
+      ?? stringFrom(objectFrom(result.createRawResponse).prompt)
+      ?? "sync upstream video task",
+    duration: 5,
+    aspectRatio: "16:9",
+    resolution: "720p",
+    generateCount: 1
+  };
+  const apiKey = model.encrypted_api_key ? decryptApiKey(model.encrypted_api_key) : "";
+  const config = validateVideoRequestConfig({
+    ...request,
+    apiKey,
+    apiBaseUrl: apiBaseUrlFor(model),
+    modelName: upstreamModelName(model, capabilities, model.model_name),
+    providerId: model.provider_id,
+    videoMode: "text_to_video",
+    capabilities
+  }, capabilities);
+  const pollUrl = materializeGenericPollUrl(config, providerTaskId);
+  const headers: Record<string, string> = { Accept: "application/json", ...(config.pollHeaders ?? {}) };
+  if (config.authType === "bearer" && apiKey) headers.Authorization = `Bearer ${apiKey}`;
+  if (config.authType === "api-key" && apiKey) headers["x-api-key"] = apiKey;
+  let body: string | undefined;
+  const method = config.pollMethod ?? "GET";
+  if (method === "POST") {
+    headers["Content-Type"] = "application/json";
+    body = JSON.stringify({ [config.pollBodyKey ?? "id"]: providerTaskId });
+  }
+  const response = await fetch(pollUrl, { method, headers, body });
+  const text = await response.text();
+  let rawResponse: unknown;
+  try {
+    rawResponse = text ? JSON.parse(text) : {};
+  } catch {
+    rawResponse = { text };
+  }
+  const providerStatus = extractProviderStatus(rawResponse) ?? (response.ok ? "processing" : "failed");
+  const progress = extractProviderProgress(rawResponse) ?? Number(task.progress ?? 0);
+  const providerVideoUrl = extractProviderVideoUrl(rawResponse);
+  const localTaskId = String(task.id);
+  const canvasNodeId = stringFrom(task.canvas_node_id) ?? stringFrom(input.canvasNodeId);
+  const projectId = stringFrom(task.project_id);
+  logVideoTask("sync-upstream", {
+    localTaskId,
+    providerTaskId,
+    providerStatus,
+    hasVideoUrl: Boolean(providerVideoUrl)
+  });
+
+  if ((isSuccessStatus(providerStatus) || providerVideoUrl) && providerVideoUrl) {
+    const finishedAt = Date.now();
+    await markVideoTaskStage({
+      id: localTaskId,
+      status: "succeeded",
+      stage: "sync_upstream_succeeded",
+      providerStatus,
+      providerTaskId,
+      canvasNodeId,
+      projectId,
+      providerId: model.provider_id,
+      modelId: model.id,
+      providerVideoUrl,
+      outputUrl: providerVideoUrl,
+      previewUrl: providerVideoUrl,
+      downloadableUrl: providerVideoUrl,
+      completedAt: finishedAt,
+      finishedAt,
+      progress: 100,
+      result: { rawResponse, syncUpstream: true, pollUrl }
+    });
+    await updateCanvasNodeWithGeneratedVideo({
+      projectId,
+      nodeId: canvasNodeId,
+      outputUrl: providerVideoUrl,
+      previewUrl: providerVideoUrl,
+      downloadableUrl: providerVideoUrl
+    });
+    return { status: "succeeded", providerTaskId, providerStatus, providerVideoUrl, outputUrl: providerVideoUrl, progress: 100, rawResponse };
+  }
+
+  if (isRunningStatus(providerStatus) || response.ok) {
+    await markVideoTaskStage({
+      id: localTaskId,
+      status: "processing",
+      stage: "sync_upstream_running",
+      providerStatus,
+      providerTaskId,
+      canvasNodeId,
+      projectId,
+      providerId: model.provider_id,
+      modelId: model.id,
+      progress,
+      result: { rawResponse, syncUpstream: true, pollUrl }
+    });
+    await updateCanvasNodeWithVideoTaskRunning({ projectId, nodeId: canvasNodeId, providerTaskId, progress });
+    return { status: "processing", providerTaskId, providerStatus, progress, rawResponse };
+  }
+
+  if (isFailedStatus(providerStatus) || !response.ok) {
+    await markVideoTaskStage({
+      id: localTaskId,
+      status: "error",
+      stage: "sync_upstream_failed",
+      providerStatus,
+      providerTaskId,
+      canvasNodeId,
+      projectId,
+      providerId: model.provider_id,
+      modelId: model.id,
+      failedStage: "polling",
+      errorCode: "PROVIDER_ERROR",
+      errorMessage: `上游任务状态为 ${providerStatus}`,
+      progress: 100,
+      result: { rawResponse, syncUpstream: true, pollUrl }
+    });
+    await updateCanvasNodeWithGenerationFailure({ projectId, nodeId: canvasNodeId, errorMessage: `上游任务状态为 ${providerStatus}`, errorCode: "PROVIDER_ERROR", failedStage: "polling" });
+    return { status: "error", providerTaskId, providerStatus, progress: 100, rawResponse };
+  }
+
+  return { status: "processing", providerTaskId, providerStatus, progress, rawResponse };
+}
+
 function ensureProviderVideoUrl(result: ProviderGenerateResult) {
   const providerVideoUrl = result.outputUrl ?? extractProviderVideoUrl(result.rawResponse);
   if (!providerVideoUrl && (result.status === "success" || isProviderSuccessStatus(result.rawResponse))) {
@@ -1379,6 +1609,13 @@ export async function generateVideo(input: GenerateVideoRequest) {
   const capabilities = normalizeVideoCapabilities(configuredCapabilities, model.provider_id, model.model_name);
   const inputForGeneration: GenerateVideoRequest = { ...input, generateCount: 1 };
   let videoRoute: ReturnType<typeof selectedVideoRouting> | undefined;
+  let providerTaskId: string | undefined;
+  let providerVideoUrl: string | undefined;
+  let successfulOutputUrl: string | undefined;
+  let generationSucceeded = false;
+  let canvasNodeUpdated = false;
+  let taskMarkedSuccess = false;
+  let successPayloadSummary: Record<string, unknown> | undefined;
   try {
     normalizeVideoRequestForCapabilities(capabilities, inputForGeneration, model.provider_id, model.model_name);
     validateVideoRequest(capabilities, inputForGeneration, model.provider_id, model.model_name);
@@ -1511,6 +1748,7 @@ export async function generateVideo(input: GenerateVideoRequest) {
       });
       result = await callVideoProvider({ model, providerParams, capabilities });
       const createdProviderTaskId = videoResultProviderTaskId(result, inputForGeneration);
+      providerTaskId = createdProviderTaskId;
       const createdProgress = videoResultProgress(result, result.status === "processing" ? 10 : 80);
       await markVideoTaskStage({
         id: createdProviderTaskId,
@@ -1599,6 +1837,7 @@ export async function generateVideo(input: GenerateVideoRequest) {
     }
 
     const taskId = videoTaskIdFrom(result, activeInputForGeneration);
+    providerTaskId = taskId;
     await markVideoTaskStage({
       id: taskId,
       status: "processing",
@@ -1621,11 +1860,14 @@ export async function generateVideo(input: GenerateVideoRequest) {
         parsedTaskId: taskId
       }
     });
-    const providerVideoUrl = ensureProviderVideoUrl(result);
+    providerVideoUrl = ensureProviderVideoUrl(result);
     const providerFallbackUrl = providerVideoUrl || result.outputUrl || "";
+    successfulOutputUrl = providerFallbackUrl;
+    generationSucceeded = Boolean(providerVideoUrl);
+    const completedAtAfterProvider = Date.now();
     await markVideoTaskStage({
       id: taskId,
-      status: "processing",
+      status: "succeeded",
       stage: "provider_result_parsed",
       providerStatus: "succeeded",
       providerTaskId: taskId,
@@ -1637,13 +1879,16 @@ export async function generateVideo(input: GenerateVideoRequest) {
       outputUrl: providerFallbackUrl,
       previewUrl: providerFallbackUrl,
       downloadableUrl: providerFallbackUrl,
-      progress: 88,
+      completedAt: completedAtAfterProvider,
+      finishedAt: completedAtAfterProvider,
+      progress: 100,
       result: {
         parsedTaskId: taskId,
         parsedVideoUrl: providerVideoUrl ? sanitizeUrlForLog(providerVideoUrl) : undefined,
         providerVideoUrl: providerVideoUrl ? sanitizeUrlForLog(providerVideoUrl) : undefined
       }
     });
+    taskMarkedSuccess = true;
     await updateCanvasNodeWithGeneratedVideo({
       projectId: activeInputForGeneration.projectId,
       nodeId: activeInputForGeneration.nodeId,
@@ -1651,6 +1896,7 @@ export async function generateVideo(input: GenerateVideoRequest) {
       previewUrl: providerFallbackUrl,
       downloadableUrl: providerFallbackUrl
     });
+    canvasNodeUpdated = true;
     logVideoTask("success", {
       localTaskId: taskId,
       providerTaskId: taskId,
@@ -1663,11 +1909,17 @@ export async function generateVideo(input: GenerateVideoRequest) {
       nodeStatus: "completed",
       nodeOutputUrl: sanitizeUrlForLog(providerFallbackUrl)
     });
+    successPayloadSummary = {
+      ...preflightSummary,
+      ...providerSummary(result),
+      providerVideoUrl: sanitizeUrlForLog(providerVideoUrl),
+      outputUrl: sanitizeUrlForLog(providerFallbackUrl)
+    };
     let asset;
     if (result.localPath) {
       await markVideoTaskStage({
         id: taskId,
-        status: "processing",
+        status: "succeeded",
         stage: "upload_to_cos",
         providerStatus: "succeeded",
         providerVideoUrl,
@@ -1697,7 +1949,7 @@ export async function generateVideo(input: GenerateVideoRequest) {
     } else if (providerVideoUrl) {
       await markVideoTaskStage({
         id: taskId,
-        status: "processing",
+        status: "succeeded",
         stage: "downloading_video",
         providerStatus: "succeeded",
         providerTaskId: taskId,
@@ -1709,36 +1961,22 @@ export async function generateVideo(input: GenerateVideoRequest) {
         progress: 90
       });
       logVideoTask("storage-transfer-start", { localTaskId: taskId, providerVideoUrl: sanitizeUrlForLog(providerVideoUrl) });
-      try {
-        const persisted = await persistGeneratedVideoToCOS({
-          providerVideoUrl,
-          taskId,
-          userId: undefined,
-          workspaceId: undefined,
-          providerId: activeModel.provider_id ?? "",
-          modelId: activeModel.id,
-          nodeId: activeInputForGeneration.nodeId,
-          projectId: activeInputForGeneration.projectId,
-          prompt: activeInputForGeneration.prompt,
-          negativePrompt: activeInputForGeneration.negativePrompt,
-          generationParams: providerSummary(result)
-        });
-        asset = persisted.asset;
-        result = {
-          ...result,
-          outputUrl: persisted.outputUrl,
-          localPath: persisted.localPath,
-          payloadSummary: {
-            ...providerSummary(result),
-            providerVideoUrl: sanitizeUrlForLog(providerVideoUrl),
-            cosObjectKey: persisted.cosObjectKey,
-            fileSize: persisted.fileSize,
-            mimeType: persisted.mimeType
-          }
-        };
+      void persistGeneratedVideoToCOS({
+        providerVideoUrl,
+        taskId,
+        userId: undefined,
+        workspaceId: undefined,
+        providerId: activeModel.provider_id ?? "",
+        modelId: activeModel.id,
+        nodeId: activeInputForGeneration.nodeId,
+        projectId: activeInputForGeneration.projectId,
+        prompt: activeInputForGeneration.prompt,
+        negativePrompt: activeInputForGeneration.negativePrompt,
+        generationParams: providerSummary(result)
+      }).then(async (persisted) => {
         await markVideoTaskStage({
           id: taskId,
-          status: "processing",
+          status: "succeeded",
           stage: "cos_uploaded",
           providerStatus: "succeeded",
           providerTaskId: taskId,
@@ -1766,8 +2004,71 @@ export async function generateVideo(input: GenerateVideoRequest) {
             cosUrl: persisted.cosUrl
           }
         });
+        await updateCanvasNodeWithGeneratedVideo({
+          projectId: activeInputForGeneration.projectId,
+          nodeId: activeInputForGeneration.nodeId,
+          outputUrl: persisted.outputUrl,
+          outputAssetId: persisted.asset.id,
+          cdnUrl: persisted.cdnUrl,
+          cosUrl: persisted.cosUrl,
+          posterUrl: persisted.posterUrl,
+          previewUrl: persisted.previewUrl,
+          thumbnailUrl: persisted.asset.thumbnailUrl,
+          downloadableUrl: persisted.downloadableUrl
+        });
+        await addHistory({
+          generationType: "video",
+          projectId: activeInputForGeneration.projectId,
+          nodeId: activeInputForGeneration.nodeId,
+          modelConfigId: activeModel.id,
+          modelDisplayName: activeModel.display_name,
+          inputMode: activeInputForGeneration.inputMode,
+          prompt: activeInputForGeneration.prompt,
+          duration: activeInputForGeneration.duration,
+          aspectRatio: activeInputForGeneration.aspectRatio,
+          resolution: activeInputForGeneration.resolution,
+          status: "success",
+          outputPath: persisted.localPath,
+          outputUrl: persisted.outputUrl,
+          thumbnailUrl: persisted.asset.thumbnailUrl,
+          posterUrl: persisted.posterUrl,
+          previewUrl: persisted.previewUrl,
+          cdnUrl: persisted.cdnUrl,
+          cosUrl: persisted.cosUrl,
+          downloadableUrl: persisted.downloadableUrl
+        }).catch((historyError) => console.warn("[video async storage history failed]", rawErrorMessage(historyError)));
+        await markVideoTaskStage({
+          id: taskId,
+          status: "succeeded",
+          stage: "storage_async_completed",
+          providerStatus: "succeeded",
+          providerTaskId: taskId,
+          canvasNodeId: activeInputForGeneration.nodeId,
+          projectId: activeInputForGeneration.projectId,
+          providerId: activeModel.provider_id ?? "",
+          modelId: activeModel.model_name ?? activeModel.id,
+          providerVideoUrl,
+          outputUrl: persisted.outputUrl,
+          cdnUrl: persisted.cdnUrl,
+          posterUrl: persisted.posterUrl,
+          previewUrl: persisted.previewUrl,
+          downloadableUrl: persisted.downloadableUrl,
+          cosKey: persisted.cosObjectKey,
+          fileSize: persisted.fileSize,
+          mimeType: persisted.mimeType,
+          storageStatus: "success",
+          progress: 96,
+          result: {
+            providerVideoUrl: sanitizeUrlForLog(providerVideoUrl),
+            cosUploadStatus: persisted.cosUploadStatus,
+            cosObjectKey: persisted.cosObjectKey,
+            finalOutputUrl: persisted.outputUrl,
+            cdnUrl: persisted.cdnUrl,
+            cosUrl: persisted.cosUrl
+          }
+        });
         logVideoTask("storage-transfer-success", { localTaskId: taskId, cosKey: persisted.cosObjectKey, cdnUrl: persisted.cdnUrl });
-      } catch (storageError) {
+      }).catch(async (storageError) => {
         await markVideoTaskStage({
           id: taskId,
           status: "succeeded",
@@ -1796,7 +2097,7 @@ export async function generateVideo(input: GenerateVideoRequest) {
           }
         });
         logVideoTask("storage-transfer-failed", { localTaskId: taskId, providerVideoUrl: sanitizeUrlForLog(providerVideoUrl), error: rawErrorMessage(storageError) });
-      }
+      });
     }
     if (!asset && providerFallbackUrl) {
       const completedAt = Date.now();
@@ -1872,7 +2173,7 @@ export async function generateVideo(input: GenerateVideoRequest) {
     result = { ...result, outputUrl: finalOutputUrl, localPath: finalLocalPath };
     await markVideoTaskStage({
       id: taskId,
-      status: "processing",
+      status: "succeeded",
       stage: "cos_uploaded",
       providerStatus: "succeeded",
       providerTaskId: taskId,
@@ -1930,7 +2231,7 @@ export async function generateVideo(input: GenerateVideoRequest) {
     }
     await markVideoTaskStage({
       id: taskId,
-      status: "processing",
+      status: "succeeded",
       stage: "history_saved",
       providerStatus: "succeeded",
       providerTaskId: taskId,
@@ -2038,6 +2339,57 @@ export async function generateVideo(input: GenerateVideoRequest) {
       : {};
     const failedStage = typeof errorDetails.failedStage === "string" ? errorDetails.failedStage : "failed";
     const failedTaskId = String(errorDetails.parsedTaskId ?? errorDetails.taskId ?? input.clientRequestId ?? input.nodeId);
+    if (generationSucceeded || providerVideoUrl || taskMarkedSuccess || canvasNodeUpdated) {
+      const finalProviderTaskId = providerTaskId ?? failedTaskId;
+      const finalOutputUrl = successfulOutputUrl ?? providerVideoUrl;
+      logVideoTask("post-success-error-ignored", {
+        localTaskId: finalProviderTaskId,
+        providerTaskId: finalProviderTaskId,
+        error: meta.errorMessage,
+        failedStage
+      });
+      if (finalProviderTaskId && finalOutputUrl) {
+        await markVideoTaskStage({
+          id: finalProviderTaskId,
+          status: "succeeded",
+          stage: "post_success_error_ignored",
+          providerStatus: "succeeded",
+          providerTaskId: finalProviderTaskId,
+          canvasNodeId: input.nodeId,
+          projectId: input.projectId,
+          providerId: model.provider_id ?? "",
+          modelId: model.model_name ?? model.id,
+          providerVideoUrl,
+          outputUrl: finalOutputUrl,
+          previewUrl: finalOutputUrl,
+          downloadableUrl: finalOutputUrl,
+          progress: 100,
+          storageStatus: failedStage === "upload_to_cos" || failedStage === "download_video" ? "failed" : undefined,
+          storageError: failedStage === "upload_to_cos" || failedStage === "download_video" ? meta.errorMessage : undefined,
+          completedAt: Date.now(),
+          finishedAt: Date.now(),
+          result: {
+            ...errorDetails,
+            ...routingSummary,
+            postSuccessErrorIgnored: true,
+            ignoredErrorCode: meta.errorCode,
+            ignoredErrorMessage: meta.errorMessage
+          }
+        });
+      }
+      return {
+        status: "success" as const,
+        outputUrl: finalOutputUrl,
+        previewUrl: finalOutputUrl,
+        downloadableUrl: finalOutputUrl,
+        payloadSummary: {
+          ...(successPayloadSummary ?? {}),
+          postSuccessErrorIgnored: true,
+          ignoredErrorCode: meta.errorCode,
+          ignoredErrorMessage: meta.errorMessage
+        }
+      };
+    }
     if (hasSubmittedRemoteVideoTask(error) && !isTerminalSubmittedVideoError(error)) {
       const details = errorDetails;
       logVideoTask("diagnosis-ignored", {

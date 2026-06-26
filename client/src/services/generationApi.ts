@@ -23,7 +23,7 @@ export const generationApi = {
     ),
   syncLatestTask: (nodeId: string, since?: number) =>
     api.post<{ id: string; status: string; progress?: number; syncStatus?: string; outputUrl?: string; videoUrl?: string; cdnUrl?: string; posterUrl?: string; previewUrl?: string; downloadableUrl?: string; providerVideoUrl?: string; errorMessage?: string }>(
-      "/api/generate/tasks/sync-latest",
-      { nodeId, since }
+      "/api/generate/video/sync-upstream",
+      { canvasNodeId: nodeId, since }
     )
 };

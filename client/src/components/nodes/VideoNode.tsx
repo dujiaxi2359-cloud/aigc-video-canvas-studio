@@ -130,6 +130,19 @@ function taskResultVideoUrl(value: unknown): string | undefined {
   return undefined;
 }
 
+function taskResultProviderTaskId(value: unknown): string | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const record = value as Record<string, unknown>;
+  for (const candidate of [record.providerTaskId, record.parsedTaskId, record.taskId, record.task_id, record.id, record.requestId, record.request_id, record.jobId, record.job_id]) {
+    if (typeof candidate === "string" && candidate.trim()) return candidate.trim();
+  }
+  for (const nested of [record.result, record.response, record.data, record.output, record.payloadSummary]) {
+    const found = taskResultProviderTaskId(nested);
+    if (found) return found;
+  }
+  return undefined;
+}
+
 function isSeedanceModel(model?: ModelConfig) {
   return /seedance|doubao/.test(modelIdentity(model));
 }
@@ -530,6 +543,9 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
   const effectiveChannelDiagnostic = props.data.providerTaskId && props.data.status === "generating"
     ? { ...channelDiagnostic, whyBlocked: "" }
     : channelDiagnostic;
+  const rawVisibleError = props.data.errorMessage || localError;
+  const isChannelPermissionError = /通道权限问题|当前中转账号|no available channel|no available platform|channel.*permission|model.*access/i.test(rawVisibleError || "");
+  const visibleErrorMessage = props.data.providerTaskId && isChannelPermissionError ? "" : rawVisibleError;
 
   useEffect(() => {
     if (selectedModel || !models.length) return;
@@ -986,7 +1002,7 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
     payloadSummary?: Record<string, unknown>;
   }) {
     const summary = result.payloadSummary ?? {};
-    return [summary.taskId, summary.task_id, summary.proxyTaskId, summary.id, summary.requestId, summary.request_id, summary.jobId, summary.job_id].some((value) => typeof value === "string" && value.length > 0)
+    return Boolean(taskResultProviderTaskId(summary))
       || summary.pendingAfterTimeout === true
       || summary.pendingAfterPollInterruption === true
       || summary.pendingInBackground === true
@@ -1203,6 +1219,7 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
       const previousThumbnailUrl = props.data.thumbnailUrl;
       const previousPreviewUrl = props.data.previewUrl;
       const returnedVideoUrl = result.outputUrl || result.videoUrl || result.cdnUrl || result.previewUrl || result.providerVideoUrl || taskResultVideoUrl(result.payloadSummary);
+      const returnedProviderTaskId = taskResultProviderTaskId(result.payloadSummary);
       const hasReturnedVideo = Boolean(returnedVideoUrl);
       update(
         props.id,
@@ -1236,6 +1253,7 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
               thumbnailUrl: previousThumbnailUrl,
               previewUrl: previousPreviewUrl,
               payloadSummary: result.payloadSummary,
+              providerTaskId: returnedProviderTaskId ?? props.data.providerTaskId,
               errorCode: undefined,
               errorMessage: "上游已完成，正在等待视频地址回填到画布。",
               debugMessage: undefined
@@ -1248,6 +1266,7 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
               posterUrl: previousPosterUrl,
               thumbnailUrl: previousThumbnailUrl,
               previewUrl: previousPreviewUrl,
+              providerTaskId: returnedProviderTaskId ?? props.data.providerTaskId,
               payloadSummary: result.payloadSummary,
               errorCode: undefined,
               errorMessage: undefined,
@@ -1261,6 +1280,7 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
               posterUrl: previousPosterUrl,
               thumbnailUrl: previousThumbnailUrl,
               previewUrl: previousPreviewUrl,
+              providerTaskId: returnedProviderTaskId ?? props.data.providerTaskId,
               errorCode: undefined,
               errorMessage: "上游任务仍在排队或生成中，完成后将自动回填画布。",
               debugMessage: undefined,
@@ -1446,7 +1466,7 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
           />
         </div>
       </div>
-      {(props.data.errorMessage || localError) && <button type="button" className="creation-error-line" onClick={() => setExpanded(true)}><AlertCircle size={12} /><span>{props.data.errorMessage || localError}</span><strong>诊断</strong></button>}
+      {visibleErrorMessage && <button type="button" className="creation-error-line" onClick={() => setExpanded(true)}><AlertCircle size={12} /><span>{visibleErrorMessage}</span><strong>诊断</strong></button>}
       <div className="creation-dock-footer">
         <div className="creation-dock-identity">
           <div className="creation-model-field" title={selectedChannelHost ? `当前线路：${selectedChannelHost}` : undefined}><Activity size={14} /><Select className="creation-model-select" value={props.data.modelConfigId ?? ""} onChange={(event) => update(props.id, { modelConfigId: event.target.value, errorCode: undefined, errorMessage: undefined, debugMessage: undefined })}><option value="">选择模型</option>{models.map((model) => <option key={model.id} value={model.id}>{modelOptionLabel(model, models)}</option>)}</Select>{selectedChannelHost && <span className="creation-model-channel">{selectedChannelHost}</span>}</div>
@@ -1481,7 +1501,7 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
         <PayloadSummary data={effectiveChannelDiagnostic as unknown as Record<string, unknown>} />
         <div className="flex flex-wrap items-center gap-2">
           {props.data.status === "generating" && <Button type="button" variant="secondary" className="h-7 px-3 text-[11px]" onClick={() => void syncUpstreamResult()}>同步上游结果</Button>}
-          {(props.data.errorMessage || localError) && <AgentAnalyzeErrorButton nodeId={props.id} errorMessage={props.data.errorMessage || localError} nodeData={props.data as unknown as Record<string, unknown>} />}
+          {visibleErrorMessage && <AgentAnalyzeErrorButton nodeId={props.id} errorMessage={visibleErrorMessage} nodeData={props.data as unknown as Record<string, unknown>} />}
         </div>
       </div>}
     </div>

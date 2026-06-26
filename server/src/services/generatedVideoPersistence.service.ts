@@ -340,11 +340,29 @@ export async function updateCanvasNodeWithGenerationFailure(input: {
     if (node.id !== input.nodeId) return node;
     didUpdate = true;
     const data = (node.data && typeof node.data === "object" ? node.data as Record<string, unknown> : {});
+    if (
+      data.status === "success"
+      || data.generationStatus === "succeeded"
+      || typeof data.outputUrl === "string"
+      || typeof data.videoUrl === "string"
+      || typeof data.previewUrl === "string"
+    ) {
+      return {
+        ...node,
+        data: {
+          ...data,
+          loading: false,
+          postSuccessErrorMessage: input.errorMessage,
+          postSuccessErrorCode: input.errorCode,
+          postSuccessFailedStage: input.failedStage
+        }
+      };
+    }
     return {
       ...node,
     data: {
         ...data,
-        providerTaskId: undefined,
+        providerTaskId: data.providerTaskId,
         status: "error",
         generationStatus: "failed",
         loading: false,
