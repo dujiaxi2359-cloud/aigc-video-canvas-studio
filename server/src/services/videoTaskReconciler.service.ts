@@ -105,22 +105,23 @@ async function contextForTask(task: ReconcileTaskRow) {
   };
 }
 
-async function canvasHasVideo(task: ReconcileTaskRow) {
-  if (!task.project_id || !task.canvas_node_id || !task.workspace_id) return false;
+async function canvasVideoState(task: ReconcileTaskRow): Promise<"has_video" | "no_video" | "missing_node"> {
+  if (!task.project_id || !task.canvas_node_id || !task.workspace_id) return "missing_node";
   const db = await getDb();
   const project = await db.get<{ nodes_json: string }>(
     "SELECT nodes_json FROM projects WHERE id = ? AND workspace_id = ?",
     task.project_id,
     task.workspace_id
   );
-  if (!project) return false;
+  if (!project) return "missing_node";
   try {
     const nodes = JSON.parse(project.nodes_json) as Array<Record<string, unknown>>;
     const node = nodes.find((item) => item.id === task.canvas_node_id);
+    if (!node) return "missing_node";
     const data = node?.data && typeof node.data === "object" ? node.data as Record<string, unknown> : {};
-    return Boolean(data.videoUrl || data.outputUrl || data.previewUrl);
+    return data.videoUrl || data.outputUrl || data.previewUrl ? "has_video" : "no_video";
   } catch {
-    return false;
+    return "missing_node";
   }
 }
 
@@ -134,11 +135,12 @@ async function reconcileTask(task: ReconcileTaskRow) {
     task.preview_url,
     extractProviderVideoUrl(result)
   );
-  const hasCanvasVideo = await canvasHasVideo(task);
-  if (url && (!hasCanvasVideo || isRunningLike(task.status))) {
+  const canvasState = await canvasVideoState(task);
+  if (canvasState === "missing_node") return;
+  if (url && (canvasState === "no_video" || isRunningLike(task.status))) {
     logReconciler("auto-finalize", {
       taskId: task.id,
-      reason: hasCanvasVideo ? "running_task_already_has_url" : "canvas_missing_video",
+      reason: canvasState === "has_video" ? "running_task_already_has_url" : "canvas_missing_video",
       videoUrl: sanitizeUrlForLog(url)
     });
     await runWithRequestContext(context, () => finalizeVideoResult({
@@ -152,7 +154,7 @@ async function reconcileTask(task: ReconcileTaskRow) {
       outputUrl: task.output_url || url,
       previewUrl: task.preview_url || task.output_url || url,
       downloadableUrl: task.downloadable_url || task.output_url || url,
-      providerResult: { reconciler: true, reason: hasCanvasVideo ? "running_task_already_has_url" : "canvas_missing_video" },
+      providerResult: { reconciler: true, reason: canvasState === "has_video" ? "running_task_already_has_url" : "canvas_missing_video" },
       rawResponse: result,
       source: "reconciler"
     }));
