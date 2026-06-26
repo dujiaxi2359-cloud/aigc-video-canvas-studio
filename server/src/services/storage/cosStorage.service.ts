@@ -100,12 +100,14 @@ export function normalizeCosKey(fileKey: string) {
   return String(fileKey || "").trim().replace(/^\/+/, "").replace(/\\/g, "/");
 }
 
-function truthyEnv(value?: string) {
-  return /^(1|true|yes|on)$/i.test(String(value || "").trim());
+function falseyEnv(value?: string) {
+  return /^(0|false|no|off)$/i.test(String(value || "").trim());
 }
 
 export function isCdnDeliveryEnabled() {
-  return truthyEnv(process.env.USE_CDN_FOR_PUBLIC_ASSETS) && Boolean(process.env.TENCENT_CDN_BASE_URL?.trim());
+  if (!process.env.TENCENT_CDN_BASE_URL?.trim()) return false;
+  if (falseyEnv(process.env.USE_CDN_FOR_PUBLIC_ASSETS)) return false;
+  return true;
 }
 
 export function getCdnBaseUrl() {

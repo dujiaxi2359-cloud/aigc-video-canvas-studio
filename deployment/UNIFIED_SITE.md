@@ -66,6 +66,29 @@ PORT=4000 pm2 start dist/index.js --name aigcnong-video-api
 pm2 save
 ```
 
+### COS / CDN delivery
+
+Moon stores the original object identity as `storage_key` / `cosKey`. Public
+display URLs are derived at runtime from `TENCENT_CDN_BASE_URL + cosKey`; the
+application code does not care whether Tencent CDN is configured with a
+custom origin, a lightweight object storage origin, or a standard COS origin.
+
+For lightweight object storage that cannot be selected by Tencent CDN's COS
+origin picker, configure Tencent CDN with a custom origin pointing at the COS
+default domain, then set only the public CDN domain in the API environment:
+
+```bash
+TENCENT_CDN_BASE_URL=https://your-cdn-domain.example.com
+```
+
+`USE_CDN_FOR_PUBLIC_ASSETS=false` can be set to force-disable CDN delivery.
+When omitted, `TENCENT_CDN_BASE_URL` enables CDN URL generation automatically.
+
+This keeps the future migration path clean: moving to standard COS private
+read/write, CDN origin authentication, and CDN URL authentication should only
+change CDN/COS configuration and signing policy, not Moon's asset model. The
+database should continue storing COS object keys, not CDN origin type.
+
 ## Nginx
 
 Set the `imagephotos.asia` site root to the deployed `client/dist` directory,
