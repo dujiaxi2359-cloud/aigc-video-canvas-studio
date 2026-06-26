@@ -198,7 +198,7 @@ function summarizeTasks(tasks: TaskRow[]) {
     lastErrorCode: failedTasks[0]?.error_code,
     lastErrorMessage: failedTasks[0]?.error_message,
     lastProviderTaskId: recent.find((task) => task.provider_task_id)?.provider_task_id,
-    lastRawResponseSample: safeStringify(taskRaw(recent[0]))
+    lastRawResponseSample: recent[0] ? safeStringify(taskRaw(recent[0])) : undefined
   };
 }
 
