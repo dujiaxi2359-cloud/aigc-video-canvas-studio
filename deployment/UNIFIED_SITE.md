@@ -79,6 +79,10 @@ default domain, then set only the public CDN domain in the API environment:
 
 ```bash
 TENCENT_CDN_BASE_URL=https://your-cdn-domain.example.com
+USE_CDN_FOR_PUBLIC_ASSETS=true
+STORAGE_PUBLIC_DELIVERY_PROVIDER=tencent_cdn
+STORAGE_ORIGINAL_PROVIDER=tencent_cos
+STORAGE_PREVIEW_PROVIDER=tencent_cos
 ```
 
 `USE_CDN_FOR_PUBLIC_ASSETS=false` can be set to force-disable CDN delivery.

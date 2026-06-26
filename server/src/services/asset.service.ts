@@ -1,5 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import sharp from "sharp";
 import { getDb } from "../db/database.js";
 import { createId } from "../utils/id.js";
@@ -23,6 +25,7 @@ import {
 import type { StorageFileType } from "./storage/cosStorage.service.js";
 
 type AssetRow = Record<string, any>;
+const execFileAsync = promisify(execFile);
 
 export type AssetQuery = {
   type?: string;
@@ -90,6 +93,18 @@ function publicAssetUrl(type: string, fileName: string) {
 
 function publicThumbnailUrl(fileName: string) {
   return `/uploads/assets/thumbnails/${path.basename(fileName)}`;
+}
+
+function storagePublicDeliveryProvider(storageKey?: string) {
+  return process.env.STORAGE_PUBLIC_DELIVERY_PROVIDER?.trim() || publicDeliveryProviderForCosKey(storageKey);
+}
+
+function storageOriginalProvider(fallback?: string) {
+  return process.env.STORAGE_ORIGINAL_PROVIDER?.trim() || fallback;
+}
+
+function storagePreviewProvider(fallback?: string) {
+  return process.env.STORAGE_PREVIEW_PROVIDER?.trim() || fallback;
 }
 
 function isStorageSignedAccessPath(value?: string | null) {
@@ -170,7 +185,7 @@ function toAsset(row: AssetRow): Asset {
     storageFileType: row.storage_file_type,
     originalStorageProvider: row.original_storage_provider,
     previewStorageProvider: row.preview_storage_provider,
-    publicDeliveryProvider: row.public_delivery_provider || publicDeliveryProviderForCosKey(storageKey),
+    publicDeliveryProvider: row.public_delivery_provider || storagePublicDeliveryProvider(storageKey),
     providerId: row.provider_id,
     modelId: row.model_id,
     nodeId: row.node_id,
@@ -214,6 +229,29 @@ async function createImageThumbnail(localPath: string, assetId: string) {
   const target = path.join(thumbnailsDir, fileName);
   await sharp(localPath).resize(480, 480, { fit: "inside", withoutEnlargement: true }).jpeg({ quality: 82 }).toFile(target);
   return publicThumbnailUrl(fileName);
+}
+
+async function createVideoPoster(localPath: string, assetId: string) {
+  const thumbnailsDir = path.join(assetRoot(), "thumbnails");
+  fs.mkdirSync(thumbnailsDir, { recursive: true });
+  const fileName = `${assetId}-poster.jpg`;
+  const target = path.join(thumbnailsDir, fileName);
+  await execFileAsync("ffmpeg", [
+    "-y",
+    "-ss",
+    "00:00:01",
+    "-i",
+    localPath,
+    "-frames:v",
+    "1",
+    "-vf",
+    "scale='min(720,iw)':-2",
+    "-q:v",
+    "4",
+    target
+  ]);
+  if (!fs.existsSync(target) || fs.statSync(target).size <= 0) throw new Error("VIDEO_POSTER_EMPTY");
+  return { localPath: target, url: publicThumbnailUrl(fileName), fileName };
 }
 
 function localPathForPublicUploadUrl(url?: string | null) {
@@ -346,6 +384,9 @@ export async function createAsset(input: CreateAssetInput & { id?: string }) {
   let storageBucket = input.storageBucket;
   let storageRegion = input.storageRegion;
   let storageFileType = input.storageFileType;
+  let thumbnailKey = input.thumbnailKey;
+  let posterKey = input.posterKey;
+  let previewKey = input.previewKey;
   if ((input.source === "generated" || input.source === "imported") && localPath && fs.existsSync(localPath) && !path.resolve(localPath).startsWith(assetRoot())) {
     const stored = await copyIntoAssetStorage({ sourcePath: localPath, type, assetId: id, originalName: input.originalName });
     localPath = stored.localPath;
@@ -358,6 +399,11 @@ export async function createAsset(input: CreateAssetInput & { id?: string }) {
   if (type === "image" && localPath && fs.existsSync(localPath)) {
     thumbnailUrl = await createImageThumbnail(localPath, id).catch(() => input.thumbnailUrl);
   }
+  let localPoster: { localPath: string; url: string; fileName: string } | undefined;
+  if (type === "video" && !posterUrl && localPath && fs.existsSync(localPath)) {
+    localPoster = await createVideoPoster(localPath, id).catch(() => undefined);
+    if (localPoster) posterUrl = localPoster.url;
+  }
   const targetStorageFileType = storageFileTypeForAsset(type, input.source, input.storageFileType);
   if (!storageKey && isCosConfigured() && localFileExists && ["uploaded", "generated", "imported"].includes(input.source ?? "uploaded")) {
     const stored = await uploadLocalFileToCos({
@@ -367,7 +413,7 @@ export async function createAsset(input: CreateAssetInput & { id?: string }) {
       originalName: input.originalName || fileName,
       mimeType: input.mimeType ?? contentTypeForFilename(fileName)
     });
-    storageProvider = "tencent_cos";
+    storageProvider = storageOriginalProvider("tencent_cos");
     storageKey = stored.fileKey;
     storageBucket = stored.bucket;
     storageRegion = stored.region;
@@ -378,6 +424,17 @@ export async function createAsset(input: CreateAssetInput & { id?: string }) {
     url = cdnUrl || stored.url;
     downloadUrl = stored.downloadUrl;
     downloadableUrl = downloadableUrl || cdnUrl || url;
+  }
+  if (localPoster && isCosConfigured() && fs.existsSync(localPoster.localPath)) {
+    const storedPoster = await uploadLocalFileToCos({
+      workspaceId: workspace.id,
+      localPath: localPoster.localPath,
+      fileType: "cover",
+      originalName: localPoster.fileName,
+      mimeType: "image/jpeg"
+    });
+    posterKey = storedPoster.fileKey;
+    posterUrl = cdnUrlForCosKey(storedPoster.fileKey) || storedPoster.url;
   }
   if (storageKey) {
     cosUrl = cosUrl || storageAccessPath(storageKey, { disposition: "inline" });
@@ -414,12 +471,12 @@ export async function createAsset(input: CreateAssetInput & { id?: string }) {
     posterUrl,
     previewUrl,
     downloadableUrl,
-    input.thumbnailKey,
-    input.posterKey,
-    input.previewKey,
-    input.originalStorageProvider || storageProvider,
-    input.previewStorageProvider,
-    input.publicDeliveryProvider || publicDeliveryProviderForCosKey(storageKey),
+    thumbnailKey,
+    posterKey,
+    previewKey,
+    input.originalStorageProvider || storageOriginalProvider(storageProvider),
+    input.previewStorageProvider || storagePreviewProvider(posterKey || previewKey || thumbnailKey ? "tencent_cos" : undefined),
+    input.publicDeliveryProvider || storagePublicDeliveryProvider(storageKey),
     metadata.fileSize ?? input.size,
     input.mimeType ?? contentTypeForFilename(fileName),
     metadata.width,
