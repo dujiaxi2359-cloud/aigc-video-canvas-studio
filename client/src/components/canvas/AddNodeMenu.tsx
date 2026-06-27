@@ -40,7 +40,7 @@ export function AddNodeMenu({ open, onClose, nodePosition, menuPosition }: { ope
   const style = floatingMenuStyle(menuPosition);
 
   return (
-    <div data-add-node-menu="true" style={style} className={`pointer-events-auto fixed z-[9999] max-h-[calc(100vh-96px)] w-[268px] overflow-auto rounded-[18px] border border-white/[0.1] bg-[#1c1c1e]/[0.94] p-2.5 shadow-[0_28px_90px_rgba(0,0,0,0.58)] backdrop-blur-2xl ${menuPosition ? "" : "left-[78px] top-1/2 -translate-y-1/2"}`}>
+    <div data-add-node-menu="true" style={style} className={`canvas-add-node-menu pointer-events-auto fixed z-[9999] max-h-[calc(100vh-96px)] w-[268px] overflow-auto rounded-[18px] border border-white/[0.1] bg-[#1c1c1e]/[0.94] p-2.5 shadow-[0_28px_90px_rgba(0,0,0,0.58)] backdrop-blur-2xl ${menuPosition ? "" : "left-[78px] top-1/2 -translate-y-1/2"}`}>
       <div className="mb-2 px-2 pt-1 text-[16px] font-semibold text-white">添加节点</div>
       {(["创作节点", "辅助工具", "添加资源"] as const).map((group) => (
         <div key={group} className="mb-2">

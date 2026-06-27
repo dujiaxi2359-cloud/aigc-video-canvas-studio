@@ -10258,6 +10258,218 @@ video:-webkit-full-screen,
   color: #7b7280 !important;
 }
 
+/* Final UI validation pass: make light theme readable beyond the home page. */
+:root[data-theme="light"] .login-shell {
+  background:
+    radial-gradient(780px circle at 50% 18%, rgba(139, 92, 246, 0.08), transparent 42%),
+    linear-gradient(180deg, #f8f7f3 0%, #f1f3f8 100%) !important;
+  color: #211f28 !important;
+}
+
+:root[data-theme="light"] .login-shell > .pointer-events-none {
+  background:
+    radial-gradient(circle at 50% 26%, rgba(255, 255, 255, 0.62), transparent 34%),
+    radial-gradient(circle at 76% 72%, rgba(6, 182, 212, 0.08), transparent 32%) !important;
+}
+
+:root[data-theme="light"] .login-card {
+  border-color: rgba(35, 34, 40, 0.1) !important;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(248, 246, 241, 0.88)) !important;
+  color: #211f28 !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.96),
+    0 26px 78px rgba(68, 64, 78, 0.14) !important;
+}
+
+:root[data-theme="light"] .login-card :is(h1, label, strong, .font-semibold, .text-white) {
+  color: #211f28 !important;
+}
+
+:root[data-theme="light"] .login-card :is(.text-white\/55, .text-white\/45, .text-white\/35, .text-white\/28, .text-white\/20),
+:root[data-theme="light"] .login-card [class*="text-white/"] {
+  color: rgba(33, 31, 40, 0.58) !important;
+}
+
+:root[data-theme="light"] .login-card .login-brand-logo .moon-logo-orbit {
+  stroke: rgba(33, 31, 40, 0.42) !important;
+}
+
+:root[data-theme="light"] .login-card .login-brand-logo .moon-logo-crescent {
+  fill: rgba(33, 31, 40, 0.92) !important;
+}
+
+:root[data-theme="light"] .login-email-option {
+  border-color: rgba(35, 34, 40, 0.11) !important;
+  background: rgba(255, 255, 255, 0.72) !important;
+  color: rgba(33, 31, 40, 0.68) !important;
+}
+
+:root[data-theme="light"] .login-email-option:hover,
+:root[data-theme="light"] .login-email-option.is-active {
+  border-color: rgba(8, 145, 178, 0.36) !important;
+  background: rgba(236, 253, 255, 0.72) !important;
+  color: #1f2933 !important;
+}
+
+:root[data-theme="light"] .login-card .studio-input {
+  border-color: rgba(35, 34, 40, 0.14) !important;
+  background: rgba(255, 255, 255, 0.78) !important;
+  color: #211f28 !important;
+}
+
+:root[data-theme="light"] .login-card .studio-input::placeholder {
+  color: rgba(33, 31, 40, 0.36) !important;
+}
+
+:root[data-theme="light"] .login-card .studio-primary-button {
+  background: linear-gradient(180deg, #2d2a35, #17151d) !important;
+  color: #fff !important;
+  box-shadow: 0 16px 38px rgba(33, 31, 40, 0.22) !important;
+}
+
+:root[data-theme="light"] .login-card .studio-primary-button:disabled {
+  opacity: 0.52 !important;
+}
+
+:root[data-theme="light"] .login-card .text-red-300 {
+  color: #b4233a !important;
+}
+
+:root[data-theme="light"] .canvas-add-node-menu,
+:root[data-theme="light"] [data-add-node-menu="true"] {
+  border-color: rgba(35, 34, 40, 0.11) !important;
+  background:
+    radial-gradient(circle at 8% 0%, rgba(139, 92, 246, 0.08), transparent 34%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(248, 246, 241, 0.88)) !important;
+  color: #211f28 !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.95),
+    0 28px 76px rgba(68, 64, 78, 0.16) !important;
+}
+
+:root[data-theme="light"] [data-add-node-menu="true"] :is(.text-white, .text-white\/88, .font-semibold) {
+  color: #211f28 !important;
+}
+
+:root[data-theme="light"] [data-add-node-menu="true"] :is(.text-white\/58, .text-white\/38, .text-white\/35) {
+  color: rgba(33, 31, 40, 0.56) !important;
+}
+
+:root[data-theme="light"] [data-add-node-menu="true"] button:hover {
+  background: rgba(33, 31, 40, 0.055) !important;
+}
+
+:root[data-theme="light"] [data-add-node-menu="true"] span[class*="bg-white/"] {
+  border-color: rgba(35, 34, 40, 0.1) !important;
+  background: rgba(33, 31, 40, 0.05) !important;
+  color: rgba(33, 31, 40, 0.64) !important;
+}
+
+:root[data-theme="light"] .creation-node {
+  color: #211f28 !important;
+  filter: drop-shadow(0 18px 42px rgba(77, 70, 88, 0.16)) !important;
+}
+
+:root[data-theme="light"] .creation-preview-card {
+  border-color: rgba(35, 34, 40, 0.11) !important;
+  background:
+    radial-gradient(circle at 50% 12%, rgba(139, 92, 246, 0.08), transparent 34%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.78), rgba(238, 236, 232, 0.78)) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.88),
+    0 20px 58px rgba(77, 70, 88, 0.14) !important;
+}
+
+:root[data-theme="light"] .creation-preview-empty,
+:root[data-theme="light"] .creation-upload-preview {
+  color: rgba(33, 31, 40, 0.48) !important;
+}
+
+:root[data-theme="light"] .creation-preview-status {
+  border-color: rgba(35, 34, 40, 0.08) !important;
+  background: rgba(255, 255, 255, 0.72) !important;
+  color: rgba(33, 31, 40, 0.66) !important;
+}
+
+:root[data-theme="light"] .creation-dock {
+  border-color: rgba(35, 34, 40, 0.11) !important;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(248, 246, 241, 0.86)) !important;
+  color: #211f28 !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.94),
+    0 20px 58px rgba(77, 70, 88, 0.16) !important;
+}
+
+:root[data-theme="light"] .creation-dock-tools button,
+:root[data-theme="light"] .creation-dock-actions > button:not(.creation-generate-button) {
+  border-color: rgba(35, 34, 40, 0.1) !important;
+  background: rgba(33, 31, 40, 0.055) !important;
+  color: rgba(33, 31, 40, 0.62) !important;
+}
+
+:root[data-theme="light"] .creation-dock-tools button:hover,
+:root[data-theme="light"] .creation-dock-tools button.is-active,
+:root[data-theme="light"] .creation-dock-actions > button:not(.creation-generate-button):hover {
+  background: rgba(33, 31, 40, 0.095) !important;
+  color: #211f28 !important;
+}
+
+:root[data-theme="light"] .creation-prompt-input {
+  color: #211f28 !important;
+}
+
+:root[data-theme="light"] .creation-prompt-input::placeholder {
+  color: rgba(33, 31, 40, 0.5) !important;
+}
+
+:root[data-theme="light"] .creation-model-field {
+  color: #211f28 !important;
+}
+
+.creation-node[data-node-type="imageGenerate"] .creation-model-field {
+  flex: 0 0 226px;
+  max-width: 226px;
+}
+
+.creation-node[data-node-type="imageGenerate"] .creation-model-select {
+  width: 202px !important;
+  min-width: 202px;
+  text-overflow: clip;
+}
+
+:root[data-theme="light"] .creation-model-select {
+  color: #211f28 !important;
+  background: rgba(255, 255, 255, 0.48) !important;
+}
+
+:root[data-theme="light"] .creation-model-select:hover,
+:root[data-theme="light"] .creation-model-select:focus {
+  background: rgba(33, 31, 40, 0.06) !important;
+}
+
+:root[data-theme="light"] .creation-model-select option,
+:root[data-theme="light"] .creation-model-select optgroup,
+:root[data-theme="light"] .studio-input option,
+:root[data-theme="light"] .studio-input optgroup {
+  background-color: #fffaf2 !important;
+  color: #211f28 !important;
+}
+
+:root[data-theme="light"] .node-parameter-popover,
+:root[data-theme="light"] .canvas-context-menu,
+:root[data-theme="light"] [data-connection-create-menu="true"] {
+  border-color: rgba(35, 34, 40, 0.11) !important;
+  background: rgba(255, 255, 255, 0.94) !important;
+  color: #211f28 !important;
+  box-shadow: 0 24px 70px rgba(68, 64, 78, 0.16) !important;
+}
+
+:root[data-theme="light"] .node-parameter-popover :is(.text-white, [class*="text-white/"]) {
+  color: rgba(33, 31, 40, 0.74) !important;
+}
+
 .director-node-card {
   position: relative;
   overflow: hidden;
