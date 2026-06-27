@@ -17,6 +17,7 @@
     "test:azure-gpt-image-config": "npm run test:azure-gpt-image-config --workspace server",
     "test:image-asset-compat": "npm run test:image-asset-compat --workspace server",
     "test:image-response-extractor": "npm run test:image-response-extractor --workspace server",
+    "test:grsai-image-adapter": "npx tsx server/src/scripts/testGrsaiImageAdapter.ts",
     "test:midjourney-image-adapter": "npm run test:midjourney-image-adapter --workspace server",
     "test:asset-access-token": "npm run test:asset-access-token --workspace server",
     "test:model-capability-classification": "npm run test:model-capability-classification --workspace server",
