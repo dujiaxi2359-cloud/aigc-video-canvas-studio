@@ -1488,29 +1488,49 @@ export async function generateImage(input: GenerateImageRequest) {
       }
     }
 
-    const asset = await createGeneratedAssetFromProvider(result, `image_${activeInputForGeneration.nodeId}.png`, {
-      providerId: activeModel.provider_id ?? "",
-      modelId: activeUseCatalogCapabilities ? activeCatalogItem?.id : activeModel.id,
-      nodeId: activeInputForGeneration.nodeId,
-      projectId: activeInputForGeneration.projectId,
-      prompt: activeInputForGeneration.prompt,
-      negativePrompt: activeInputForGeneration.negativePrompt
-    });
-    const payloadSummary = await enrichPayloadSummaryWithOutput(preflightSummary, result);
-    await addHistory({
-      generationType: "image",
-      projectId: activeInputForGeneration.projectId,
-      nodeId: activeInputForGeneration.nodeId,
-      modelConfigId: activeModel.id,
-      modelDisplayName: activeModel.display_name,
-      inputMode: activeInputForGeneration.inputMode,
-      prompt: activeInputForGeneration.prompt,
-      resolution: activeInputForGeneration.aspectRatio ?? activeInputForGeneration.imageSize,
-      aspectRatio: activeInputForGeneration.aspectRatio,
-      status: "success",
-      outputPath: asset?.localPath ?? result.localPath,
-      outputUrl: asset?.url ?? result.outputUrl
-    });
+    let asset: Awaited<ReturnType<typeof createGeneratedAssetFromProvider>> | undefined;
+    let payloadSummary: Record<string, unknown> = {
+      ...preflightSummary,
+      ...(result.payloadSummary && typeof result.payloadSummary === "object" ? result.payloadSummary as Record<string, unknown> : {}),
+      imageProviderResultPreserved: Boolean(result.outputUrl)
+    };
+    try {
+      asset = await createGeneratedAssetFromProvider(result, `image_${activeInputForGeneration.nodeId}.png`, {
+        providerId: activeModel.provider_id ?? "",
+        modelId: activeUseCatalogCapabilities ? activeCatalogItem?.id : activeModel.id,
+        nodeId: activeInputForGeneration.nodeId,
+        projectId: activeInputForGeneration.projectId,
+        prompt: activeInputForGeneration.prompt,
+        negativePrompt: activeInputForGeneration.negativePrompt
+      });
+      payloadSummary = await enrichPayloadSummaryWithOutput(preflightSummary, result);
+      await addHistory({
+        generationType: "image",
+        projectId: activeInputForGeneration.projectId,
+        nodeId: activeInputForGeneration.nodeId,
+        modelConfigId: activeModel.id,
+        modelDisplayName: activeModel.display_name,
+        inputMode: activeInputForGeneration.inputMode,
+        prompt: activeInputForGeneration.prompt,
+        resolution: activeInputForGeneration.aspectRatio ?? activeInputForGeneration.imageSize,
+        aspectRatio: activeInputForGeneration.aspectRatio,
+        status: "success",
+        outputPath: asset?.localPath ?? result.localPath,
+        outputUrl: asset?.url ?? result.outputUrl
+      });
+    } catch (postSuccessError) {
+      console.warn("[image-task:post-success-error-ignored]", {
+        nodeId: activeInputForGeneration.nodeId,
+        modelConfigId: activeModel.id,
+        providerResultUrl: result.outputUrl,
+        error: postSuccessError instanceof Error ? postSuccessError.message : String(postSuccessError)
+      });
+      payloadSummary = {
+        ...payloadSummary,
+        postSuccessErrorIgnored: true,
+        postSuccessErrorMessage: postSuccessError instanceof Error ? postSuccessError.message : String(postSuccessError)
+      };
+    }
     return { status: "success" as const, outputAssetId: asset?.id, outputUrl: asset?.url ?? result.outputUrl, payloadSummary };
   } catch (error) {
     const meta = providerErrorMeta(model.provider_id, error);

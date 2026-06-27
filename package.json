@@ -28,7 +28,12 @@
     "test:midjourney-image-adapter": "npm run test:midjourney-image-adapter --workspace server",
     "test:asset-access-token": "npm run test:asset-access-token --workspace server",
     "test:model-capability-classification": "npm run test:model-capability-classification --workspace server",
-    "test:veo-capabilities": "npm run test:veo-capabilities --workspace server"
+    "test:veo-capabilities": "npm run test:veo-capabilities --workspace server",
+    "test:model-capability-matrix": "npx tsx server/src/scripts/testModelCapabilityMatrix.ts",
+    "test:video-model-params": "npx tsx server/src/scripts/testVideoModelParams.ts",
+    "test:image-auto-model-router": "npx tsx client/src/scripts/testImageAutoModelRouter.ts",
+    "test:image-result-finalizer": "npx tsx server/src/scripts/testImageResultFinalizer.ts",
+    "test:midjourney-endpoint-validation": "npx tsx client/src/scripts/testMidjourneyEndpointValidation.ts"
   },
   "workspaces": [
     "client",

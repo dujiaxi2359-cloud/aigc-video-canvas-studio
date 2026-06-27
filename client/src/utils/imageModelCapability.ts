@@ -1,4 +1,7 @@
 import type { ImageInputMode, ModelConfig } from "../types/model";
+import { isCanvasReadyModel } from "./modelReadiness";
+
+export const AUTO_IMAGE_MODEL_ID = "__auto_image_model__";
 
 function referenceMode(model: ModelConfig): ImageInputMode | undefined {
   if (model.modelType === "text-to-image" && !["image_to_image", "image_edit"].includes(model.capabilities.capability || "")) return undefined;
@@ -6,6 +9,44 @@ function referenceMode(model: ModelConfig): ImageInputMode | undefined {
   if (model.modelType === "image-edit" || modes.includes("image-edit")) return "image-edit";
   if (model.modelType === "image-to-image" || modes.includes("image-to-image")) return "image-to-image";
   return undefined;
+}
+
+function textMode(model: ModelConfig): ImageInputMode | undefined {
+  const modes = model.capabilities.inputModes;
+  const capability = model.capabilities.capability;
+  if (
+    model.modelType === "text-to-image"
+    || modes.includes("text-to-image")
+    || capability === "text_to_image"
+    || capability === "image_generation"
+    || model.capabilities.modelCapability?.supportsTextToImage
+  ) return "text-to-image";
+  return undefined;
+}
+
+export function selectAutomaticImageModel(input: {
+  models: ModelConfig[];
+  hasReferenceImages: boolean;
+}) {
+  const readyModels = input.models.filter((model) => model.enabled && model.category === "image" && isCanvasReadyModel(model));
+  const match = input.hasReferenceImages
+    ? readyModels.find((model) => Boolean(referenceMode(model)))
+    : readyModels.find((model) => Boolean(textMode(model)));
+  if (!match) {
+    return {
+      ok: false as const,
+      errorCode: input.hasReferenceImages ? "NO_READY_IMAGE_REFERENCE_MODEL" : "NO_READY_TEXT_TO_IMAGE_MODEL",
+      message: input.hasReferenceImages
+        ? "暂无可用参考图模型，请配置图片编辑或图生图模型。"
+        : "暂无可用文生图模型，请先配置可用图片模型。"
+    };
+  }
+  return {
+    ok: true as const,
+    modelId: match.id,
+    inputMode: input.hasReferenceImages ? referenceMode(match)! : textMode(match)!,
+    model: match
+  };
 }
 
 export function resolveImageSubmission(input: {

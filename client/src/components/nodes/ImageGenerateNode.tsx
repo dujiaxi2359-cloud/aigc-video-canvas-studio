@@ -14,7 +14,8 @@ import { useModelConfigStore } from "../../store/modelConfigStore";
 import { absoluteUploadUrl } from "../../utils/file";
 import { buildReferenceAwareImagePrompt, compactAssetIds, resolveImageNodeInputs, resolvePromptReferencedImageInputs } from "../../utils/workflowInputs";
 import { dedupeModelConfigsForSelect, findCanonicalModelConfig } from "../../utils/modelConfigSelection";
-import { resolveImageSubmission } from "../../utils/imageModelCapability";
+import { AUTO_IMAGE_MODEL_ID, resolveImageSubmission, selectAutomaticImageModel } from "../../utils/imageModelCapability";
+import { isCanvasReadyModel } from "../../utils/modelReadiness";
 import { AgentAnalyzeErrorButton } from "../agent/AgentAnalyzeErrorButton";
 import type { AvailableImageOptions, ImageInputMode } from "../../types/model";
 import type { ImageGenerateNodeData } from "../../types/node";
@@ -178,8 +179,17 @@ function ImageGenerateNodeComponent(props: NodeProps<ImageGenerateNodeData>) {
   const nodes = useCanvasStore((state) => state.nodes);
   const allModels = useModelConfigStore((state) => state.modelConfigs);
   const rawImageModels = useMemo(() => allModels.filter((model) => model.enabled && model.category === "image"), [allModels]);
-  const imageModels = useMemo(() => dedupeModelConfigsForSelect(rawImageModels), [rawImageModels]);
-  const selectedModel = imageModels.find((model) => model.id === props.data.modelConfigId);
+  const imageModels = useMemo(() => dedupeModelConfigsForSelect(rawImageModels).filter(isCanvasReadyModel), [rawImageModels]);
+  const resolvedInputs = useMemo(() => resolveImageNodeInputs(props.id, nodes, edges), [edges, nodes, props.id]);
+  const isAutoModel = !props.data.modelConfigId || props.data.modelConfigId === AUTO_IMAGE_MODEL_ID;
+  const automaticSelection = useMemo(
+    () => selectAutomaticImageModel({ models: imageModels, hasReferenceImages: resolvedInputs.hasImageInput }),
+    [imageModels, resolvedInputs.hasImageInput]
+  );
+  const selectedModel = isAutoModel
+    ? (automaticSelection.ok ? automaticSelection.model : undefined)
+    : imageModels.find((model) => model.id === props.data.modelConfigId);
+  const selectedModelIdForOptions = selectedModel?.id;
   const [options, setOptions] = useState<AvailableImageOptions | null>(null);
   const [localError, setLocalError] = useState("");
   const [localPrompt, setLocalPrompt] = useState(props.data.prompt || "");
@@ -191,17 +201,16 @@ function ImageGenerateNodeComponent(props: NodeProps<ImageGenerateNodeData>) {
   const isComposingRef = useRef(false);
   const promptTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const parameterAnchorRef = useRef<HTMLDivElement | null>(null);
-  const resolvedInputs = useMemo(() => resolveImageNodeInputs(props.id, nodes, edges), [edges, nodes, props.id]);
 
   useEffect(() => {
-    if (selectedModel || !imageModels.length) return;
+    if (isAutoModel || selectedModel || !imageModels.length) return;
     const canonical = findCanonicalModelConfig(rawImageModels, props.data.modelConfigId);
-    if (canonical) {
+    if (canonical && isCanvasReadyModel(canonical) && imageModels.some((model) => model.id === canonical.id)) {
       update(props.id, { modelConfigId: canonical.id, errorMessage: undefined });
       return;
     }
-    update(props.id, { modelConfigId: imageModels[0].id, errorMessage: undefined });
-  }, [imageModels, props.data.modelConfigId, props.id, rawImageModels, selectedModel, update]);
+    update(props.id, { modelConfigId: AUTO_IMAGE_MODEL_ID, errorMessage: undefined });
+  }, [imageModels, isAutoModel, props.data.modelConfigId, props.id, rawImageModels, selectedModel, update]);
 
   useEffect(() => {
     function closeFloatingPanels(event: PointerEvent) {
@@ -261,12 +270,12 @@ function ImageGenerateNodeComponent(props: NodeProps<ImageGenerateNodeData>) {
 
   useEffect(() => {
     let cancelled = false;
-    if (!props.data.modelConfigId) {
+    if (!selectedModelIdForOptions) {
       setOptions(null);
       return;
     }
     modelConfigApi
-      .imageOptions(props.data.modelConfigId, {
+      .imageOptions(selectedModelIdForOptions, {
         inputMode: props.data.inputMode,
         hasImageInput: resolvedInputs.hasImageInput,
         selectedImageSize: props.data.aspectRatio ?? props.data.imageSize,
@@ -289,7 +298,7 @@ function ImageGenerateNodeComponent(props: NodeProps<ImageGenerateNodeData>) {
     return () => {
       cancelled = true;
     };
-  }, [props.data.modelConfigId, props.data.inputMode, props.data.imageSize, props.data.imageQuality, props.data.imageFormat, props.data.aspectRatio, props.id, resolvedInputs.hasImageInput, update]);
+  }, [selectedModelIdForOptions, props.data.inputMode, props.data.imageSize, props.data.imageQuality, props.data.imageFormat, props.data.aspectRatio, props.id, resolvedInputs.hasImageInput, update]);
 
   const availableModes = (options?.availableInputModes ?? selectedModel?.capabilities.inputModes.filter((mode) => ["text-to-image", "image-to-image", "image-edit"].includes(mode)) ?? ["text-to-image"]) as ImageInputMode[];
   const ratios = selectedModel?.capabilities.imageAspectRatios ?? imageAspectRatios;
@@ -302,6 +311,7 @@ function ImageGenerateNodeComponent(props: NodeProps<ImageGenerateNodeData>) {
   const imageReferenceLimit = imageReferenceLimitLabel(props.data.inputMode, selectedModel?.modelName || selectedModel?.displayName);
 
   useEffect(() => {
+    if (isAutoModel) return;
     if (!resolvedInputs.hasImageInput || props.data.inputMode !== "text-to-image" || !selectedModel) return;
     const resolution = resolveImageSubmission({
       selectedModel,
@@ -321,10 +331,17 @@ function ImageGenerateNodeComponent(props: NodeProps<ImageGenerateNodeData>) {
         errorMessage: resolution.message
       });
     }
-  }, [imageModels, props.data.inputMode, props.data.modelConfigId, props.id, resolvedInputs.hasImageInput, selectedModel, update]);
+  }, [imageModels, isAutoModel, props.data.inputMode, props.data.modelConfigId, props.id, resolvedInputs.hasImageInput, selectedModel, update]);
 
   async function generate() {
-    if (!props.data.modelConfigId || !selectedModel) {
+    const automatic = isAutoModel ? selectAutomaticImageModel({ models: imageModels, hasReferenceImages: resolvedInputs.hasImageInput }) : undefined;
+    const activeModel = automatic?.ok ? automatic.model : selectedModel;
+    if (automatic && !automatic.ok) {
+      setLocalError(automatic.message);
+      update(props.id, { status: "idle", errorCode: automatic.errorCode, errorMessage: automatic.message });
+      return;
+    }
+    if (!activeModel) {
       update(props.id, { status: "error", errorMessage: "暂无可用图片模型，请先到设置中心配置 API。" });
       return;
     }
@@ -341,9 +358,9 @@ function ImageGenerateNodeComponent(props: NodeProps<ImageGenerateNodeData>) {
         throw new Error(`提示词中的图片引用不存在：${promptReferencedInputs.missingPromptReferences.join("、")}。请使用 @素材1 或 @图片1。`);
       }
       const submission = resolveImageSubmission({
-        selectedModel,
+        selectedModel: activeModel,
         models: imageModels,
-        inputMode: props.data.inputMode,
+        inputMode: automatic?.ok ? automatic.inputMode : props.data.inputMode,
         hasReferenceImages: requestInputs.hasImageInput
       });
       if (!submission.ok) {
@@ -355,7 +372,7 @@ function ImageGenerateNodeComponent(props: NodeProps<ImageGenerateNodeData>) {
         });
         return;
       }
-      if (submission.modelId !== props.data.modelConfigId || submission.inputMode !== props.data.inputMode) {
+      if (!isAutoModel && (submission.modelId !== props.data.modelConfigId || submission.inputMode !== props.data.inputMode)) {
         const message = submission.message || "已切换到支持参考图的图片模式，请再次点击生成。";
         update(props.id, {
           status: "idle",
@@ -372,7 +389,7 @@ function ImageGenerateNodeComponent(props: NodeProps<ImageGenerateNodeData>) {
       }
       const result = await generationApi.image({
         nodeId: props.id,
-        modelConfigId: props.data.modelConfigId,
+        modelConfigId: submission.modelId,
         inputMode: submission.inputMode,
         prompt: promptForProvider,
         aspectRatio: props.data.aspectRatio ?? ratios[0],
@@ -482,7 +499,7 @@ function ImageGenerateNodeComponent(props: NodeProps<ImageGenerateNodeData>) {
       {(props.data.errorMessage || localError) && <button type="button" className="creation-error-line" onClick={() => setExpanded(true)}><span>{props.data.errorMessage || localError}</span><strong>诊断</strong></button>}
       <div className="creation-dock-footer">
         <div className="creation-dock-identity">
-          <div className="creation-model-field"><ImagePlus size={14} /><Select className="creation-model-select" value={props.data.modelConfigId ?? ""} onChange={(event) => update(props.id, { modelConfigId: event.target.value })}><option value="">选择模型</option>{imageModels.map((model) => <option key={model.id} value={model.id}>{model.displayName}</option>)}</Select></div>
+          <div className="creation-model-field"><ImagePlus size={14} /><Select className="creation-model-select" value={props.data.modelConfigId ?? AUTO_IMAGE_MODEL_ID} onChange={(event) => update(props.id, { modelConfigId: event.target.value, errorCode: undefined, errorMessage: undefined })}><option value={AUTO_IMAGE_MODEL_ID}>自动</option>{imageModels.map((model) => <option key={model.id} value={model.id}>{model.displayName}</option>)}</Select></div>
           <div ref={parameterAnchorRef} className={`creation-parameter-wrap nodrag nopan ${parametersOpen ? "is-open" : ""}`}>
           <button type="button" className="creation-parameter-pill" onClick={() => { setActiveTool(null); setParametersOpen((value) => !value); }}>{props.data.aspectRatio ?? ratios[0]} · {selectedQualityTier}</button>
           <NodeParameterPopover open={parametersOpen} anchorRef={parameterAnchorRef} onClose={() => setParametersOpen(false)} sections={[

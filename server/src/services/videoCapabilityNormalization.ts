@@ -17,6 +17,16 @@ function union<T>(base: readonly T[] | undefined, additions: readonly T[]) {
   return Array.from(new Set([...(base ?? []), ...additions]));
 }
 
+function isContiguousDurationRange(values: readonly number[] | undefined, start: number, end: number) {
+  if (!values?.length) return false;
+  if (values.length !== end - start + 1) return false;
+  return values.every((value, index) => value === start + index);
+}
+
+function isGenericOmniFastDurationList(values: readonly number[] | undefined) {
+  return isContiguousDurationRange(values, 4, 30) || isContiguousDurationRange(values, 4, 19);
+}
+
 export function isVeoLikeVideoModel(providerId?: string, modelName?: string, capabilities?: ModelCapabilities) {
   const identity = `${providerId ?? ""} ${modelName ?? ""} ${capabilities?.provider ?? ""} ${capabilities?.modelCapability?.model ?? ""}`.toLowerCase();
   return /\b(?:google|gemini|veo)\b/.test(identity) || /veo[-_ .]?\d|veo_/.test(identity);
@@ -51,13 +61,17 @@ export function normalizeVideoCapabilities(
   modelName?: string
 ): ModelCapabilities {
   if (isOmniFastVideoModel(modelName, capabilities)) {
+    const explicitDurations = capabilities.supportedDurations?.length && !isGenericOmniFastDurationList(capabilities.supportedDurations)
+      ? capabilities.supportedDurations
+      : undefined;
+    const explicitDuration = capabilities.duration?.type === "fixed" || capabilities.duration?.type === "enum" ? capabilities.duration : undefined;
     const normalized: ModelCapabilities = {
       ...capabilities,
       apiFamily: "omni_fast",
       inputModes: union(capabilities.inputModes, omniFastInputModes),
       supportedInputs: union(capabilities.supportedInputs, omniFastSupportedInputs),
-      duration: { type: "range", min: 4, max: 30, step: 1 },
-      supportedDurations: Array.from({ length: 27 }, (_, index) => index + 4),
+      duration: explicitDuration ?? (explicitDurations?.length ? { type: "enum", values: explicitDurations } : { type: "fixed", value: 10 }),
+      supportedDurations: explicitDurations ?? [10],
       aspectRatios: union(capabilities.aspectRatios, ["16:9", "9:16"]),
       supportedAspectRatios: union(capabilities.supportedAspectRatios, ["16:9", "9:16"]),
       resolutions: union(capabilities.resolutions, ["720p", "1080p", "2k", "4k"]),

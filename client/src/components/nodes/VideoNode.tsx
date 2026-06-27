@@ -16,6 +16,7 @@ import { deriveVideoNodeState, syncVideoNodeTask } from "../../utils/videoNodeSt
 import { buildReferenceAwareVideoPrompt, compactAssetIds, resolvePromptReferencedVideoInputs, resolveVideoNodeInputs } from "../../utils/workflowInputs";
 import { diagnoseVideoChannel } from "../../utils/videoChannelCapability";
 import { dedupeModelConfigsForSelect, findCanonicalModelConfig } from "../../utils/modelConfigSelection";
+import { isCanvasReadyModel } from "../../utils/modelReadiness";
 import { AgentAnalyzeErrorButton } from "../agent/AgentAnalyzeErrorButton";
 import type { AvailableVideoOptions, ModelConfig, VideoInputMode } from "../../types/model";
 import type { VideoNodeData } from "../../types/node";
@@ -379,7 +380,7 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
     () => allModels.filter((model) => model.enabled && model.category === "video" && isRuntimeUsableVideoModel(model) && modelSupportsVideoCategory(model, videoCategory)),
     [allModels, videoCategory]
   );
-  const models = useMemo(() => dedupeModelConfigsForSelect(rawModels), [rawModels]);
+  const models = useMemo(() => dedupeModelConfigsForSelect(rawModels).filter(isCanvasReadyModel), [rawModels]);
   const [dynamicOptions, setDynamicOptions] = useState<AvailableVideoOptions | null>(null);
   const [localError, setLocalError] = useState("");
   const [localPrompt, setLocalPrompt] = useState(props.data.prompt || "");
@@ -408,7 +409,7 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
   useEffect(() => {
     if (selectedModel || !models.length) return;
     const canonical = findCanonicalModelConfig(rawModels, props.data.modelConfigId);
-    if (canonical) {
+    if (canonical && isCanvasReadyModel(canonical) && models.some((model) => model.id === canonical.id)) {
       update(props.id, { modelConfigId: canonical.id, errorCode: undefined, errorMessage: undefined, debugMessage: undefined });
       return;
     }
