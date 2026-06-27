@@ -22,6 +22,7 @@ import { adminRouter } from "./routes/admin.routes.js";
 import { requireActiveWorkspace, requireAdmin, requireAssetFileAccess } from "./middleware/auth.js";
 import { applySmartProxyConfig } from "./utils/proxy.js";
 import { logOssConfig } from "./services/assets/ossUpload.service.js";
+import { getServerVersion } from "./services/version.service.js";
 
 dotenv.config({ path: path.resolve(process.cwd(), ".env") });
 dotenv.config({ path: path.resolve(process.cwd(), "../.env") });
@@ -104,6 +105,7 @@ app.use(express.json({ limit: "10mb" }));
 app.use("/uploads", requireAssetFileAccess, express.static(uploadDir));
 
 app.get("/api/health", (_req, res) => res.json({ ok: true, time: new Date().toISOString(), version: "0.1.0" }));
+app.get("/api/version", (_req, res) => res.json(getServerVersion(port)));
 app.use("/api/auth", authRouter);
 app.use("/api/invite", inviteRouter);
 app.get("/api/system/share-info", (_req, res) => {
