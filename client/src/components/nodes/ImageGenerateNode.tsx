@@ -33,6 +33,11 @@ const modeLabels: Record<ImageInputMode, string> = {
 const imageAspectRatios = ["1:1", "3:4", "4:3", "9:16", "16:9"];
 const imageQualityTiers = ["1K", "2K", "4K"];
 
+function formatAspectRatioLabel(value?: string) {
+  if (!value || value === "auto" || value === "自动") return "比例：自动";
+  return `比例：${value}`;
+}
+
 function qualityValueForTier(tier: string, qualities: string[]) {
   if (qualities.length === 0) return "auto";
   if (tier === "1K") return qualities[0];
@@ -307,6 +312,8 @@ function ImageGenerateNodeComponent(props: NodeProps<ImageGenerateNodeData>) {
   const selectedQualityTier = imageQualityTiers.includes(props.data.imageSize ?? "")
     ? props.data.imageSize!
     : tierForQuality(props.data.imageQuality, qualities);
+  const selectedAspectRatio = props.data.aspectRatio ?? ratios[0];
+  const aspectRatioLabel = formatAspectRatioLabel(selectedAspectRatio);
   const displayRatio = outputRatioFromSummary(props.data.payloadSummary, props.data.aspectRatio || "1:1");
   const imageReferenceLimit = imageReferenceLimitLabel(props.data.inputMode, selectedModel?.modelName || selectedModel?.displayName);
 
@@ -499,12 +506,12 @@ function ImageGenerateNodeComponent(props: NodeProps<ImageGenerateNodeData>) {
       {(props.data.errorMessage || localError) && <button type="button" className="creation-error-line" onClick={() => setExpanded(true)}><span>{props.data.errorMessage || localError}</span><strong>诊断</strong></button>}
       <div className="creation-dock-footer">
         <div className="creation-dock-identity">
-          <div className="creation-model-field"><ImagePlus size={14} /><Select className="creation-model-select" value={props.data.modelConfigId ?? AUTO_IMAGE_MODEL_ID} onChange={(event) => update(props.id, { modelConfigId: event.target.value, errorCode: undefined, errorMessage: undefined })}><option value={AUTO_IMAGE_MODEL_ID}>{AUTO_IMAGE_MODEL_LABEL}</option>{imageModels.map((model) => <option key={model.id} value={model.id}>{model.displayName}</option>)}</Select></div>
+          <div className={`creation-model-field ${isAutoModel ? "is-auto-model" : ""}`} title={isAutoModel ? AUTO_IMAGE_MODEL_LABEL : undefined}><ImagePlus size={14} /><span className="creation-model-auto-label" aria-hidden="true">{AUTO_IMAGE_MODEL_LABEL}</span><Select className="creation-model-select" aria-label="选择图片模型" value={props.data.modelConfigId ?? AUTO_IMAGE_MODEL_ID} onChange={(event) => update(props.id, { modelConfigId: event.target.value, errorCode: undefined, errorMessage: undefined })}><option value={AUTO_IMAGE_MODEL_ID}>{AUTO_IMAGE_MODEL_LABEL}</option>{imageModels.map((model) => <option key={model.id} value={model.id}>{model.displayName}</option>)}</Select></div>
           <div ref={parameterAnchorRef} className={`creation-parameter-wrap nodrag nopan ${parametersOpen ? "is-open" : ""}`}>
-          <button type="button" className="creation-parameter-pill" onClick={() => { setActiveTool(null); setParametersOpen((value) => !value); }}>{props.data.aspectRatio ?? ratios[0]} · {selectedQualityTier}</button>
+          <button type="button" className="creation-parameter-pill" onClick={() => { setActiveTool(null); setParametersOpen((value) => !value); }}>{aspectRatioLabel} · {selectedQualityTier}</button>
           <NodeParameterPopover open={parametersOpen} anchorRef={parameterAnchorRef} onClose={() => setParametersOpen(false)} sections={[
             { label: "生成方式", value: props.data.inputMode, options: availableModes, format: (value) => modeLabels[value as ImageInputMode], onChange: (value) => update(props.id, { inputMode: value }) },
-            { label: "比例", value: props.data.aspectRatio ?? ratios[0], options: ratios, onChange: (value) => update(props.id, { aspectRatio: value }) },
+            { label: aspectRatioLabel, value: selectedAspectRatio, options: ratios, format: (value) => formatAspectRatioLabel(String(value)).replace("比例：", ""), onChange: (value) => update(props.id, { aspectRatio: value }) },
             { label: "画质", value: selectedQualityTier, options: imageQualityTiers, onChange: (value) => update(props.id, { imageSize: String(value), imageQuality: qualityValueForTier(String(value), qualities) }) }
           ]} />
           </div>

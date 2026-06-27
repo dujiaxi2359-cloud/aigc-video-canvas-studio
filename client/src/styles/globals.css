@@ -4719,12 +4719,17 @@ select {
 }
 
 .creation-model-field {
+  position: relative;
   display: flex;
   min-width: 0;
   flex: 0 1 258px;
   align-items: center;
   gap: 4px;
   color: rgba(255, 255, 255, 0.94);
+}
+
+.creation-model-auto-label {
+  display: none;
 }
 
 .creation-model-select {
@@ -10429,19 +10434,54 @@ video:-webkit-full-screen,
 }
 
 .creation-node[data-node-type="imageGenerate"] .creation-model-field {
-  flex: 0 0 226px;
-  max-width: 226px;
+  flex: 0 0 244px;
+  max-width: 244px;
 }
 
 .creation-node[data-node-type="imageGenerate"] .creation-model-select {
-  width: 202px !important;
-  min-width: 202px;
+  width: 220px !important;
+  min-width: 220px;
   text-overflow: clip;
+}
+
+.creation-node[data-node-type="imageGenerate"] .creation-model-field.is-auto-model .creation-model-auto-label {
+  position: absolute;
+  left: 22px;
+  top: 50%;
+  z-index: 2;
+  display: inline-flex;
+  max-width: 176px;
+  transform: translateY(-50%);
+  color: inherit;
+  font-size: 14.5px;
+  font-weight: 800;
+  line-height: 1;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.creation-node[data-node-type="imageGenerate"] .creation-model-field.is-auto-model .creation-model-select {
+  color: transparent !important;
+  text-shadow: none !important;
+}
+
+.creation-node[data-node-type="imageGenerate"] .creation-model-field.is-auto-model .creation-model-select option,
+.creation-node[data-node-type="imageGenerate"] .creation-model-field.is-auto-model .creation-model-select optgroup {
+  color: #f7f8fb !important;
 }
 
 :root[data-theme="light"] .creation-model-select {
   color: #211f28 !important;
   background: rgba(255, 255, 255, 0.48) !important;
+}
+
+:root[data-theme="light"] .creation-node[data-node-type="imageGenerate"] .creation-model-field.is-auto-model .creation-model-auto-label {
+  color: #211f28 !important;
+}
+
+:root[data-theme="light"] .creation-node[data-node-type="imageGenerate"] .creation-model-field.is-auto-model .creation-model-select option,
+:root[data-theme="light"] .creation-node[data-node-type="imageGenerate"] .creation-model-field.is-auto-model .creation-model-select optgroup {
+  color: #211f28 !important;
 }
 
 :root[data-theme="light"] .creation-model-select:hover,
