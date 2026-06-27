@@ -442,6 +442,11 @@ export async function getDb() {
   await ensureColumn("generation_history", "user_id", "ALTER TABLE generation_history ADD COLUMN user_id TEXT");
   await ensureColumn("generation_tasks", "workspace_id", "ALTER TABLE generation_tasks ADD COLUMN workspace_id TEXT");
   await ensureColumn("generation_tasks", "user_id", "ALTER TABLE generation_tasks ADD COLUMN user_id TEXT");
+  await ensureColumn("generation_tasks", "provider_task_id", "ALTER TABLE generation_tasks ADD COLUMN provider_task_id TEXT");
+  await ensureColumn("generation_tasks", "canvas_node_id", "ALTER TABLE generation_tasks ADD COLUMN canvas_node_id TEXT");
+  await ensureColumn("generation_tasks", "project_id", "ALTER TABLE generation_tasks ADD COLUMN project_id TEXT");
+  await ensureColumn("generation_tasks", "provider_id", "ALTER TABLE generation_tasks ADD COLUMN provider_id TEXT");
+  await ensureColumn("generation_tasks", "model_id", "ALTER TABLE generation_tasks ADD COLUMN model_id TEXT");
   await ensureColumn("generation_tasks", "provider_status", "ALTER TABLE generation_tasks ADD COLUMN provider_status TEXT");
   await ensureColumn("generation_tasks", "provider_video_url", "ALTER TABLE generation_tasks ADD COLUMN provider_video_url TEXT");
   await ensureColumn("generation_tasks", "output_url", "ALTER TABLE generation_tasks ADD COLUMN output_url TEXT");

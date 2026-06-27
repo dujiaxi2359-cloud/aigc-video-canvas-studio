@@ -8,13 +8,39 @@ type ProjectNode = {
   [key: string]: unknown;
 };
 
-function nodeHasSuccessfulVideo(data: Record<string, unknown>) {
+export function nodeHasSuccessfulVideo(data: Record<string, unknown>) {
   return data.status === "completed"
     || data.generationStatus === "success"
     || isRealMediaUrl(data.videoUrl as string | undefined)
     || isRealMediaUrl(data.outputUrl as string | undefined)
     || isRealMediaUrl(data.previewUrl as string | undefined)
     || isRealMediaUrl(data.providerVideoUrl as string | undefined);
+}
+
+export function mergeCanvasNodeGenerationFailure(
+  data: Record<string, unknown>,
+  input: {
+    errorMessage: string;
+    errorCode?: string;
+    diagnosticOnly?: boolean;
+  }
+): Record<string, unknown> {
+  if (nodeHasSuccessfulVideo(data) || input.diagnosticOnly) {
+    return {
+      ...data,
+      diagnosticErrorMessage: input.errorMessage,
+      diagnosticErrorCode: input.errorCode ?? data.diagnosticErrorCode
+    };
+  }
+  return {
+    ...data,
+    status: "error",
+    generationStatus: "error",
+    loading: false,
+    error: input.errorMessage,
+    errorMessage: input.errorMessage,
+    errorCode: input.errorCode ?? data.errorCode
+  };
 }
 
 function parseNodes(value: string): ProjectNode[] {
@@ -82,29 +108,5 @@ export async function updateCanvasNodeWithGenerationFailure(input: {
   diagnosticOnly?: boolean;
 }) {
   if (!input.projectId || !input.nodeId) return false;
-  return updateProjectNode(input.projectId, input.nodeId, (data) => {
-    if (nodeHasSuccessfulVideo(data)) {
-      return {
-        ...data,
-        diagnosticErrorMessage: input.errorMessage,
-        diagnosticErrorCode: input.errorCode ?? data.diagnosticErrorCode
-      };
-    }
-    if (input.diagnosticOnly) {
-      return {
-        ...data,
-        diagnosticErrorMessage: input.errorMessage,
-        diagnosticErrorCode: input.errorCode ?? data.diagnosticErrorCode
-      };
-    }
-    return {
-      ...data,
-      status: "error",
-      generationStatus: "error",
-      loading: false,
-      error: input.errorMessage,
-      errorMessage: input.errorMessage,
-      errorCode: input.errorCode ?? data.errorCode
-    };
-  });
+  return updateProjectNode(input.projectId, input.nodeId, (data) => mergeCanvasNodeGenerationFailure(data, input));
 }

@@ -3,7 +3,7 @@ import path from "node:path";
 import { getDb } from "../db/database.js";
 import { createAsset } from "./asset.service.js";
 import { decryptApiKey } from "./encryption.service.js";
-import { updateCanvasNodeWithGenerationFailure, updateCanvasNodeWithGenerationSuccess } from "./generatedVideoPersistence.service.js";
+import { updateCanvasNodeWithGenerationFailure } from "./generatedVideoPersistence.service.js";
 import { addHistory } from "./history.service.js";
 import { modelCatalog } from "./modelCatalog.js";
 import { getInternalModelConfig, listModelConfigs } from "./modelConfig.service.js";
@@ -40,6 +40,7 @@ import { metadataToQualityAudit, readGeneratedFileMetadata } from "../utils/medi
 import { mapVideoDimensions, normalizeVideoAspectRatio } from "../utils/videoParams.js";
 import { extractProviderStatus, extractProviderTaskId, extractProviderVideoUrl, isRealMediaUrl, sanitizeUrlForLog } from "../utils/videoResultExtractor.js";
 import { saveGenerationTask } from "./generationTask.service.js";
+import { finalizeVideoTaskResult } from "./videoTaskFinalizer.service.js";
 
 export type GenerateTextRequest = {
   projectId?: string;
@@ -1104,27 +1105,20 @@ export async function generateVideo(input: GenerateVideoRequest) {
       ...(result.payloadSummary && typeof result.payloadSummary === "object" ? result.payloadSummary as Record<string, unknown> : {}),
       providerVideoUrl: providerVideoUrl ? sanitizeUrlForLog(providerVideoUrl) : undefined
     };
-    if (providerVideoUrl) {
-      await saveGenerationTask({
-        id: taskId,
-        status: "success",
-        providerStatus,
-        providerVideoUrl,
-        outputUrl: providerVideoUrl,
-        previewUrl: providerVideoUrl,
-        progress: 100,
-        result: basePayloadSummary
+    if (providerVideoUrl && isRealMediaUrl(providerVideoUrl)) {
+      await finalizeVideoTaskResult({
+        taskId,
+        providerTaskId,
+        canvasNodeId: activeInputForGeneration.nodeId,
+        projectId: activeInputForGeneration.projectId,
+        provider: activeModel.provider_id,
+        model: activeModel.id,
+        videoUrl: providerVideoUrl,
+        rawResponse: result.payloadSummary,
+        source: "generate",
+        fileName: `video_${activeInputForGeneration.nodeId}.mp4`,
+        payloadSummary: basePayloadSummary
       });
-      if (isRealMediaUrl(providerVideoUrl)) {
-        await updateCanvasNodeWithGenerationSuccess({
-          projectId: activeInputForGeneration.projectId,
-          nodeId: activeInputForGeneration.nodeId,
-          realUrl: providerVideoUrl,
-          providerTaskId,
-          fileName: `video_${activeInputForGeneration.nodeId}.mp4`,
-          payloadSummary: basePayloadSummary
-        });
-      }
     }
 
     let asset: Awaited<ReturnType<typeof createGeneratedAssetFromProvider>> | undefined;

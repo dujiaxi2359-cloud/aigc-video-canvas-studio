@@ -4,6 +4,12 @@ import { requireRequestContext } from "./requestContext.js";
 
 interface GenerationTaskRow {
   id: string;
+  user_id?: string;
+  provider_task_id?: string;
+  canvas_node_id?: string;
+  project_id?: string;
+  provider_id?: string;
+  model_id?: string;
   status: string;
   provider_status?: string;
   provider_video_url?: string;
@@ -27,6 +33,12 @@ export async function getGenerationTask(id: string) {
 
   return {
     id: row.id,
+    userId: row.user_id,
+    providerTaskId: row.provider_task_id,
+    canvasNodeId: row.canvas_node_id,
+    projectId: row.project_id,
+    providerId: row.provider_id,
+    modelId: row.model_id,
     status: row.status,
     providerStatus: row.provider_status,
     providerVideoUrl: row.provider_video_url,
@@ -46,6 +58,12 @@ export async function getGenerationTask(id: string) {
 
 export async function saveGenerationTask(input: {
   id: string;
+  userId?: string;
+  providerTaskId?: string;
+  canvasNodeId?: string;
+  projectId?: string;
+  providerId?: string;
+  modelId?: string;
   status: string;
   providerStatus?: string;
   providerVideoUrl?: string;
@@ -57,7 +75,7 @@ export async function saveGenerationTask(input: {
   rawPollResponse?: unknown;
   progress?: number;
   result?: unknown;
-  errorMessage?: string;
+  errorMessage?: string | null;
 }) {
   const db = await getDb();
   const { workspace, user } = requireRequestContext();
@@ -72,12 +90,19 @@ export async function saveGenerationTask(input: {
     : input.result ?? previousResult;
   await db.run(
     `INSERT INTO generation_tasks (
-       id, workspace_id, user_id, status, provider_status, provider_video_url, progress,
+       id, workspace_id, user_id, provider_task_id, canvas_node_id, project_id, provider_id, model_id,
+       status, provider_status, provider_video_url, progress,
        output_url, preview_url, storage_status, storage_key, storage_error, raw_poll_response,
        result_json, error_message, created_at, updated_at
      )
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(id) DO UPDATE SET
+       user_id = excluded.user_id,
+       provider_task_id = excluded.provider_task_id,
+       canvas_node_id = excluded.canvas_node_id,
+       project_id = excluded.project_id,
+       provider_id = excluded.provider_id,
+       model_id = excluded.model_id,
        status = excluded.status,
        provider_status = excluded.provider_status,
        provider_video_url = excluded.provider_video_url,
@@ -93,7 +118,12 @@ export async function saveGenerationTask(input: {
        updated_at = excluded.updated_at`,
     input.id,
     workspace.id,
-    user.id,
+    input.userId ?? existing?.user_id ?? user.id,
+    input.providerTaskId ?? existing?.provider_task_id,
+    input.canvasNodeId ?? existing?.canvas_node_id,
+    input.projectId ?? existing?.project_id,
+    input.providerId ?? existing?.provider_id,
+    input.modelId ?? existing?.model_id,
     input.status,
     input.providerStatus ?? existing?.provider_status,
     input.providerVideoUrl ?? existing?.provider_video_url,
@@ -105,7 +135,7 @@ export async function saveGenerationTask(input: {
     input.storageError ?? existing?.storage_error,
     input.rawPollResponse === undefined ? existing?.raw_poll_response : JSON.stringify(input.rawPollResponse),
     mergedResult === undefined ? undefined : JSON.stringify(mergedResult),
-    input.errorMessage ?? existing?.error_message,
+    input.errorMessage === undefined ? existing?.error_message : input.errorMessage,
     timestamp,
     timestamp
   );
