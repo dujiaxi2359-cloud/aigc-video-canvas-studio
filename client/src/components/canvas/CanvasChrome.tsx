@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import {
   ArrowLeft, Blocks, Bot, ChevronDown, Clock3, Copy, Download, FileAudio, Folder, FolderPlus,
   Eye, History, Image as ImageIcon, LayoutTemplate, Link2, MessageCircle, MoreHorizontal, Plus, Search,
-  ScrollText, Settings, Share2, Star, Trash2, Upload, UserRound, UsersRound, Video, X
+  MousePointer2, ScrollText, Settings, Share2, Star, Trash2, Upload, UserRound, UsersRound, Video, X
 } from "lucide-react";
 import type { Page } from "../../App";
 import { useI18nStore } from "../../i18n";
@@ -15,6 +15,8 @@ import type { Asset } from "../../types/asset";
 import type { GenerationHistory } from "../../types/history";
 import type { WorkflowNodeType } from "../../types/node";
 import { absoluteUploadUrl } from "../../utils/file";
+import { imageDisplayUrl, imageOriginalUrl, mediaDownloadUrl, videoPlayableUrl, videoPosterUrl } from "../../utils/mediaUrls";
+import { downloadAssetById } from "../../services/downloadApi";
 import { MediaLightbox } from "../media/MediaLightbox";
 import { AssetFolderTree } from "../assets/AssetFolderTree";
 import { MoonLogo } from "../common/BrandIdentity";
@@ -38,12 +40,21 @@ const templateItems = [
 ];
 
 function assetDragPayload(asset: Asset) {
-  return JSON.stringify({ assetId: asset.id, type: asset.type, filePath: asset.localPath, url: asset.url, publicUrl: asset.publicUrl, thumbnailUrl: asset.thumbnailUrl, width: asset.width, height: asset.height, duration: asset.duration });
+  return JSON.stringify({ assetId: asset.id, type: asset.type, filePath: asset.localPath, url: asset.url, publicUrl: asset.publicUrl, thumbnailUrl: asset.thumbnailUrl, posterUrl: asset.posterUrl, previewUrl: asset.previewUrl, cdnUrl: asset.cdnUrl, cosUrl: asset.cosUrl, downloadableUrl: asset.downloadableUrl, width: asset.width, height: asset.height, duration: asset.duration });
 }
 
 function historyKind(item: GenerationHistory) {
+  if (item.generationType === "image" || item.generationType === "video") return item.generationType;
   const value = `${item.inputMode || ""} ${item.outputUrl || ""}`.toLowerCase();
   return /\.(png|jpe?g|webp)(\?|$)/.test(value) || value.includes("image") ? "image" : "video";
+}
+
+  async function downloadLibraryAsset(asset: Asset) {
+  try {
+    await downloadAssetById(asset.id, asset.name || "aigc_asset");
+  } catch (error) {
+    window.dispatchEvent(new CustomEvent("studio:toast", { detail: error instanceof Error ? error.message : "下载失败。" }));
+  }
 }
 
 export function CanvasTopBar({ onNavigate, onShare }: { onNavigate: (page: Page, projectId?: string) => void; onShare: () => void }) {
@@ -241,7 +252,7 @@ function AssetDrawer({ onClose }: { onClose: () => void }) {
             <div className="mt-5 px-2 text-[11px] font-medium text-white/30">{folderId === undefined ? t("canvas.recentAssets") : t("canvas.currentFolderAssets")}</div>
             <div className="mt-2 grid grid-cols-3 gap-2">
               {visibleAssets.slice(0, 12).map((asset) => {
-                const src = absoluteUploadUrl(asset.thumbnailUrl || asset.url);
+                const src = absoluteUploadUrl(asset.type === "video" ? videoPosterUrl(asset) : imageDisplayUrl(asset));
                 return (
                   <div
                     key={asset.id}
@@ -250,11 +261,11 @@ function AssetDrawer({ onClose }: { onClose: () => void }) {
                     className="drawer-media-tile"
                     title={asset.name}
                   >
-                    {asset.type === "image" && src ? <img src={src} alt="" /> : asset.type === "video" && src ? <video src={src} muted /> : <FileAudio size={20} />}
+                    {asset.type === "image" && src ? <img src={src} alt="" loading="lazy" decoding="async" /> : asset.type === "video" ? (src ? <img src={src} alt="" loading="lazy" decoding="async" /> : <Video size={20} />) : <FileAudio size={20} />}
                     <span className="drawer-resource-actions">
                       {(asset.type === "image" || asset.type === "video") && <button type="button" title="预览" onClick={() => setPreview(asset)}><Eye size={12} /></button>}
-                      <button type="button" title={t("canvas.addToCanvas")} onClick={() => addAssetNode({ assetId: asset.id, type: asset.type, url: asset.url, filePath: asset.localPath, thumbnailUrl: asset.thumbnailUrl, width: asset.width, height: asset.height, duration: asset.duration })}><Plus size={12} /></button>
-                      <button type="button" title="下载" onClick={() => { const link = document.createElement("a"); link.href = absoluteUploadUrl(asset.downloadUrl || asset.url) || ""; link.download = asset.name; link.click(); }}><Download size={12} /></button>
+                      <button type="button" title={t("canvas.addToCanvas")} onClick={() => addAssetNode({ assetId: asset.id, type: asset.type, url: asset.url, filePath: asset.localPath, thumbnailUrl: asset.thumbnailUrl, posterUrl: asset.posterUrl, previewUrl: asset.previewUrl, cdnUrl: asset.cdnUrl, cosUrl: asset.cosUrl, downloadableUrl: asset.downloadableUrl, width: asset.width, height: asset.height, duration: asset.duration })}><Plus size={12} /></button>
+                      <button type="button" title="下载" onClick={() => void downloadLibraryAsset(asset)}><Download size={12} /></button>
                       <button type="button" title="删除" onClick={() => void deleteAsset(asset.id)}><Trash2 size={12} /></button>
                     </span>
                     <span className="drawer-resource-name">{asset.name}</span>
@@ -269,7 +280,9 @@ function AssetDrawer({ onClose }: { onClose: () => void }) {
     <MediaLightbox
       open={Boolean(preview)}
       type={preview?.type === "video" ? "video" : "image"}
-      src={absoluteUploadUrl(preview?.url)}
+      assetId={preview?.id}
+      src={absoluteUploadUrl(preview?.type === "video" ? videoPlayableUrl(preview) : imageOriginalUrl(preview || {}))}
+      previewSrc={absoluteUploadUrl(preview?.type === "video" ? videoPosterUrl(preview) : imageDisplayUrl(preview || {}))}
       title={preview?.name}
       meta={[{ label: "尺寸", value: preview?.width && preview?.height ? `${preview.width}×${preview.height}` : undefined }]}
       onClose={() => setPreview(null)}
@@ -281,21 +294,32 @@ function AssetDrawer({ onClose }: { onClose: () => void }) {
 function HistoryDrawer({ onClose }: { onClose: () => void }) {
   const { histories, fetchHistories, deleteHistory } = useHistoryStore();
   const addAssetNode = useCanvasStore((state) => state.addAssetNode);
-  const [tab, setTab] = useState<"image" | "video" | "audio" | "3d">("image");
+  const [tab, setTab] = useState<"image" | "video" | "audio" | "3d">(() => {
+    const saved = window.sessionStorage.getItem("moon:history-tab");
+    return saved === "video" || saved === "audio" || saved === "3d" ? saved : "image";
+  });
   const [preview, setPreview] = useState<GenerationHistory | null>(null);
 
   useEffect(() => {
-    fetchHistories().catch(() => undefined);
+    void fetchHistories().catch(() => undefined);
+    const interval = window.setInterval(() => void fetchHistories().catch(() => undefined), 5000);
+    return () => window.clearInterval(interval);
   }, [fetchHistories]);
 
   const visible = histories.filter((item) => tab === "image" ? historyKind(item) === "image" : tab === "video" ? historyKind(item) === "video" : false);
   const samples = visible.length ? visible : Array.from({ length: 6 }, (_, index) => ({ id: `mock-${index}`, outputUrl: "", modelDisplayName: "Moon｜Tv" } as GenerationHistory));
 
   function download(item: GenerationHistory) {
-    if (!item.outputUrl) return;
+    const filename = `${item.modelDisplayName || "generation"}-${item.id}`;
+    if (item.outputAssetId) {
+      void downloadAssetById(item.outputAssetId, filename);
+      return;
+    }
+    const url = mediaDownloadUrl(item);
+    if (!url) return;
     const link = document.createElement("a");
-    link.href = absoluteUploadUrl(item.outputUrl) || "";
-    link.download = `${item.modelDisplayName || "generation"}-${item.id}`;
+    link.href = absoluteUploadUrl(url) || "";
+    link.download = filename;
     link.click();
   }
 
@@ -303,18 +327,20 @@ function HistoryDrawer({ onClose }: { onClose: () => void }) {
     <>
     <DrawerFrame title="历史" onClose={onClose}>
       <div className="flex border-b border-white/[0.07] px-3 pt-2">
-        {([["image", "图片历史"], ["video", "视频历史"], ["audio", "音频"], ["3d", "3D 世界"]] as const).map(([value, label]) => <button key={value} onClick={() => setTab(value)} className={`drawer-tab ${tab === value ? "is-active" : ""}`}>{label}</button>)}
+        {([["image", "图片历史"], ["video", "视频历史"], ["audio", "音频"], ["3d", "3D 世界"]] as const).map(([value, label]) => <button key={value} onClick={() => { window.sessionStorage.setItem("moon:history-tab", value); setTab(value); }} className={`drawer-tab ${tab === value ? "is-active" : ""}`}>{label}</button>)}
       </div>
       <div className="grid grid-cols-3 gap-2 p-3">
         {samples.map((item, index) => {
-          const src = absoluteUploadUrl(item.outputUrl);
+          const src = absoluteUploadUrl(historyKind(item) === "video" ? videoPlayableUrl(item) : imageOriginalUrl(item));
+          const poster = absoluteUploadUrl(videoPosterUrl(item));
           const kind = item.outputUrl ? historyKind(item) : tab;
           return (
             <div key={item.id} className={`drawer-history-tile ${!src ? `is-placeholder tone-${index % 4}` : ""}`}>
-              {src && kind === "image" ? <img src={src} alt="" /> : src && kind === "video" ? <video src={src} muted /> : <span>{kind === "image" ? <ImageIcon size={19} /> : <Video size={19} />}</span>}
+              {src && kind === "image" ? <img src={absoluteUploadUrl(imageDisplayUrl(item))} alt="" loading="lazy" decoding="async" /> : src && kind === "video" ? (poster ? <img src={poster} alt="" loading="lazy" decoding="async" /> : <span><Video size={19} /></span>) : <span>{kind === "image" ? <ImageIcon size={19} /> : <Video size={19} />}</span>}
+              {!item.id.startsWith("mock-") && <span className={`drawer-history-status is-${item.status}`}>{item.status === "processing" ? "生成中" : item.status === "error" ? "失败" : "已完成"}</span>}
               {item.outputUrl && <span className="drawer-resource-actions">
                 <button type="button" title="预览" onClick={() => setPreview(item)}><Eye size={12} /></button>
-                <button type="button" title="加入画布" onClick={() => addAssetNode({ assetId: item.id, type: kind === "image" ? "image" : "video", url: item.outputUrl, aspectRatio: item.aspectRatio, duration: item.duration })}><Plus size={12} /></button>
+                <button type="button" title="加入画布" onClick={() => addAssetNode({ assetId: item.outputAssetId || item.id, type: kind === "image" ? "image" : "video", url: item.outputUrl, thumbnailUrl: item.thumbnailUrl, posterUrl: item.posterUrl, previewUrl: item.previewUrl, cdnUrl: item.cdnUrl, cosUrl: item.cosUrl, downloadableUrl: item.downloadableUrl, aspectRatio: item.aspectRatio, duration: item.duration })}><Plus size={12} /></button>
                 <button type="button" title="下载" onClick={() => download(item)}><Download size={12} /></button>
                 <button type="button" title="删除" onClick={() => void deleteHistory(item.id)}><Trash2 size={12} /></button>
               </span>}
@@ -327,7 +353,9 @@ function HistoryDrawer({ onClose }: { onClose: () => void }) {
     <MediaLightbox
       open={Boolean(preview)}
       type={preview && historyKind(preview) === "image" ? "image" : "video"}
-      src={absoluteUploadUrl(preview?.outputUrl)}
+      assetId={preview?.outputAssetId}
+      src={absoluteUploadUrl(preview && historyKind(preview) === "video" ? videoPlayableUrl(preview) : imageOriginalUrl(preview || {}))}
+      previewSrc={absoluteUploadUrl(preview && historyKind(preview) === "video" ? videoPosterUrl(preview) : imageDisplayUrl(preview || {}))}
       title={preview?.modelDisplayName || "生成结果"}
       meta={[
         { label: "比例", value: preview?.aspectRatio },
@@ -378,18 +406,21 @@ export function CanvasDrawer({ drawer, onClose }: { drawer: DrawerName; onClose:
   return <AnimatePresence>{drawer === "assets" ? <AssetDrawer key="assets" onClose={onClose} /> : drawer === "history" ? <HistoryDrawer key="history" onClose={onClose} /> : drawer === "templates" ? <TemplateDrawer key="templates" onClose={onClose} /> : null}</AnimatePresence>;
 }
 
-export function CanvasEmptyGuide({ onAdd, onTemplates }: { onAdd: (type: WorkflowNodeType, position?: { x: number; y: number }) => void; onTemplates: () => void }) {
-  const t = useI18nStore((state) => state.t);
-  const actions: Array<{ label: string; hint: string; type?: WorkflowNodeType; icon: ElementType; position?: { x: number; y: number }; onClick?: () => void; tone: string }> = [
-    { label: "故事脚本生成", hint: "剧本、分镜、Shot Prompt", type: "script", icon: ScrollText, position: { x: 180, y: 160 }, tone: "is-blue" },
-    { label: "角色三视图", hint: "正侧背设定参考", type: "imageGenerate", icon: UserRound, position: { x: 620, y: 150 }, tone: "is-rose" },
-    { label: "首帧图生视频", hint: "首帧、参考图转视频", type: "video", icon: ImageIcon, position: { x: 1060, y: 150 }, tone: "is-amber" },
-    { label: "音频生视频", hint: "音乐、旁白驱动画面", type: "audio", icon: FileAudio, position: { x: 1500, y: 160 }, tone: "is-teal" }
+export function CanvasEmptyGuide({ onAdd, onTemplates }: { onAdd: (type: WorkflowNodeType, position?: { x: number; y: number }, data?: Record<string, unknown>) => void; onTemplates: () => void }) {
+  const actions: Array<{ label: string; type: WorkflowNodeType; icon: ElementType; position: { x: number; y: number }; data?: Record<string, unknown> }> = [
+    { label: "拆解脚本", type: "textGenerate", icon: ScrollText, position: { x: 220, y: 180 }, data: { title: "脚本 / 分镜", taskType: "script", prompt: "" } },
+    { label: "建立角色", type: "imageGenerate", icon: UserRound, position: { x: 660, y: 170 } },
+    { label: "生成首帧", type: "imageGenerate", icon: ImageIcon, position: { x: 1100, y: 170 } },
+    { label: "音画起稿", type: "audio", icon: FileAudio, position: { x: 1540, y: 180 } }
   ];
   return (
     <div className="pointer-events-none fixed inset-0 z-10 flex items-center justify-center px-8">
       <motion.div layout className="canvas-empty-guide pointer-events-auto" transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}>
-        <div className="canvas-empty-kicker">{t("canvas.emptyTitlePrefix")}{t("canvas.emptyTitleSuffix")}</div>
+        <div className="canvas-empty-heading">
+          <span className="canvas-empty-gesture"><MousePointer2 size={18} /> 双击空白处</span>
+          <strong>让一个想法在 Moon 画布里长成完整作品</strong>
+        </div>
+        <p className="canvas-empty-copy">自由落下节点，或从常用创作路径开始。</p>
         <div className="canvas-empty-actions">
           {actions.map((item) => {
             const Icon = item.icon;
@@ -397,20 +428,17 @@ export function CanvasEmptyGuide({ onAdd, onTemplates }: { onAdd: (type: Workflo
               <button
                 key={item.label}
                 type="button"
-                className={`canvas-empty-task ${item.tone}`}
-                onClick={() => item.onClick ? item.onClick() : item.type && onAdd(item.type, item.position)}
+                className="canvas-empty-task"
+                onClick={() => onAdd(item.type, item.position, item.data)}
               >
                 <span className="canvas-empty-task-icon"><Icon size={18} /></span>
-                <span className="canvas-empty-task-text">
-                  <strong>{item.label}</strong>
-                  <small>{item.hint}</small>
-                </span>
+                <span className="canvas-empty-task-text"><strong>{item.label}</strong></span>
               </button>
             );
           })}
           <button type="button" onClick={onTemplates} className="canvas-empty-task is-template">
             <span className="canvas-empty-task-icon"><LayoutTemplate size={18} /></span>
-            <span className="canvas-empty-task-text"><strong>模板工作流</strong><small>从预设结构开始</small></span>
+            <span className="canvas-empty-task-text"><strong>浏览模板</strong></span>
           </button>
         </div>
       </motion.div>

@@ -5,6 +5,7 @@ import { Copy, Download, Maximize2, Minus, Plus, RotateCcw, X } from "lucide-rea
 type MediaLightboxProps = {
   open: boolean;
   type: "image" | "video";
+  assetId?: string;
   src?: string;
   previewSrc?: string;
   title?: string;

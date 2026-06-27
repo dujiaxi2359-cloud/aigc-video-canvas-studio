@@ -15,7 +15,7 @@ function triggerUrlDownload(url: string, filename: string) {
   anchor.remove();
 }
 
-export function downloadAssetById(assetId: string) {
+export function downloadAssetById(assetId: string, _fallbackFilename = "aigc_asset") {
   window.location.href = apiUrl(`/api/assets/${assetId}/download`);
 }
 

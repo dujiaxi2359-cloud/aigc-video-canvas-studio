@@ -58,6 +58,10 @@ export function imagePreviewUrl(source: MediaUrlSource) {
   );
 }
 
+export function imageDisplayUrl(source: MediaUrlSource) {
+  return imagePreviewUrl(source);
+}
+
 export function imageOriginalUrl(source: MediaUrlSource) {
   return firstDisplayMediaUrl(
     source.cdnUrl,
@@ -67,4 +71,8 @@ export function imageOriginalUrl(source: MediaUrlSource) {
     source.previewUrl,
     source.thumbnailUrl
   );
+}
+
+export function videoPosterUrl(source: MediaUrlSource) {
+  return firstDisplayMediaUrl(source.posterUrl, source.thumbnailUrl);
 }
