@@ -117,9 +117,15 @@ Rule: do not whole-branch merge `codex/fix-video-task-chain`. Cherry-pick only r
 | `4f0e4d0` | Fix NewToken video protocol profiles | Specific platform profile; defer. |
 | `f395b36` | Fix official Agnes and Zhipu model integrations | Specific official/image integrations; defer. |
 
+## Contradiction correction
+
+The previous handoff summary incorrectly highlighted only the later finalizer/download commits as the required set while the plan also suggested `8e9a565` + `c7fa9d4` as the first batch. After checking `git show --stat`:
+
+- `8e9a565` is a large but foundational video result persistence commit. It introduces `videoResultExtractor`, `generatedVideoPersistence`, `provider_video_url` schema/task persistence, admin repair hooks, COS post-success persistence hooks, and core model-service result handling. It belongs to the required candidate pool, but it is high risk and must be cherry-picked alone.
+- `c7fa9d4` is a direct video node state fix that keeps nodes pending until upstream actually settles. It is required for the closed loop, but it should not be bundled with `8e9a565` because `8e9a565` is already a large integration step.
+
 ## First suggested batch after approval
 
-1. `8e9a565`
-2. `c7fa9d4`
+1. `8e9a565` only.
 
-Then run the full validation suite before the next batch.
+Then run the full validation suite before considering `c7fa9d4` or any later commit.
