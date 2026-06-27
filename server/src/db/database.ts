@@ -442,6 +442,14 @@ export async function getDb() {
   await ensureColumn("generation_history", "user_id", "ALTER TABLE generation_history ADD COLUMN user_id TEXT");
   await ensureColumn("generation_tasks", "workspace_id", "ALTER TABLE generation_tasks ADD COLUMN workspace_id TEXT");
   await ensureColumn("generation_tasks", "user_id", "ALTER TABLE generation_tasks ADD COLUMN user_id TEXT");
+  await ensureColumn("generation_tasks", "provider_status", "ALTER TABLE generation_tasks ADD COLUMN provider_status TEXT");
+  await ensureColumn("generation_tasks", "provider_video_url", "ALTER TABLE generation_tasks ADD COLUMN provider_video_url TEXT");
+  await ensureColumn("generation_tasks", "output_url", "ALTER TABLE generation_tasks ADD COLUMN output_url TEXT");
+  await ensureColumn("generation_tasks", "preview_url", "ALTER TABLE generation_tasks ADD COLUMN preview_url TEXT");
+  await ensureColumn("generation_tasks", "storage_status", "ALTER TABLE generation_tasks ADD COLUMN storage_status TEXT");
+  await ensureColumn("generation_tasks", "storage_key", "ALTER TABLE generation_tasks ADD COLUMN storage_key TEXT");
+  await ensureColumn("generation_tasks", "storage_error", "ALTER TABLE generation_tasks ADD COLUMN storage_error TEXT");
+  await ensureColumn("generation_tasks", "raw_poll_response", "ALTER TABLE generation_tasks ADD COLUMN raw_poll_response TEXT");
   await database.exec("CREATE INDEX IF NOT EXISTS idx_projects_workspace ON projects(workspace_id); CREATE INDEX IF NOT EXISTS idx_assets_workspace ON assets(workspace_id); CREATE INDEX IF NOT EXISTS idx_asset_folders_workspace ON asset_folders(workspace_id); CREATE INDEX IF NOT EXISTS idx_history_workspace ON generation_history(workspace_id); CREATE INDEX IF NOT EXISTS idx_model_configs_workspace ON model_configs(workspace_id)");
   const timestamp = Date.now();
   await database.run(`UPDATE model_configs SET workspace_id = COALESCE(

@@ -3,6 +3,7 @@ import path from "node:path";
 import { getDb } from "../db/database.js";
 import { createAsset } from "./asset.service.js";
 import { decryptApiKey } from "./encryption.service.js";
+import { updateCanvasNodeWithGenerationFailure, updateCanvasNodeWithGenerationSuccess } from "./generatedVideoPersistence.service.js";
 import { addHistory } from "./history.service.js";
 import { modelCatalog } from "./modelCatalog.js";
 import { getInternalModelConfig, listModelConfigs } from "./modelConfig.service.js";
@@ -37,6 +38,8 @@ import { isProviderError, ProviderError } from "../utils/providerErrors.js";
 import { buildPayloadSummary, logOfficialPayload } from "../utils/generationPayload.js";
 import { metadataToQualityAudit, readGeneratedFileMetadata } from "../utils/mediaMetadata.js";
 import { mapVideoDimensions, normalizeVideoAspectRatio } from "../utils/videoParams.js";
+import { extractProviderStatus, extractProviderTaskId, extractProviderVideoUrl, isRealMediaUrl, sanitizeUrlForLog } from "../utils/videoResultExtractor.js";
+import { saveGenerationTask } from "./generationTask.service.js";
 
 export type GenerateTextRequest = {
   projectId?: string;
@@ -1092,31 +1095,95 @@ export async function generateVideo(input: GenerateVideoRequest) {
       };
     }
 
-    const asset = await createGeneratedAssetFromProvider(result, `video_${activeInputForGeneration.nodeId}.mp4`, {
-      providerId: activeModel.provider_id ?? "",
-      modelId: activeModel.id,
-      nodeId: activeInputForGeneration.nodeId,
-      projectId: activeInputForGeneration.projectId,
-      prompt: activeInputForGeneration.prompt,
-      negativePrompt: activeInputForGeneration.negativePrompt
-    });
-    const payloadSummary = await enrichPayloadSummaryWithOutput(preflightSummary, result);
-    await addHistory({
-      generationType: "video",
-      projectId: activeInputForGeneration.projectId,
-      nodeId: activeInputForGeneration.nodeId,
-      modelConfigId: activeModel.id,
-      modelDisplayName: activeModel.display_name,
-      inputMode: activeInputForGeneration.inputMode,
-      prompt: activeInputForGeneration.prompt,
-      duration: activeInputForGeneration.duration,
-      aspectRatio: activeInputForGeneration.aspectRatio,
-      resolution: activeInputForGeneration.resolution,
-      status: "success",
-      outputPath: asset?.localPath ?? result.localPath,
-      outputUrl: asset?.url ?? result.outputUrl
-    });
-    return { status: "success" as const, outputAssetId: asset?.id, outputUrl: asset?.url ?? result.outputUrl, payloadSummary };
+    const providerVideoUrl = extractProviderVideoUrl(result.payloadSummary) ?? result.outputUrl;
+    const providerStatus = extractProviderStatus(result.payloadSummary) ?? "completed";
+    const providerTaskId = extractProviderTaskId(result.payloadSummary);
+    const taskId = activeInputForGeneration.clientRequestId || activeInputForGeneration.nodeId;
+    const basePayloadSummary = {
+      ...preflightSummary,
+      ...(result.payloadSummary && typeof result.payloadSummary === "object" ? result.payloadSummary as Record<string, unknown> : {}),
+      providerVideoUrl: providerVideoUrl ? sanitizeUrlForLog(providerVideoUrl) : undefined
+    };
+    if (providerVideoUrl) {
+      await saveGenerationTask({
+        id: taskId,
+        status: "success",
+        providerStatus,
+        providerVideoUrl,
+        outputUrl: providerVideoUrl,
+        previewUrl: providerVideoUrl,
+        progress: 100,
+        result: basePayloadSummary
+      });
+      if (isRealMediaUrl(providerVideoUrl)) {
+        await updateCanvasNodeWithGenerationSuccess({
+          projectId: activeInputForGeneration.projectId,
+          nodeId: activeInputForGeneration.nodeId,
+          realUrl: providerVideoUrl,
+          providerTaskId,
+          fileName: `video_${activeInputForGeneration.nodeId}.mp4`,
+          payloadSummary: basePayloadSummary
+        });
+      }
+    }
+
+    let asset: Awaited<ReturnType<typeof createGeneratedAssetFromProvider>> | undefined;
+    let payloadSummary: Record<string, unknown> = basePayloadSummary;
+    try {
+      // Post-success storage errors must not override a successful provider video result.
+      asset = await createGeneratedAssetFromProvider(result, `video_${activeInputForGeneration.nodeId}.mp4`, {
+        providerId: activeModel.provider_id ?? "",
+        modelId: activeModel.id,
+        nodeId: activeInputForGeneration.nodeId,
+        projectId: activeInputForGeneration.projectId,
+        prompt: activeInputForGeneration.prompt,
+        negativePrompt: activeInputForGeneration.negativePrompt
+      });
+      payloadSummary = await enrichPayloadSummaryWithOutput(preflightSummary, result);
+      await addHistory({
+        generationType: "video",
+        projectId: activeInputForGeneration.projectId,
+        nodeId: activeInputForGeneration.nodeId,
+        modelConfigId: activeModel.id,
+        modelDisplayName: activeModel.display_name,
+        inputMode: activeInputForGeneration.inputMode,
+        prompt: activeInputForGeneration.prompt,
+        duration: activeInputForGeneration.duration,
+        aspectRatio: activeInputForGeneration.aspectRatio,
+        resolution: activeInputForGeneration.resolution,
+        status: "success",
+        outputPath: asset?.localPath ?? result.localPath,
+        outputUrl: asset?.url ?? providerVideoUrl ?? result.outputUrl
+      });
+    } catch (storageError) {
+      const storageErrorMessage = storageError instanceof Error ? storageError.message : String(storageError);
+      console.warn("[video post-success storage ignored]", {
+        nodeId: activeInputForGeneration.nodeId,
+        providerVideoUrl: sanitizeUrlForLog(providerVideoUrl),
+        error: storageErrorMessage
+      });
+      await saveGenerationTask({
+        id: taskId,
+        status: "success",
+        providerStatus,
+        providerVideoUrl,
+        outputUrl: providerVideoUrl,
+        previewUrl: providerVideoUrl,
+        storageStatus: "failed",
+        storageError: storageErrorMessage,
+        progress: 100,
+        result: { ...basePayloadSummary, storageStatus: "failed" }
+      });
+      await updateCanvasNodeWithGenerationFailure({
+        projectId: activeInputForGeneration.projectId,
+        nodeId: activeInputForGeneration.nodeId,
+        errorMessage: `视频已生成，COS/CDN 转存失败：${storageErrorMessage}`,
+        errorCode: "COS_TRANSFER_FAILED_BUT_VIDEO_OK",
+        diagnosticOnly: true
+      });
+    }
+    const finalOutputUrl = asset?.url ?? providerVideoUrl ?? result.outputUrl;
+    return { status: "success" as const, outputAssetId: asset?.id, outputUrl: finalOutputUrl, payloadSummary };
   } catch (error) {
     const meta = providerErrorMeta(model.provider_id, error);
     if (hasSubmittedRemoteVideoTask(error)) {

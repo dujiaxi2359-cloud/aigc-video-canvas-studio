@@ -17,6 +17,7 @@
     "test:image-asset-compat": "node ../node_modules/tsx/dist/cli.mjs src/scripts/testImageAssetCompat.ts",
     "test:image-response-extractor": "node ../node_modules/tsx/dist/cli.mjs src/scripts/testImageResponseExtractor.ts",
     "test:grsai-image-adapter": "npx tsx src/scripts/testGrsaiImageAdapter.ts",
+    "test:video-result-extractor": "npx tsx src/scripts/testVideoResultExtractor.ts",
     "test:midjourney-image-adapter": "node ../node_modules/tsx/dist/cli.mjs src/scripts/testMidjourneyImageAdapter.ts",
     "test:asset-access-token": "node ../node_modules/tsx/dist/cli.mjs src/scripts/testAssetAccessToken.ts",
     "test:model-capability-classification": "node ../node_modules/tsx/dist/cli.mjs src/scripts/testModelCapabilityClassification.ts",
