@@ -12,6 +12,7 @@ import { useCanvasStore } from "../../store/canvasStore";
 import { useModelConfigStore } from "../../store/modelConfigStore";
 import { absoluteUploadUrl } from "../../utils/file";
 import { mediaDownloadUrl, videoPlayableUrl } from "../../utils/mediaUrls";
+import { deriveVideoNodeState, syncVideoNodeTask } from "../../utils/videoNodeState";
 import { buildReferenceAwareVideoPrompt, compactAssetIds, resolvePromptReferencedVideoInputs, resolveVideoNodeInputs } from "../../utils/workflowInputs";
 import { diagnoseVideoChannel } from "../../utils/videoChannelCapability";
 import { dedupeModelConfigsForSelect, findCanonicalModelConfig } from "../../utils/modelConfigSelection";
@@ -386,6 +387,7 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
   const [expanded, setExpanded] = useState(false);
   const [activeTool, setActiveTool] = useState<NodeTool>(null);
   const [listening, setListening] = useState(false);
+  const [syncingUpstream, setSyncingUpstream] = useState(false);
   const [pendingMentionRange, setPendingMentionRange] = useState<MentionRange | null>(null);
   const isComposingRef = useRef(false);
   const generatingRef = useRef(false);
@@ -574,6 +576,7 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
   const downloadUrl = mediaDownloadUrl(props.data);
   const outputUrl = absoluteUploadUrl(playableUrl);
   const outputIsVideo = Boolean(outputUrl);
+  const nodeState = deriveVideoNodeState(props.data);
   const displayRatio = displayAspectRatio(props.data.aspectRatio, selectedAspectRatio);
   const selectedChannelHost = channelHost(selectedModel?.apiBaseUrl);
   const actualOutputInfo = outputInfo(props.data.payloadSummary, props.data.resolution);
@@ -623,7 +626,13 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
         if (latest?.status === "success" && latest.outputUrl) {
           update(props.id, {
             status: "success",
+            generationStatus: "success",
+            providerStatus: "success",
             outputUrl: latest.outputUrl,
+            videoUrl: latest.outputUrl,
+            previewUrl: latest.outputUrl,
+            downloadUrl: latest.outputUrl,
+            providerVideoUrl: latest.outputUrl,
             aspectRatio: selectedAspectRatio ?? props.data.aspectRatio,
             resolution: selectedResolution ?? props.data.resolution,
             duration: selectedDuration ?? props.data.duration,
@@ -638,6 +647,14 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
           return;
         }
         if (latest?.status === "error") {
+          if (currentData.providerTaskId) {
+            update(props.id, {
+              status: "generating",
+              generationStatus: "processing",
+              errorMessage: "任务已创建，查询暂未完成，可稍后同步。"
+            });
+            continue;
+          }
           const message = latest.errorMessage || "上游任务生成失败。";
           update(props.id, {
             status: "error",
@@ -724,7 +741,7 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
   }, [props.data.inputMode, props.data.videoMode, resolvedInputs.audioInputs.length, resolvedInputs.hasFirstFrame, resolvedInputs.hasImageInput, resolvedInputs.hasLastFrame, resolvedInputs.hasReferenceImage, resolvedInputs.hasVideoInput, selectedModel]);
 
   async function generate(promptOverride?: string) {
-    if (generatingRef.current || props.data.status === "generating") return;
+    if (generatingRef.current || !deriveVideoNodeState(props.data).canGenerate) return;
     generatingRef.current = true;
     const startedAt = Date.now();
     if (!props.data.modelConfigId || !selectedModel) {
@@ -735,6 +752,8 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
     const promptForRequest = promptOverride ?? localPrompt ?? props.data.prompt;
     update(props.id, {
       status: "generating",
+      generationStatus: "processing",
+      providerStatus: "submitting",
       generationStartedAt: startedAt,
       errorCode: undefined,
       errorMessage: undefined,
@@ -813,13 +832,26 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
         promptExtend: true,
         realismMode: "natural_human"
       });
+      const providerTaskId = [
+        result.payloadSummary?.providerTaskId,
+        result.payloadSummary?.taskId,
+        result.payloadSummary?.proxyTaskId,
+        result.payloadSummary?.id
+      ].find((value): value is string => typeof value === "string" && value.length > 0);
       update(
         props.id,
         result.status === "success"
           ? {
             status: "success",
+            generationStatus: "success",
+            providerStatus: "success",
+            providerTaskId: providerTaskId || props.data.providerTaskId,
             outputAssetId: result.outputAssetId,
             outputUrl: result.outputUrl,
+            videoUrl: result.outputUrl,
+            previewUrl: result.outputUrl,
+            downloadUrl: result.outputUrl,
+            providerVideoUrl: result.outputUrl,
             payloadSummary: result.payloadSummary,
             aspectRatio: selectedAspectRatio ?? props.data.aspectRatio,
             resolution: selectedResolution ?? props.data.resolution,
@@ -833,6 +865,9 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
           : result.status === "processing"
             ? {
               status: "generating",
+              generationStatus: "processing",
+              providerStatus: "processing",
+              providerTaskId: providerTaskId || props.data.providerTaskId,
               payloadSummary: result.payloadSummary,
               errorCode: undefined,
               errorMessage: undefined,
@@ -841,8 +876,11 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
           : resultHasSubmittedTask(result)
             ? {
               status: "generating",
-              errorCode: undefined,
-              errorMessage: "上游任务仍在排队或生成中，完成后将自动回填画布。",
+              generationStatus: "processing",
+              providerStatus: "processing_with_poll_error",
+              providerTaskId: providerTaskId || props.data.providerTaskId,
+              errorCode: result.errorCode,
+              errorMessage: "任务已创建，查询暂未完成，可稍后同步。",
               debugMessage: undefined,
               payloadSummary: result.payloadSummary
             }
@@ -874,6 +912,37 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
       }
     } finally {
       generatingRef.current = false;
+    }
+  }
+
+  async function syncUpstreamResult() {
+    if (syncingUpstream || !props.data.providerTaskId) return;
+    const localTaskId = props.data.clientRequestId || props.data.providerTaskId;
+    setSyncingUpstream(true);
+    try {
+      const { patch } = await syncVideoNodeTask({
+        localTaskId,
+        providerTaskId: props.data.providerTaskId,
+        canvasNodeId: props.id,
+        current: props.data
+      }, generationApi.syncVideoTask);
+      update(props.id, patch);
+      if (patch.status === "success") {
+        setLocalError("");
+      } else if (patch.errorMessage) {
+        setLocalError(patch.errorMessage);
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "同步上游结果失败。";
+      update(props.id, {
+        status: "generating",
+        generationStatus: "processing",
+        providerTaskId: props.data.providerTaskId,
+        errorMessage: message
+      });
+      setLocalError(message);
+    } finally {
+      setSyncingUpstream(false);
     }
   }
 
@@ -953,7 +1022,7 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
       aspectRatio={aspectRatioCss(displayRatio)}
       className="creation-media-preview"
     >
-      {props.data.status === "generating" ? <div className="creation-preview-empty"><Loader2 className="animate-spin" size={25} /><span>正在生成视频</span></div> : props.data.status === "error" ? <div className="creation-preview-empty is-error"><AlertCircle size={25} /><span>生成失败</span></div> : <div className="creation-preview-empty"><Play size={24} fill="currentColor" /><span>视频预览</span></div>}
+      {nodeState.phase === "processing" || nodeState.phase === "query_blocked" ? <div className="creation-preview-empty"><Loader2 className="animate-spin" size={25} /><span>上游处理中</span><small>可稍后同步结果</small></div> : nodeState.phase === "error" ? <div className="creation-preview-empty is-error"><AlertCircle size={25} /><span>生成失败</span></div> : <div className="creation-preview-empty"><Play size={24} fill="currentColor" /><span>视频预览</span></div>}
     </MediaPreview>
   );
 
@@ -1020,7 +1089,7 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
           />
         </div>
       </div>
-      {(props.data.errorMessage || localError) && <button type="button" className="creation-error-line" onClick={() => setExpanded(true)}><AlertCircle size={12} /><span>{props.data.errorMessage || localError}</span><strong>诊断</strong></button>}
+      {nodeState.helperText ? <div className="creation-error-line"><Loader2 className="animate-spin" size={12} /><span>{nodeState.helperText}</span></div> : (props.data.errorMessage || localError) && <button type="button" className="creation-error-line" onClick={() => setExpanded(true)}><AlertCircle size={12} /><span>{props.data.errorMessage || localError}</span><strong>诊断</strong></button>}
       <div className="creation-dock-footer">
         <div className="creation-dock-identity">
           <div className="creation-model-field" title={selectedChannelHost ? `当前线路：${selectedChannelHost}` : undefined}><Activity size={14} /><Select className="creation-model-select" value={props.data.modelConfigId ?? ""} onChange={(event) => update(props.id, { modelConfigId: event.target.value, errorCode: undefined, errorMessage: undefined, debugMessage: undefined })}><option value="">选择模型</option>{models.map((model) => <option key={model.id} value={model.id}>{modelOptionLabel(model, models)}</option>)}</Select>{selectedChannelHost && <span className="creation-model-channel">{selectedChannelHost}</span>}</div>
@@ -1035,9 +1104,10 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
           </div>
         </div>
         <div className="creation-dock-actions">
+          {nodeState.canSync && <button type="button" title="查询已有上游任务，不会重新生成或扣费" disabled={syncingUpstream} onClick={() => void syncUpstreamResult()}>{syncingUpstream ? <Loader2 className="animate-spin" size={14} /> : <Activity size={14} />}<span>{syncingUpstream ? "同步中" : "同步上游结果"}</span></button>}
           <button type="button" title="语音输入" className={listening ? "is-active" : ""} onClick={() => setListening((value) => !value)}><Mic size={14} /></button>
           <div className="creation-video-generate-cluster">
-            <button type="button" title={props.data.status === "idle" ? "生成" : generateButtonLabel(props.data.status)} aria-label={props.data.status === "idle" ? "生成" : generateButtonLabel(props.data.status)} className="creation-generate-button creation-video-generate-button" disabled={!selectedModel || availableVideoModes.length === 0 || props.data.status === "generating"} onClick={() => void generate()}><ArrowUp size={19} strokeWidth={2.3} /></button>
+            <button type="button" title={props.data.status === "idle" ? "生成" : generateButtonLabel(props.data.status)} aria-label={props.data.status === "idle" ? "生成" : generateButtonLabel(props.data.status)} className="creation-generate-button creation-video-generate-button" disabled={!selectedModel || availableVideoModes.length === 0 || !nodeState.canGenerate} onClick={() => void generate()}><ArrowUp size={19} strokeWidth={2.3} /></button>
           </div>
         </div>
       </div>
@@ -1058,7 +1128,7 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
     </div>
   );
 
-  return <CreationNodeFrame id={props.id} type={props.type} selected={props.selected} title={props.data.title || "Video"} ratio={displayRatio} status={props.data.status} preview={preview} toolbar={<MediaPreviewActions kind="video" url={downloadUrl || undefined} assetId={props.data.outputAssetId} title={props.data.title} nodeId={props.id} onSaved={(assetId) => update(props.id, { outputAssetId: assetId })} />} dock={dock} />;
+  return <CreationNodeFrame id={props.id} type={props.type} selected={props.selected} title={props.data.title || "Video"} ratio={displayRatio} status={nodeState.frameStatus} preview={preview} toolbar={<MediaPreviewActions kind="video" url={downloadUrl || undefined} assetId={props.data.outputAssetId} title={props.data.title} nodeId={props.id} onSaved={(assetId) => update(props.id, { outputAssetId: assetId })} />} dock={dock} />;
 }
 
 export const VideoNode = memo(VideoNodeComponent);
