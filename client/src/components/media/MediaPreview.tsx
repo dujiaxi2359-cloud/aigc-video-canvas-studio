@@ -1,12 +1,23 @@
 import { useMemo, useState } from "react";
 import { Download, Maximize2 } from "lucide-react";
 import { absoluteUploadUrl } from "../../utils/file";
+import {
+  imageOriginalUrl,
+  imagePreviewUrl,
+  mediaDownloadUrl,
+  videoPlayableUrl
+} from "../../utils/mediaUrls";
 import { MediaLightbox } from "./MediaLightbox";
 
 type MediaPreviewProps = {
   type: "image" | "video";
   title?: string;
   previewUrl?: string;
+  videoUrl?: string;
+  providerVideoUrl?: string;
+  downloadUrl?: string;
+  downloadableUrl?: string;
+  cdnUrl?: string;
   originalUrl?: string;
   outputUrl?: string;
   thumbnailUrl?: string;
@@ -23,28 +34,57 @@ function ratioToCss(ratio?: string) {
   return ratio.replace(":", " / ");
 }
 
-export function MediaPreview({ type, title, previewUrl, originalUrl, outputUrl, thumbnailUrl, aspectRatio, className = "", showInlineActions = true, onVideoMetadata, children, meta }: MediaPreviewProps) {
+export function MediaPreview({
+  type,
+  title,
+  previewUrl,
+  videoUrl,
+  providerVideoUrl,
+  downloadUrl,
+  downloadableUrl,
+  cdnUrl,
+  originalUrl,
+  outputUrl,
+  thumbnailUrl,
+  aspectRatio,
+  className = "",
+  showInlineActions = true,
+  onVideoMetadata,
+  children,
+  meta
+}: MediaPreviewProps) {
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const allowNodeDrag = className.includes("creation-media-preview");
   const previewSrc = useMemo(() => {
     const selected = type === "image"
-      ? thumbnailUrl || previewUrl || outputUrl || originalUrl
-      : previewUrl || outputUrl || originalUrl || thumbnailUrl;
+      ? imagePreviewUrl({ thumbnailUrl, previewUrl, cdnUrl, outputUrl, originalUrl })
+      : videoPlayableUrl({ cdnUrl, outputUrl, downloadUrl, videoUrl, providerVideoUrl, previewUrl });
     return absoluteUploadUrl(selected);
-  }, [originalUrl, outputUrl, previewUrl, thumbnailUrl, type]);
+  }, [cdnUrl, downloadUrl, originalUrl, outputUrl, previewUrl, providerVideoUrl, thumbnailUrl, type, videoUrl]);
   const highResSrc = useMemo(() => {
     const selected = type === "image"
-      ? originalUrl || outputUrl || previewUrl || thumbnailUrl
-      : outputUrl || originalUrl || previewUrl || thumbnailUrl;
+      ? imageOriginalUrl({ thumbnailUrl, previewUrl, cdnUrl, outputUrl, originalUrl })
+      : videoPlayableUrl({ cdnUrl, outputUrl, downloadUrl, videoUrl, providerVideoUrl, previewUrl });
     return absoluteUploadUrl(selected);
-  }, [originalUrl, outputUrl, previewUrl, thumbnailUrl, type]);
+  }, [cdnUrl, downloadUrl, originalUrl, outputUrl, previewUrl, providerVideoUrl, thumbnailUrl, type, videoUrl]);
+  const downloadSrc = useMemo(
+    () => type === "image"
+      ? absoluteUploadUrl(imageOriginalUrl({ thumbnailUrl, previewUrl, cdnUrl, outputUrl, originalUrl }))
+      : mediaDownloadUrl({ cdnUrl, outputUrl, downloadUrl, downloadableUrl, videoUrl, providerVideoUrl, previewUrl }),
+    [cdnUrl, downloadUrl, downloadableUrl, originalUrl, outputUrl, previewUrl, providerVideoUrl, thumbnailUrl, type, videoUrl]
+  );
 
   function download(event: React.MouseEvent<HTMLButtonElement>) {
     event.preventDefault();
     event.stopPropagation();
-    if (!highResSrc) return;
+    if (!downloadSrc) {
+      window.dispatchEvent(new CustomEvent("studio:toast", {
+        detail: "当前没有可下载的视频 URL，只有文件名，等待上游结果或 COS/CDN 转存完成。"
+      }));
+      return;
+    }
     const link = document.createElement("a");
-    link.href = highResSrc;
+    link.href = downloadSrc;
     link.download = title || (type === "image" ? "image" : "video");
     link.rel = "noopener";
     link.click();
@@ -95,7 +135,7 @@ export function MediaPreview({ type, title, previewUrl, originalUrl, outputUrl, 
             <button type="button" className="media-action-button" title={type === "image" ? "查看原图" : "全屏查看"} onClick={(event) => { event.preventDefault(); event.stopPropagation(); setLightboxOpen(true); }}>
               <Maximize2 size={14} />
             </button>
-            <button type="button" className="media-action-button" title={type === "image" ? "下载图片" : "下载视频"} onClick={download}>
+            <button type="button" className="media-action-button" title={downloadSrc ? (type === "image" ? "下载图片" : "下载视频") : "当前没有可下载的视频 URL"} disabled={!downloadSrc} onClick={download}>
               <Download size={14} />
             </button>
           </div>

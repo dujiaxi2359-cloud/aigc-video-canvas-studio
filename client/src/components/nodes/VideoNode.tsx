@@ -11,6 +11,7 @@ import { modelConfigApi } from "../../services/modelConfigApi";
 import { useCanvasStore } from "../../store/canvasStore";
 import { useModelConfigStore } from "../../store/modelConfigStore";
 import { absoluteUploadUrl } from "../../utils/file";
+import { mediaDownloadUrl, videoPlayableUrl } from "../../utils/mediaUrls";
 import { buildReferenceAwareVideoPrompt, compactAssetIds, resolvePromptReferencedVideoInputs, resolveVideoNodeInputs } from "../../utils/workflowInputs";
 import { diagnoseVideoChannel } from "../../utils/videoChannelCapability";
 import { dedupeModelConfigsForSelect, findCanonicalModelConfig } from "../../utils/modelConfigSelection";
@@ -213,10 +214,6 @@ function durationOptions(model?: ModelConfig) {
   const values: number[] = [];
   for (let value = duration.min; value <= duration.max; value += duration.step) values.push(value);
   return values;
-}
-
-function isVideoOutput(url?: string) {
-  return Boolean(url && /\.(mp4|webm|mov|m4v)(\?|$)/i.test(url));
 }
 
 function aspectRatioCss(ratio?: string) {
@@ -573,8 +570,10 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
   const selectedDuration = parameterValue(props.data.duration, availableDurations);
   const selectedVideoMode = props.data.videoMode ?? legacyInputModeToOfficialMode(props.data.inputMode);
   const selectedVideoModeLabel = videoModeLabelForModel(selectedModel, selectedVideoMode, dynamicOptions?.videoModeLabels?.[selectedVideoMode]);
-  const outputUrl = absoluteUploadUrl(props.data.outputUrl);
-  const outputIsVideo = isVideoOutput(props.data.outputUrl);
+  const playableUrl = videoPlayableUrl(props.data);
+  const downloadUrl = mediaDownloadUrl(props.data);
+  const outputUrl = absoluteUploadUrl(playableUrl);
+  const outputIsVideo = Boolean(outputUrl);
   const displayRatio = displayAspectRatio(props.data.aspectRatio, selectedAspectRatio);
   const selectedChannelHost = channelHost(selectedModel?.apiBaseUrl);
   const actualOutputInfo = outputInfo(props.data.payloadSummary, props.data.resolution);
@@ -944,7 +943,13 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
     <MediaPreview
       type="video"
       title={props.data.title}
-      outputUrl={outputIsVideo ? props.data.outputUrl : undefined}
+      outputUrl={outputIsVideo ? playableUrl : undefined}
+      videoUrl={props.data.videoUrl}
+      providerVideoUrl={props.data.providerVideoUrl}
+      previewUrl={props.data.previewUrl}
+      downloadUrl={downloadUrl}
+      downloadableUrl={props.data.downloadableUrl}
+      cdnUrl={props.data.cdnUrl}
       aspectRatio={aspectRatioCss(displayRatio)}
       className="creation-media-preview"
     >
@@ -1053,7 +1058,7 @@ function VideoNodeComponent(props: NodeProps<VideoNodeData>) {
     </div>
   );
 
-  return <CreationNodeFrame id={props.id} type={props.type} selected={props.selected} title={props.data.title || "Video"} ratio={displayRatio} status={props.data.status} preview={preview} toolbar={<MediaPreviewActions kind="video" url={outputIsVideo ? props.data.outputUrl : undefined} assetId={props.data.outputAssetId} title={props.data.title} nodeId={props.id} onSaved={(assetId) => update(props.id, { outputAssetId: assetId })} />} dock={dock} />;
+  return <CreationNodeFrame id={props.id} type={props.type} selected={props.selected} title={props.data.title || "Video"} ratio={displayRatio} status={props.data.status} preview={preview} toolbar={<MediaPreviewActions kind="video" url={downloadUrl || undefined} assetId={props.data.outputAssetId} title={props.data.title} nodeId={props.id} onSaved={(assetId) => update(props.id, { outputAssetId: assetId })} />} dock={dock} />;
 }
 
 export const VideoNode = memo(VideoNodeComponent);

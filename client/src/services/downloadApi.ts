@@ -1,22 +1,27 @@
 import { apiUrl } from "./api";
-import { triggerBlobDownload } from "./exportApi";
+import { isRealMediaUrl } from "../utils/mediaUrls";
+
+export function isValidDownloadUrl(url?: string) {
+  return isRealMediaUrl(url);
+}
+
+function triggerUrlDownload(url: string, filename: string) {
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.rel = "noopener";
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+}
 
 export function downloadAssetById(assetId: string) {
   window.location.href = apiUrl(`/api/assets/${assetId}/download`);
 }
 
 export async function downloadAsset(url: string, filename: string) {
-  const response = await fetch(apiUrl("/api/assets/download"), {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ url, filename })
-  });
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ errorMessage: "导出失败。" }));
-    throw new Error(error.errorMessage || "导出失败。");
+  if (!isValidDownloadUrl(url)) {
+    throw new Error("当前没有可下载的视频 URL，只有文件名，等待上游结果或 COS/CDN 转存完成。");
   }
-
-  const blob = await response.blob();
-  triggerBlobDownload(blob, filename);
+  triggerUrlDownload(url.trim(), filename);
 }
