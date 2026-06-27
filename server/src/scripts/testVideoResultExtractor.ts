@@ -49,6 +49,7 @@ for (const [name, payload] of cases) {
 assert.equal(extractProviderTaskId({ task_id: "task_123" }), "task_123");
 assert.equal(extractProviderTaskId({ job_id: "job_123" }), "job_123");
 assert.equal(extractProviderTaskId({ data: { id: "video_456" } }), "video_456");
+assert.equal(extractProviderTaskId({ proxyTaskId: "proxy_789" }), "proxy_789");
 assert.equal(extractProviderStatus({ result: { state: "completed" } }), "completed");
 assert.equal(isProviderSuccessStatus({ status: "succeeded" }), true);
 assert.equal(isProviderRunningStatus({ status: "in_progress" }), true);

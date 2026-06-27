@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { getGenerationTask } from "../services/generationTask.service.js";
 import { generateImage, generateText, generateVideo } from "../services/model.service.js";
+import { pollVideoTaskFromSavedContext } from "../services/videoPollResolver.service.js";
 import { isProviderError } from "../utils/providerErrors.js";
 import { assertCreditsAvailable, assertWorkspaceFeature, consumeCredits } from "../services/billing.service.js";
 
@@ -159,4 +160,12 @@ generationRouter.get("/tasks/:id", async (req, res) => {
     return;
   }
   res.json(task);
+});
+
+generationRouter.post("/tasks/:id/sync-upstream", async (req, res) => {
+  try {
+    res.json(await pollVideoTaskFromSavedContext(req.params.id, undefined, "sync"));
+  } catch (error) {
+    res.json(generationError(error));
+  }
 });

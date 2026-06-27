@@ -42,8 +42,14 @@ export type ProviderErrorCode =
   | "VIDEO_URL_FORBIDDEN"
   | "VIDEO_CONTENT_TYPE_INVALID"
   | "POLL_ROUTE_WRONG_CREATE_ENDPOINT"
+  | "PROVIDER_AUTH_FAILED"
   | "PROVIDER_TASK_QUERY_FORBIDDEN"
   | "PROVIDER_TOKEN_MODEL_SCOPE_MISMATCH"
+  | "PROVIDER_TASK_NOT_FOUND"
+  | "PROVIDER_TASK_NOT_COMPLETED"
+  | "PROVIDER_ENDPOINT_MISSING"
+  | "TASK_ID_MISSING"
+  | "PROVIDER_RAW_ERROR"
   | "UPSTREAM_HUMAN_PRIVACY_REVIEW"
   | "UPSTREAM_QUOTA_EXHAUSTED"
   | "UPSTREAM_CHANNEL_UNAVAILABLE"
@@ -75,4 +81,11 @@ export function rawErrorMessage(error: unknown) {
   } catch {
     return String(error);
   }
+}
+
+export function isProviderAuthFailure(error: unknown) {
+  const text = error instanceof ProviderError
+    ? `${error.message}\n${error.debugMessage ?? ""}\n${rawErrorMessage(error.details)}`
+    : rawErrorMessage(error);
+  return /(?:\b401\b|\b403\b|unauthorized|forbidden|invalid api key|incorrect api key|authentication failed)/i.test(text);
 }

@@ -3,7 +3,7 @@ import path from "node:path";
 import { getDb } from "../db/database.js";
 import { createAsset } from "./asset.service.js";
 import { decryptApiKey } from "./encryption.service.js";
-import { updateCanvasNodeWithGenerationFailure } from "./generatedVideoPersistence.service.js";
+import { updateCanvasNodeWithGenerationFailure, updateCanvasNodeWithGenerationProcessing } from "./generatedVideoPersistence.service.js";
 import { addHistory } from "./history.service.js";
 import { modelCatalog } from "./modelCatalog.js";
 import { getInternalModelConfig, listModelConfigs } from "./modelConfig.service.js";
@@ -34,13 +34,15 @@ import type { ImageInputMode, ModelCapabilities, ModelCatalogItem, VideoNodeCont
 import type { OfficialVideoMode } from "../types/videoModes.js";
 import { legacyInputModeToOfficialMode } from "../types/videoModes.js";
 import type { ProviderGenerateResult } from "./providers/providerTypes.js";
-import { isProviderError, ProviderError } from "../utils/providerErrors.js";
+import { isProviderAuthFailure, isProviderError, ProviderError } from "../utils/providerErrors.js";
 import { buildPayloadSummary, logOfficialPayload } from "../utils/generationPayload.js";
 import { metadataToQualityAudit, readGeneratedFileMetadata } from "../utils/mediaMetadata.js";
 import { mapVideoDimensions, normalizeVideoAspectRatio } from "../utils/videoParams.js";
 import { extractProviderStatus, extractProviderTaskId, extractProviderVideoUrl, isRealMediaUrl, sanitizeUrlForLog } from "../utils/videoResultExtractor.js";
 import { saveGenerationTask } from "./generationTask.service.js";
 import { finalizeVideoTaskResult } from "./videoTaskFinalizer.service.js";
+import { buildVideoTaskContext } from "./videoTaskContext.service.js";
+import { scheduleVideoTaskPolling } from "./videoPollResolver.service.js";
 
 export type GenerateTextRequest = {
   projectId?: string;
@@ -599,6 +601,13 @@ export function hasSubmittedRemoteVideoTask(error: unknown) {
     .some((value) => typeof value === "string" && value.length > 0);
 }
 
+function submittedRemoteVideoTaskId(error: unknown) {
+  if (!(error instanceof ProviderError) || !error.details || typeof error.details !== "object") return undefined;
+  const record = error.details as Record<string, unknown>;
+  return [record.proxyTaskId, record.taskId, record.requestId, record.id]
+    .find((value): value is string => typeof value === "string" && value.length > 0);
+}
+
 function videoProviderPriority(providerId?: string) {
   if (providerId === "google") return 0;
   if (providerId === "grok") return 1;
@@ -1059,10 +1068,54 @@ export async function generateVideo(input: GenerateVideoRequest) {
     try {
       result = await callVideoProvider({ model, providerParams, capabilities });
       if (result.status === "processing") {
+        const providerTaskId = extractProviderTaskId(result.payloadSummary) ?? extractProviderTaskId(result.rawResponse);
+        const createResponse = {
+          ...(result.rawResponse && typeof result.rawResponse === "object" && !Array.isArray(result.rawResponse)
+            ? result.rawResponse as Record<string, unknown>
+            : {}),
+          ...(result.payloadSummary && typeof result.payloadSummary === "object" && !Array.isArray(result.payloadSummary)
+            ? result.payloadSummary as Record<string, unknown>
+            : {})
+        };
+        const requestConfig = resolveVideoRequestConfig(providerParams, capabilities);
+        const providerContext = buildVideoTaskContext({
+          providerId: model.provider_id,
+          providerName: model.provider,
+          modelId: model.id,
+          upstreamModelId: model.model_name,
+          credentialId: model.id,
+          requestConfig,
+          createResponse,
+          providerTaskId
+        });
+        const localTaskId = inputForGeneration.clientRequestId || inputForGeneration.nodeId;
         const payloadSummary = {
           ...preflightSummary,
-          ...(result.payloadSummary && typeof result.payloadSummary === "object" ? result.payloadSummary as Record<string, unknown> : {})
+          ...(result.payloadSummary && typeof result.payloadSummary === "object" ? result.payloadSummary as Record<string, unknown> : {}),
+          providerTaskId,
+          providerTaskContext: providerContext
         };
+        await saveGenerationTask({
+          id: localTaskId,
+          providerTaskId,
+          canvasNodeId: inputForGeneration.nodeId,
+          projectId: inputForGeneration.projectId,
+          providerId: model.provider_id,
+          modelId: model.id,
+          providerContext,
+          status: "processing",
+          providerStatus: extractProviderStatus(result.payloadSummary) ?? "processing",
+          progress: 0,
+          result: payloadSummary,
+          errorMessage: null
+        });
+        await updateCanvasNodeWithGenerationProcessing({
+          projectId: inputForGeneration.projectId,
+          nodeId: inputForGeneration.nodeId,
+          providerTaskId,
+          progress: 0
+        });
+        if (providerTaskId && providerContext) scheduleVideoTaskPolling(localTaskId);
         await addHistory({
           generationType: "video",
           projectId: inputForGeneration.projectId,
@@ -1184,6 +1237,52 @@ export async function generateVideo(input: GenerateVideoRequest) {
       const details = isProviderError(error) && error.details && typeof error.details === "object"
         ? error.details as Record<string, unknown>
         : {};
+      const providerTaskId = submittedRemoteVideoTaskId(error);
+      const requestConfig = resolveVideoRequestConfig({
+        ...inputForGeneration,
+        apiKey,
+        apiBaseUrl: apiBaseUrlFor(model),
+        modelName: model.model_name ?? "",
+        providerId: model.provider_id ?? "",
+        qualityMode: inputForGeneration.qualityMode ?? "full_quality"
+      }, capabilities);
+      const providerContext = buildVideoTaskContext({
+        providerId: model.provider_id,
+        providerName: model.provider,
+        modelId: model.id,
+        upstreamModelId: model.model_name,
+        credentialId: model.id,
+        requestConfig,
+        createResponse: details,
+        providerTaskId
+      });
+      const localTaskId = input.clientRequestId || input.nodeId;
+      await saveGenerationTask({
+        id: localTaskId,
+        providerTaskId,
+        canvasNodeId: input.nodeId,
+        projectId: input.projectId,
+        providerId: model.provider_id,
+        modelId: model.id,
+        providerContext,
+        status: "processing",
+        providerStatus: "processing_with_poll_error",
+        progress: 0,
+        rawPollResponse: details,
+        result: {
+          ...details,
+          providerTaskContext: providerContext,
+          pendingAfterPollInterruption: true
+        },
+        errorMessage: "上游任务已创建，查询暂时中断，可重新同步。"
+      });
+      await updateCanvasNodeWithGenerationProcessing({
+        projectId: input.projectId,
+        nodeId: input.nodeId,
+        providerTaskId,
+        progress: 0
+      });
+      if (providerTaskId && providerContext) scheduleVideoTaskPolling(localTaskId);
       await addHistory({
         generationType: "video",
         projectId: input.projectId,
@@ -1202,6 +1301,8 @@ export async function generateVideo(input: GenerateVideoRequest) {
         status: "processing" as const,
         payloadSummary: {
           ...details,
+          providerTaskId,
+          providerTaskContext: providerContext,
           pendingAfterPollInterruption: true,
           message: "上游任务已创建，仍在排队或生成中。"
         }
@@ -1221,7 +1322,12 @@ export async function generateVideo(input: GenerateVideoRequest) {
       status: "error",
       errorMessage: meta.errorMessage
     });
-    return errorResponse(meta.errorMessage, meta.errorCode, meta.debugMessage, meta.payloadSummary);
+    return errorResponse(
+      meta.errorMessage,
+      isProviderAuthFailure(error) ? "PROVIDER_AUTH_FAILED" : meta.errorCode,
+      meta.debugMessage,
+      meta.payloadSummary
+    );
   }
 }
 

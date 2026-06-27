@@ -10,6 +10,7 @@ interface GenerationTaskRow {
   project_id?: string;
   provider_id?: string;
   model_id?: string;
+  provider_context_json?: string;
   status: string;
   provider_status?: string;
   provider_video_url?: string;
@@ -39,6 +40,7 @@ export async function getGenerationTask(id: string) {
     projectId: row.project_id,
     providerId: row.provider_id,
     modelId: row.model_id,
+    providerContext: row.provider_context_json ? JSON.parse(row.provider_context_json) as unknown : undefined,
     status: row.status,
     providerStatus: row.provider_status,
     providerVideoUrl: row.provider_video_url,
@@ -64,6 +66,7 @@ export async function saveGenerationTask(input: {
   projectId?: string;
   providerId?: string;
   modelId?: string;
+  providerContext?: unknown;
   status: string;
   providerStatus?: string;
   providerVideoUrl?: string;
@@ -90,12 +93,12 @@ export async function saveGenerationTask(input: {
     : input.result ?? previousResult;
   await db.run(
     `INSERT INTO generation_tasks (
-       id, workspace_id, user_id, provider_task_id, canvas_node_id, project_id, provider_id, model_id,
+       id, workspace_id, user_id, provider_task_id, canvas_node_id, project_id, provider_id, model_id, provider_context_json,
        status, provider_status, provider_video_url, progress,
        output_url, preview_url, storage_status, storage_key, storage_error, raw_poll_response,
        result_json, error_message, created_at, updated_at
      )
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(id) DO UPDATE SET
        user_id = excluded.user_id,
        provider_task_id = excluded.provider_task_id,
@@ -103,6 +106,7 @@ export async function saveGenerationTask(input: {
        project_id = excluded.project_id,
        provider_id = excluded.provider_id,
        model_id = excluded.model_id,
+       provider_context_json = excluded.provider_context_json,
        status = excluded.status,
        provider_status = excluded.provider_status,
        provider_video_url = excluded.provider_video_url,
@@ -124,6 +128,7 @@ export async function saveGenerationTask(input: {
     input.projectId ?? existing?.project_id,
     input.providerId ?? existing?.provider_id,
     input.modelId ?? existing?.model_id,
+    input.providerContext === undefined ? existing?.provider_context_json : JSON.stringify(input.providerContext),
     input.status,
     input.providerStatus ?? existing?.provider_status,
     input.providerVideoUrl ?? existing?.provider_video_url,

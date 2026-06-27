@@ -19,6 +19,8 @@
     "test:grsai-image-adapter": "npx tsx src/scripts/testGrsaiImageAdapter.ts",
     "test:video-result-extractor": "npx tsx src/scripts/testVideoResultExtractor.ts",
     "test:video-task-finalizer": "npx tsx src/scripts/testVideoTaskFinalizer.ts",
+    "test:video-task-context": "npx tsx src/scripts/testVideoTaskContext.ts",
+    "test:video-poll-resolver": "npx tsx src/scripts/testVideoPollResolver.ts",
     "test:midjourney-image-adapter": "node ../node_modules/tsx/dist/cli.mjs src/scripts/testMidjourneyImageAdapter.ts",
     "test:asset-access-token": "node ../node_modules/tsx/dist/cli.mjs src/scripts/testAssetAccessToken.ts",
     "test:model-capability-classification": "node ../node_modules/tsx/dist/cli.mjs src/scripts/testModelCapabilityClassification.ts",

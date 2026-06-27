@@ -109,6 +109,7 @@ CREATE TABLE IF NOT EXISTS generation_tasks (
   project_id TEXT,
   provider_id TEXT,
   model_id TEXT,
+  provider_context_json TEXT,
   status TEXT,
   provider_status TEXT,
   provider_video_url TEXT,

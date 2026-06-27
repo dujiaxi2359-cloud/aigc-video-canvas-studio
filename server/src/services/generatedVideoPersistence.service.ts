@@ -100,6 +100,25 @@ export async function updateCanvasNodeWithGenerationSuccess(input: {
   }));
 }
 
+export async function updateCanvasNodeWithGenerationProcessing(input: {
+  projectId?: string;
+  nodeId?: string;
+  providerTaskId?: string;
+  progress?: number;
+}) {
+  if (!input.projectId || !input.nodeId) return false;
+  return updateProjectNode(input.projectId, input.nodeId, (data) => ({
+    ...data,
+    status: "generating",
+    generationStatus: "processing",
+    loading: true,
+    providerTaskId: input.providerTaskId ?? data.providerTaskId,
+    progress: input.progress ?? data.progress,
+    error: null,
+    errorMessage: null
+  }));
+}
+
 export async function updateCanvasNodeWithGenerationFailure(input: {
   projectId?: string;
   nodeId?: string;

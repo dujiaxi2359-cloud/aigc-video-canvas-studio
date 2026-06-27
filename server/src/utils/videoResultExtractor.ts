@@ -42,6 +42,8 @@ const TASK_ID_PATHS = [
   ["videoId"],
   ["request_id"],
   ["requestId"],
+  ["proxy_task_id"],
+  ["proxyTaskId"],
   ["data", "id"],
   ["data", "task_id"],
   ["data", "taskId"],
@@ -51,7 +53,9 @@ const TASK_ID_PATHS = [
   ["result", "task_id"],
   ["result", "taskId"],
   ["result", "job_id"],
-  ["result", "jobId"]
+  ["result", "jobId"],
+  ["result", "proxy_task_id"],
+  ["result", "proxyTaskId"]
 ] as const;
 
 const STATUS_PATHS = [
