@@ -3,7 +3,7 @@ import { Mesh, Program, Renderer, Triangle } from "ogl";
 
 type FerrofluidBackgroundProps = {
   className?: string;
-  colors?: string[];
+  colors?: readonly string[];
   speed?: number;
   scale?: number;
   turbulence?: number;

@@ -14,7 +14,7 @@ import { useModelConfigStore } from "../../store/modelConfigStore";
 import { absoluteUploadUrl } from "../../utils/file";
 import { buildReferenceAwareImagePrompt, compactAssetIds, resolveImageNodeInputs, resolvePromptReferencedImageInputs } from "../../utils/workflowInputs";
 import { dedupeModelConfigsForSelect, findCanonicalModelConfig } from "../../utils/modelConfigSelection";
-import { AUTO_IMAGE_MODEL_ID, resolveImageSubmission, selectAutomaticImageModel } from "../../utils/imageModelCapability";
+import { AUTO_IMAGE_MODEL_ID, AUTO_IMAGE_MODEL_LABEL, resolveImageSubmission, selectAutomaticImageModel } from "../../utils/imageModelCapability";
 import { isCanvasReadyModel } from "../../utils/modelReadiness";
 import { AgentAnalyzeErrorButton } from "../agent/AgentAnalyzeErrorButton";
 import type { AvailableImageOptions, ImageInputMode } from "../../types/model";
@@ -499,7 +499,7 @@ function ImageGenerateNodeComponent(props: NodeProps<ImageGenerateNodeData>) {
       {(props.data.errorMessage || localError) && <button type="button" className="creation-error-line" onClick={() => setExpanded(true)}><span>{props.data.errorMessage || localError}</span><strong>诊断</strong></button>}
       <div className="creation-dock-footer">
         <div className="creation-dock-identity">
-          <div className="creation-model-field"><ImagePlus size={14} /><Select className="creation-model-select" value={props.data.modelConfigId ?? AUTO_IMAGE_MODEL_ID} onChange={(event) => update(props.id, { modelConfigId: event.target.value, errorCode: undefined, errorMessage: undefined })}><option value={AUTO_IMAGE_MODEL_ID}>自动</option>{imageModels.map((model) => <option key={model.id} value={model.id}>{model.displayName}</option>)}</Select></div>
+          <div className="creation-model-field"><ImagePlus size={14} /><Select className="creation-model-select" value={props.data.modelConfigId ?? AUTO_IMAGE_MODEL_ID} onChange={(event) => update(props.id, { modelConfigId: event.target.value, errorCode: undefined, errorMessage: undefined })}><option value={AUTO_IMAGE_MODEL_ID}>{AUTO_IMAGE_MODEL_LABEL}</option>{imageModels.map((model) => <option key={model.id} value={model.id}>{model.displayName}</option>)}</Select></div>
           <div ref={parameterAnchorRef} className={`creation-parameter-wrap nodrag nopan ${parametersOpen ? "is-open" : ""}`}>
           <button type="button" className="creation-parameter-pill" onClick={() => { setActiveTool(null); setParametersOpen((value) => !value); }}>{props.data.aspectRatio ?? ratios[0]} · {selectedQualityTier}</button>
           <NodeParameterPopover open={parametersOpen} anchorRef={parameterAnchorRef} onClose={() => setParametersOpen(false)} sections={[

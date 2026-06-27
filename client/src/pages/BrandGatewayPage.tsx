@@ -7,15 +7,36 @@ import { HomeLaunchIntro } from "../components/home/HomeLaunchIntro";
 import { HomeTopNav } from "../components/home/HomeTopNav";
 import { FerrofluidBackground } from "../components/home/FerrofluidBackground";
 import { useI18nStore } from "../i18n";
+import { useThemeStore } from "../store/themeStore";
 
 const ICP_RECORD = "粤ICP备2026074382号";
 const STUDIO_NAME = "Moon｜Tv";
+const HOME_ANIMATION_THEME = {
+  dark: {
+    colors: ["#f4f0e8", "#f0b75d", "#7c5cff", "#20b8d7"],
+    speed: 0.18,
+    scale: 1.5,
+    turbulence: 0.82,
+    glow: 2.35,
+    opacity: 1
+  },
+  light: {
+    colors: ["#ffffff", "#d9d6cf", "#b9beca", "#f7f1e4"],
+    speed: 0.12,
+    scale: 1.35,
+    turbulence: 0.56,
+    glow: 1.05,
+    opacity: 0.42
+  }
+} as const;
 
 export function BrandGatewayPage({ onNavigate }: { onNavigate: (page: Page, projectId?: string) => void }) {
   const promptSectionRef = useRef<HTMLElement>(null);
   const heroCopyRef = useRef<HTMLDivElement>(null);
   const spotlightFrameRef = useRef(0);
   const t = useI18nStore((state) => state.t);
+  const resolvedTheme = useThemeStore((state) => state.resolvedTheme);
+  const homeAnimation = HOME_ANIMATION_THEME[resolvedTheme];
   const [launchComplete, setLaunchComplete] = useState(() => {
     if (typeof window === "undefined") return false;
     const shouldSkipLaunch = window.sessionStorage.getItem("moon.home.skipLaunch") === "1";
@@ -72,7 +93,13 @@ export function BrandGatewayPage({ onNavigate }: { onNavigate: (page: Page, proj
       onMouseMove={updateSpotlight}
     >
       {!launchComplete ? <HomeLaunchIntro onFinish={() => setLaunchComplete(true)} /> : null}
-      {launchComplete ? <FerrofluidBackground className="home-page-ferrofluid" /> : null}
+      {launchComplete ? (
+        <FerrofluidBackground
+          key={resolvedTheme}
+          className={`home-page-ferrofluid is-${resolvedTheme}`}
+          {...homeAnimation}
+        />
+      ) : null}
       <HomeTopNav page="home" onNavigate={onNavigate} />
 
       <main className="home-flagship-content">

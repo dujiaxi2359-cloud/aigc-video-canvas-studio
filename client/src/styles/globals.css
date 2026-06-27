@@ -1676,6 +1676,24 @@ select {
   content: "";
 }
 
+:root[data-theme="light"] .home-page-ferrofluid {
+  background:
+    radial-gradient(circle at 50% 20%, rgba(190, 194, 202, 0.26), transparent 42%),
+    linear-gradient(135deg, #fbfaf7 0%, #f2f3f6 54%, #fbf8f0 100%);
+}
+
+:root[data-theme="light"] .home-page-ferrofluid::after {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.72), rgba(255, 255, 255, 0.38)),
+    radial-gradient(circle at 50% 42%, rgba(255, 255, 255, 0.18) 24%, rgba(233, 235, 240, 0.34) 100%);
+}
+
+:root[data-theme="dark"] .home-page-ferrofluid {
+  background:
+    radial-gradient(circle at 50% 18%, rgba(43, 35, 62, 0.28), transparent 42%),
+    #050506;
+}
+
 .ferrofluid-canvas {
   object-fit: cover;
   transform: translateZ(0);
