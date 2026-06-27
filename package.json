@@ -24,6 +24,7 @@
     "test:video-task-context": "npx tsx server/src/scripts/testVideoTaskContext.ts",
     "test:video-poll-resolver": "npx tsx server/src/scripts/testVideoPollResolver.ts",
     "test:video-node-state": "npx tsx client/src/scripts/testVideoNodeState.ts",
+    "test:image-model-capability-resolver": "npx tsx server/src/scripts/testImageModelCapabilityResolver.ts && npx tsx client/src/scripts/testImageModelCapability.ts",
     "test:midjourney-image-adapter": "npm run test:midjourney-image-adapter --workspace server",
     "test:asset-access-token": "npm run test:asset-access-token --workspace server",
     "test:model-capability-classification": "npm run test:model-capability-classification --workspace server",

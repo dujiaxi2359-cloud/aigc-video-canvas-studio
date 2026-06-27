@@ -8,7 +8,8 @@
     "build": "tsc -b && vite build",
     "typecheck": "tsc --noEmit",
     "test:media-url-utils": "node ../node_modules/tsx/dist/cli.mjs src/scripts/testMediaUrlUtils.ts",
-    "test:video-node-state": "node ../node_modules/tsx/dist/cli.mjs src/scripts/testVideoNodeState.ts"
+    "test:video-node-state": "node ../node_modules/tsx/dist/cli.mjs src/scripts/testVideoNodeState.ts",
+    "test:image-model-capability": "node ../node_modules/tsx/dist/cli.mjs src/scripts/testImageModelCapability.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

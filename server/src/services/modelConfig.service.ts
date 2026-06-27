@@ -182,7 +182,11 @@ function normalizeModelConfigInput(input: Partial<ModelConfig> & { apiKey?: stri
       providerId: nextProviderId,
       provider: nextProvider,
       category: "image" as const,
-      modelType: inferImageModelType({ providerId: nextProviderId, provider: nextProvider, modelName, displayName, capabilities }),
+      modelType: input.modelType === "text-to-image" || input.modelType === "image-to-image" || input.modelType === "image-edit"
+        ? input.modelType
+        : fallback?.model_type === "text-to-image" || fallback?.model_type === "image-to-image" || fallback?.model_type === "image-edit"
+          ? fallback.model_type
+          : inferImageModelType({ providerId: nextProviderId, provider: nextProvider, modelName, displayName, capabilities }),
       capabilities
     };
   }

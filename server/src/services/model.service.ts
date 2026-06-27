@@ -43,6 +43,7 @@ import { saveGenerationTask } from "./generationTask.service.js";
 import { finalizeVideoTaskResult } from "./videoTaskFinalizer.service.js";
 import { buildVideoTaskContext } from "./videoTaskContext.service.js";
 import { scheduleVideoTaskPolling } from "./videoPollResolver.service.js";
+import { resolveImageModelCapability } from "../utils/imageModelCapabilityResolver.js";
 
 export type GenerateTextRequest = {
   projectId?: string;
@@ -513,6 +514,19 @@ async function tryImageFallback(input: {
       const useCatalogCapabilities = shouldUseCatalogCapabilities(candidate, catalogItem);
       const configuredCapabilities = JSON.parse(candidate.capabilities_json) as ModelCapabilities;
       const candidateRequest: GenerateImageRequest = { ...input.request };
+      const resolvedCapability = resolveImageModelCapability({
+        providerId: candidate.provider_id,
+        providerName: candidate.provider,
+        modelId: candidate.model_name,
+        modelType: candidate.model_type,
+        baseUrl: apiBaseUrlFor(candidate),
+        hasApiKey: Boolean(candidate.encrypted_api_key),
+        capabilities: configuredCapabilities,
+        requestType: candidateRequest.inputMode,
+        hasReferenceImages: Boolean(candidateRequest.imageAssetIds?.length)
+      });
+      if (!resolvedCapability.ok) continue;
+      candidateRequest.inputMode = resolvedCapability.imageMode;
       const runtime = effectiveImageRuntime({
         capabilities: useCatalogCapabilities ? catalogItem!.capabilities : configuredCapabilities,
         providerId: candidate.provider_id,
@@ -1337,6 +1351,26 @@ export async function generateImage(input: GenerateImageRequest) {
   const configuredCapabilities = JSON.parse(model.capabilities_json) as ModelCapabilities;
   const useCatalogCapabilities = shouldUseCatalogCapabilities(model, catalogItem);
   const inputForGeneration: GenerateImageRequest = { ...input };
+  const resolvedCapability = resolveImageModelCapability({
+    providerId: model.provider_id,
+    providerName: model.provider,
+    modelId: model.model_name,
+    modelType: model.model_type,
+    baseUrl: apiBaseUrlFor(model),
+    hasApiKey: Boolean(apiKey),
+    capabilities: useCatalogCapabilities ? catalogItem!.capabilities : configuredCapabilities,
+    requestType: inputForGeneration.inputMode,
+    hasReferenceImages: Boolean(inputForGeneration.imageAssetIds?.length)
+  });
+  if (!resolvedCapability.ok) {
+    return errorResponse(
+      resolvedCapability.reason,
+      resolvedCapability.errorCode,
+      undefined,
+      { imageCapabilityResolution: resolvedCapability }
+    );
+  }
+  inputForGeneration.inputMode = resolvedCapability.imageMode;
   const runtime = effectiveImageRuntime({
     capabilities: useCatalogCapabilities ? catalogItem!.capabilities : configuredCapabilities,
     providerId: model.provider_id,
@@ -1424,7 +1458,11 @@ export async function generateImage(input: GenerateImageRequest) {
         seed: inputForGeneration.seed,
         isFallback: false
       },
-      payloadSummary: { stage: "preflight", officialCatalogValidation: useCatalogCapabilities }
+      payloadSummary: {
+        stage: "preflight",
+        officialCatalogValidation: useCatalogCapabilities,
+        imageCapabilityResolution: resolvedCapability
+      }
     });
     logOfficialPayload(preflightSummary);
 

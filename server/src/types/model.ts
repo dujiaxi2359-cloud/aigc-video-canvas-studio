@@ -47,6 +47,10 @@ export type ModelConstraint = {
 };
 
 export type ModelCapabilities = {
+  providerType?: "official" | "openai_compatible" | "legacy_supported";
+  adapterFamily?: "provider_native" | "openai_compatible" | "legacy_supported";
+  endpointFamily?: "openai_images_generation" | "openai_images_edits" | "image_to_image" | "legacy_image_edit" | "provider_native";
+  capability?: "text_to_image" | "image_generation" | "image_to_image" | "image_edit";
   modelCapability?: {
     model?: string;
     supportsText?: boolean;

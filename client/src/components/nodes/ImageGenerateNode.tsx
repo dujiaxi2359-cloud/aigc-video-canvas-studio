@@ -14,6 +14,7 @@ import { useModelConfigStore } from "../../store/modelConfigStore";
 import { absoluteUploadUrl } from "../../utils/file";
 import { buildReferenceAwareImagePrompt, compactAssetIds, resolveImageNodeInputs, resolvePromptReferencedImageInputs } from "../../utils/workflowInputs";
 import { dedupeModelConfigsForSelect, findCanonicalModelConfig } from "../../utils/modelConfigSelection";
+import { resolveImageSubmission } from "../../utils/imageModelCapability";
 import { AgentAnalyzeErrorButton } from "../agent/AgentAnalyzeErrorButton";
 import type { AvailableImageOptions, ImageInputMode } from "../../types/model";
 import type { ImageGenerateNodeData } from "../../types/node";
@@ -301,9 +302,26 @@ function ImageGenerateNodeComponent(props: NodeProps<ImageGenerateNodeData>) {
   const imageReferenceLimit = imageReferenceLimitLabel(props.data.inputMode, selectedModel?.modelName || selectedModel?.displayName);
 
   useEffect(() => {
-    if (!resolvedInputs.hasImageInput || props.data.inputMode !== "text-to-image" || !availableModes.includes("image-to-image")) return;
-    update(props.id, { inputMode: "image-to-image", errorMessage: undefined });
-  }, [availableModes, props.data.inputMode, props.id, resolvedInputs.hasImageInput, update]);
+    if (!resolvedInputs.hasImageInput || props.data.inputMode !== "text-to-image" || !selectedModel) return;
+    const resolution = resolveImageSubmission({
+      selectedModel,
+      models: imageModels,
+      inputMode: props.data.inputMode,
+      hasReferenceImages: true
+    });
+    if (!resolution.ok) {
+      update(props.id, { errorCode: resolution.errorCode, errorMessage: resolution.message });
+      return;
+    }
+    if (resolution.modelId !== props.data.modelConfigId || resolution.inputMode !== props.data.inputMode) {
+      update(props.id, {
+        modelConfigId: resolution.modelId,
+        inputMode: resolution.inputMode,
+        errorCode: undefined,
+        errorMessage: resolution.message
+      });
+    }
+  }, [imageModels, props.data.inputMode, props.data.modelConfigId, props.id, resolvedInputs.hasImageInput, selectedModel, update]);
 
   async function generate() {
     if (!props.data.modelConfigId || !selectedModel) {
@@ -322,13 +340,40 @@ function ImageGenerateNodeComponent(props: NodeProps<ImageGenerateNodeData>) {
       if (promptReferencedInputs.missingPromptReferences.length) {
         throw new Error(`提示词中的图片引用不存在：${promptReferencedInputs.missingPromptReferences.join("、")}。请使用 @素材1 或 @图片1。`);
       }
-      if (props.data.inputMode !== "text-to-image" && !requestInputs.hasImageInput) {
-        throw new Error(props.data.inputMode === "image-edit" ? "图片编辑需要连接一张图片素材。" : "图生图需要连接一张图片素材。");
+      const submission = resolveImageSubmission({
+        selectedModel,
+        models: imageModels,
+        inputMode: props.data.inputMode,
+        hasReferenceImages: requestInputs.hasImageInput
+      });
+      if (!submission.ok) {
+        setLocalError(submission.message);
+        update(props.id, {
+          status: "error",
+          errorCode: submission.errorCode,
+          errorMessage: submission.message
+        });
+        return;
+      }
+      if (submission.modelId !== props.data.modelConfigId || submission.inputMode !== props.data.inputMode) {
+        const message = submission.message || "已切换到支持参考图的图片模式，请再次点击生成。";
+        update(props.id, {
+          status: "idle",
+          modelConfigId: submission.modelId,
+          inputMode: submission.inputMode,
+          errorCode: undefined,
+          errorMessage: message
+        });
+        setLocalError(message);
+        return;
+      }
+      if (submission.inputMode !== "text-to-image" && !requestInputs.hasImageInput) {
+        throw new Error(submission.inputMode === "image-edit" ? "图片编辑需要连接一张图片素材。" : "图生图需要连接一张图片素材。");
       }
       const result = await generationApi.image({
         nodeId: props.id,
         modelConfigId: props.data.modelConfigId,
-        inputMode: props.data.inputMode,
+        inputMode: submission.inputMode,
         prompt: promptForProvider,
         aspectRatio: props.data.aspectRatio ?? ratios[0],
         imageSize: props.data.imageSize,
