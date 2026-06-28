@@ -9514,8 +9514,7 @@ video:-webkit-full-screen,
 }
 
 :root[data-theme="light"] .home-unicorn-copy::before {
-  background:
-    radial-gradient(ellipse at 50% 46%, rgba(250, 249, 246, 0.62) 0%, rgba(250, 249, 246, 0.3) 38%, rgba(250, 249, 246, 0) 72%);
+  display: none;
 }
 
 :root[data-theme="light"] .home-unicorn-eyebrow {
