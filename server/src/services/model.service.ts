@@ -41,7 +41,7 @@ import { mapVideoDimensions, normalizeVideoAspectRatio } from "../utils/videoPar
 import { extractProviderStatus, extractProviderTaskId, extractProviderVideoUrl, isRealMediaUrl, sanitizeUrlForLog } from "../utils/videoResultExtractor.js";
 import { saveGenerationTask } from "./generationTask.service.js";
 import { finalizeVideoTaskResult } from "./videoTaskFinalizer.service.js";
-import { buildVideoTaskContext } from "./videoTaskContext.service.js";
+import { buildVideoTaskContext, redactProviderSecrets } from "./videoTaskContext.service.js";
 import { scheduleVideoTaskPolling } from "./videoPollResolver.service.js";
 import { resolveImageModelCapability } from "../utils/imageModelCapabilityResolver.js";
 
@@ -972,6 +972,67 @@ async function enforceImageAspectRatio(result: ProviderGenerateResult, aspectRat
   };
 }
 
+function objectPayload(value: unknown) {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+}
+
+function mergedProviderResponse(result: ProviderGenerateResult) {
+  return {
+    ...objectPayload(result.rawResponse),
+    ...objectPayload(result.payloadSummary)
+  };
+}
+
+async function saveSuccessfulVideoTaskTrace(input: {
+  taskId: string;
+  providerTaskId?: string;
+  canvasNodeId?: string;
+  projectId?: string;
+  providerId?: string;
+  modelId?: string;
+  providerContext?: unknown;
+  providerStatus: string;
+  providerVideoUrl?: string;
+  outputUrl?: string;
+  previewUrl?: string;
+  storageStatus?: string;
+  storageKey?: string;
+  storageError?: string;
+  rawResponse?: unknown;
+  result: Record<string, unknown>;
+}) {
+  const taskIds = Array.from(new Set([
+    input.taskId,
+    input.providerTaskId
+  ].filter((value): value is string => Boolean(value))));
+
+  for (const id of taskIds) {
+    await saveGenerationTask({
+      id,
+      providerTaskId: input.providerTaskId,
+      canvasNodeId: input.canvasNodeId,
+      projectId: input.projectId,
+      providerId: input.providerId,
+      modelId: input.modelId,
+      providerContext: input.providerContext === undefined ? undefined : redactProviderSecrets(input.providerContext),
+      status: "success",
+      providerStatus: input.providerStatus,
+      providerVideoUrl: input.providerVideoUrl,
+      outputUrl: input.outputUrl,
+      previewUrl: input.previewUrl,
+      storageStatus: input.storageStatus,
+      storageKey: input.storageKey,
+      storageError: input.storageError,
+      rawPollResponse: input.rawResponse,
+      progress: 100,
+      result: input.result,
+      errorMessage: null
+    });
+  }
+}
+
 export async function generateText(input: GenerateTextRequest) {
   const { model, apiKey, catalogItem, forceMock } = await getGenerationContext(input.modelConfigId, "text");
   logGenerate({ type: "text", model, catalogItem, apiKey, inputMode: "text" });
@@ -1083,14 +1144,7 @@ export async function generateVideo(input: GenerateVideoRequest) {
       result = await callVideoProvider({ model, providerParams, capabilities });
       if (result.status === "processing") {
         const providerTaskId = extractProviderTaskId(result.payloadSummary) ?? extractProviderTaskId(result.rawResponse);
-        const createResponse = {
-          ...(result.rawResponse && typeof result.rawResponse === "object" && !Array.isArray(result.rawResponse)
-            ? result.rawResponse as Record<string, unknown>
-            : {}),
-          ...(result.payloadSummary && typeof result.payloadSummary === "object" && !Array.isArray(result.payloadSummary)
-            ? result.payloadSummary as Record<string, unknown>
-            : {})
-        };
+        const createResponse = mergedProviderResponse(result);
         const requestConfig = resolveVideoRequestConfig(providerParams, capabilities);
         const providerContext = buildVideoTaskContext({
           providerId: model.provider_id,
@@ -1163,13 +1217,46 @@ export async function generateVideo(input: GenerateVideoRequest) {
       };
     }
 
-    const providerVideoUrl = extractProviderVideoUrl(result.payloadSummary) ?? result.outputUrl;
-    const providerStatus = extractProviderStatus(result.payloadSummary) ?? "completed";
-    const providerTaskId = extractProviderTaskId(result.payloadSummary);
+    const successCreateResponse = mergedProviderResponse(result);
+    const providerVideoUrl = extractProviderVideoUrl(successCreateResponse) ?? result.outputUrl;
+    const providerStatus = extractProviderStatus(successCreateResponse) ?? "completed";
+    const providerTaskId = extractProviderTaskId(successCreateResponse);
     const taskId = activeInputForGeneration.clientRequestId || activeInputForGeneration.nodeId;
+    const activeProviderId = activeModel.provider_id ?? "";
+    const activeModelName = activeModel.model_name ?? "";
+    const activeCapabilities = normalizeVideoCapabilities(
+      JSON.parse(activeModel.capabilities_json) as ModelCapabilities,
+      activeProviderId,
+      activeModelName
+    );
+    const activeOfficialVideoMode = activeInputForGeneration.videoMode
+      ?? legacyInputModeToOfficialMode(activeInputForGeneration.inputMode, activeProviderId);
+    const activeProviderParams = {
+      ...activeInputForGeneration,
+      videoMode: activeOfficialVideoMode,
+      apiKey,
+      apiBaseUrl: apiBaseUrlFor(activeModel),
+      modelName: activeModelName,
+      providerId: activeProviderId,
+      qualityMode: activeInputForGeneration.qualityMode ?? "full_quality"
+    };
+    const successProviderContext = providerTaskId
+      ? buildVideoTaskContext({
+        providerId: activeModel.provider_id,
+        providerName: activeModel.provider,
+        modelId: activeModel.id,
+        upstreamModelId: activeModel.model_name,
+        credentialId: activeModel.id,
+        requestConfig: resolveVideoRequestConfig(activeProviderParams, activeCapabilities),
+        createResponse: successCreateResponse,
+        providerTaskId
+      })
+      : undefined;
     const basePayloadSummary = {
       ...preflightSummary,
       ...(result.payloadSummary && typeof result.payloadSummary === "object" ? result.payloadSummary as Record<string, unknown> : {}),
+      providerTaskId,
+      providerTaskContext: successProviderContext,
       providerVideoUrl: providerVideoUrl ? sanitizeUrlForLog(providerVideoUrl) : undefined
     };
     if (providerVideoUrl && isRealMediaUrl(providerVideoUrl)) {
@@ -1180,8 +1267,9 @@ export async function generateVideo(input: GenerateVideoRequest) {
         projectId: activeInputForGeneration.projectId,
         provider: activeModel.provider_id,
         model: activeModel.id,
+        providerContext: successProviderContext,
         videoUrl: providerVideoUrl,
-        rawResponse: result.payloadSummary,
+        rawResponse: successCreateResponse,
         source: "generate",
         fileName: `video_${activeInputForGeneration.nodeId}.mp4`,
         payloadSummary: basePayloadSummary
@@ -1216,6 +1304,32 @@ export async function generateVideo(input: GenerateVideoRequest) {
         outputPath: asset?.localPath ?? result.localPath,
         outputUrl: asset?.url ?? providerVideoUrl ?? result.outputUrl
       });
+      const finalOutputUrl = asset?.url ?? providerVideoUrl ?? result.outputUrl;
+      const finalProviderVideoUrl = providerVideoUrl ?? finalOutputUrl;
+      await saveSuccessfulVideoTaskTrace({
+        taskId,
+        providerTaskId,
+        canvasNodeId: activeInputForGeneration.nodeId,
+        projectId: activeInputForGeneration.projectId,
+        providerId: activeModel.provider_id,
+        modelId: activeModel.id,
+        providerContext: successProviderContext,
+        providerStatus,
+        providerVideoUrl: finalProviderVideoUrl,
+        outputUrl: finalOutputUrl,
+        previewUrl: finalOutputUrl,
+        storageStatus: "success",
+        storageKey: asset?.storageKey,
+        rawResponse: successCreateResponse,
+        result: {
+          ...payloadSummary,
+          providerTaskId,
+          providerTaskContext: successProviderContext,
+          providerVideoUrl: finalProviderVideoUrl ? sanitizeUrlForLog(finalProviderVideoUrl) : undefined,
+          outputUrl: finalOutputUrl ? sanitizeUrlForLog(finalOutputUrl) : undefined,
+          outputAssetId: asset?.id
+        }
+      });
     } catch (storageError) {
       const storageErrorMessage = storageError instanceof Error ? storageError.message : String(storageError);
       console.warn("[video post-success storage ignored]", {
@@ -1223,17 +1337,28 @@ export async function generateVideo(input: GenerateVideoRequest) {
         providerVideoUrl: sanitizeUrlForLog(providerVideoUrl),
         error: storageErrorMessage
       });
-      await saveGenerationTask({
-        id: taskId,
-        status: "success",
+      const fallbackOutputUrl = providerVideoUrl ?? result.outputUrl;
+      await saveSuccessfulVideoTaskTrace({
+        taskId,
+        providerTaskId,
+        canvasNodeId: activeInputForGeneration.nodeId,
+        projectId: activeInputForGeneration.projectId,
+        providerId: activeModel.provider_id,
+        modelId: activeModel.id,
+        providerContext: successProviderContext,
         providerStatus,
-        providerVideoUrl,
-        outputUrl: providerVideoUrl,
-        previewUrl: providerVideoUrl,
+        providerVideoUrl: providerVideoUrl ?? fallbackOutputUrl,
+        outputUrl: fallbackOutputUrl,
+        previewUrl: fallbackOutputUrl,
         storageStatus: "failed",
         storageError: storageErrorMessage,
-        progress: 100,
-        result: { ...basePayloadSummary, storageStatus: "failed" }
+        rawResponse: successCreateResponse,
+        result: {
+          ...basePayloadSummary,
+          providerVideoUrl: providerVideoUrl ? sanitizeUrlForLog(providerVideoUrl) : undefined,
+          outputUrl: fallbackOutputUrl ? sanitizeUrlForLog(fallbackOutputUrl) : undefined,
+          storageStatus: "failed"
+        }
       });
       await updateCanvasNodeWithGenerationFailure({
         projectId: activeInputForGeneration.projectId,

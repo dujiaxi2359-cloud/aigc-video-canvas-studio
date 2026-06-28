@@ -214,6 +214,7 @@ export async function pollVideoTaskFromSavedContext(
       userId: task.userId,
       provider: task.providerId,
       model: task.modelId,
+      providerContext: context,
       videoUrl,
       rawResponse: payload,
       source

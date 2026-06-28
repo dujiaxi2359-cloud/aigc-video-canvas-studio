@@ -1,6 +1,7 @@
 import { isRealMediaUrl, sanitizeUrlForLog } from "../utils/videoResultExtractor.js";
 import { updateCanvasNodeWithGenerationSuccess } from "./generatedVideoPersistence.service.js";
 import { saveGenerationTask } from "./generationTask.service.js";
+import { redactProviderSecrets } from "./videoTaskContext.service.js";
 
 export type VideoTaskFinalizeSource = "generate" | "poll" | "sync" | "manual_repair";
 
@@ -12,6 +13,7 @@ export type FinalizeVideoTaskResultInput = {
   userId?: string;
   provider?: string;
   model?: string;
+  providerContext?: unknown;
   videoUrl: string;
   rawResponse?: unknown;
   source: VideoTaskFinalizeSource;
@@ -58,6 +60,7 @@ export async function finalizeVideoTaskResult(
     projectId: input.projectId,
     providerId: input.provider,
     modelId: input.model,
+    providerContext: input.providerContext === undefined ? undefined : redactProviderSecrets(input.providerContext),
     status: "success",
     providerStatus: "success",
     providerVideoUrl: videoUrl,

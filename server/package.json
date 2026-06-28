@@ -19,6 +19,7 @@
     "test:grsai-image-adapter": "npx tsx src/scripts/testGrsaiImageAdapter.ts",
     "test:video-result-extractor": "npx tsx src/scripts/testVideoResultExtractor.ts",
     "test:video-task-finalizer": "npx tsx src/scripts/testVideoTaskFinalizer.ts",
+    "test:video-task-persistence": "npx tsx src/scripts/testVideoTaskPersistence.ts",
     "test:video-task-context": "npx tsx src/scripts/testVideoTaskContext.ts",
     "test:video-poll-resolver": "npx tsx src/scripts/testVideoPollResolver.ts",
     "test:image-model-capability-resolver": "npx tsx src/scripts/testImageModelCapabilityResolver.ts",
