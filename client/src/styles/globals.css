@@ -1647,11 +1647,71 @@ select {
 /* Single-canvas home surface: the intro is unmounted before this layer starts. */
 .home-page-ferrofluid,
 .ferrofluid-background,
+.plasma-wave-container,
 .home-plasma-background,
 .home-plasma-canvas,
 .ferrofluid-canvas {
   position: absolute;
   inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.home-light-plasma-frame {
+  position: absolute;
+  top: clamp(46px, 5.4svh, 68px);
+  left: 50%;
+  z-index: 0;
+  display: none;
+  width: min(80vw, 1640px);
+  height: min(78svh, 920px);
+  overflow: hidden;
+  border-radius: 0;
+  transform: translateX(-50%);
+  pointer-events: none;
+  -webkit-mask-image:
+    linear-gradient(90deg, transparent 0%, #000 10%, #000 90%, transparent 100%),
+    linear-gradient(180deg, transparent 0%, #000 8%, #000 92%, transparent 100%);
+  -webkit-mask-composite: source-in;
+  mask-image:
+    linear-gradient(90deg, transparent 0%, #000 10%, #000 90%, transparent 100%),
+    linear-gradient(180deg, transparent 0%, #000 8%, #000 92%, transparent 100%);
+  mask-composite: intersect;
+}
+
+.home-light-plasma-frame::before,
+.home-light-plasma-frame::after {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  content: "";
+  pointer-events: none;
+}
+
+.home-light-plasma-frame::before {
+  background:
+    radial-gradient(ellipse at 50% 49%, rgba(255, 255, 255, 0.76) 0%, rgba(255, 255, 255, 0.54) 33%, rgba(255, 255, 255, 0.14) 64%, transparent 82%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.62), rgba(255, 255, 255, 0.46));
+  mix-blend-mode: screen;
+}
+
+.home-light-plasma-frame::after {
+  background:
+    radial-gradient(ellipse at 50% 52%, rgba(255, 255, 255, 0.68) 0%, rgba(255, 255, 255, 0.24) 44%, transparent 72%),
+    linear-gradient(90deg, rgba(247, 246, 242, 0.74) 0%, transparent 18%, transparent 82%, rgba(247, 246, 242, 0.74) 100%);
+}
+
+.home-light-plasma-wave {
+  inset: -12% -10%;
+  width: 120%;
+  height: 124%;
+  opacity: 0.9;
+  filter: blur(0.5px) saturate(0.55) contrast(0.82) brightness(1.58);
+  mix-blend-mode: multiply;
+}
+
+.plasma-wave-container canvas {
   display: block;
   width: 100%;
   height: 100%;
@@ -1677,9 +1737,7 @@ select {
 }
 
 :root[data-theme="light"] .home-page-ferrofluid {
-  background:
-    radial-gradient(circle at 50% 20%, rgba(190, 194, 202, 0.26), transparent 42%),
-    linear-gradient(135deg, #fbfaf7 0%, #f2f3f6 54%, #fbf8f0 100%);
+  display: none;
 }
 
 :root[data-theme="light"] .home-page-ferrofluid::after {
@@ -1692,6 +1750,14 @@ select {
   background:
     radial-gradient(circle at 50% 18%, rgba(43, 35, 62, 0.28), transparent 42%),
     #050506;
+}
+
+:root[data-theme="light"] .home-light-plasma-frame {
+  display: block;
+}
+
+:root[data-theme="dark"] .home-light-plasma-frame {
+  display: none;
 }
 
 .ferrofluid-canvas {

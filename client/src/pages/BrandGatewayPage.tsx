@@ -6,6 +6,7 @@ import type { Page } from "../App";
 import { HomeLaunchIntro } from "../components/home/HomeLaunchIntro";
 import { HomeTopNav } from "../components/home/HomeTopNav";
 import { FerrofluidBackground } from "../components/home/FerrofluidBackground";
+import { PlasmaWave } from "../components/home/PlasmaWave";
 import { useI18nStore } from "../i18n";
 import { useThemeStore } from "../store/themeStore";
 
@@ -36,7 +37,6 @@ export function BrandGatewayPage({ onNavigate }: { onNavigate: (page: Page, proj
   const spotlightFrameRef = useRef(0);
   const t = useI18nStore((state) => state.t);
   const resolvedTheme = useThemeStore((state) => state.resolvedTheme);
-  const homeAnimation = HOME_ANIMATION_THEME[resolvedTheme];
   const [launchComplete, setLaunchComplete] = useState(() => {
     if (typeof window === "undefined") return false;
     const shouldSkipLaunch = window.sessionStorage.getItem("moon.home.skipLaunch") === "1";
@@ -93,17 +93,34 @@ export function BrandGatewayPage({ onNavigate }: { onNavigate: (page: Page, proj
       onMouseMove={updateSpotlight}
     >
       {!launchComplete ? <HomeLaunchIntro onFinish={() => setLaunchComplete(true)} /> : null}
-      {launchComplete ? (
+      {launchComplete && resolvedTheme === "dark" ? (
         <FerrofluidBackground
-          key={resolvedTheme}
-          className={`home-page-ferrofluid is-${resolvedTheme}`}
-          {...homeAnimation}
+          key="dark"
+          className="home-page-ferrofluid is-dark"
+          {...HOME_ANIMATION_THEME.dark}
         />
       ) : null}
       <HomeTopNav page="home" onNavigate={onNavigate} />
 
       <main className="home-flagship-content">
         <section ref={promptSectionRef} className="home-unicorn-hero" aria-label={t("home.heroAria")}>
+          {launchComplete && resolvedTheme === "light" ? (
+            <div className="home-light-plasma-frame" aria-hidden="true">
+              <PlasmaWave
+                className="home-light-plasma-wave"
+                xOffset={-140}
+                yOffset={20}
+                rotationDeg={0}
+                focalLength={0.88}
+                speed1={0.032}
+                speed2={0.024}
+                dir2={-1}
+                bend1={0.76}
+                bend2={0.42}
+                colors={["#9aa3af", "#ded7cb"]}
+              />
+            </div>
+          ) : null}
           <div className="home-unicorn-hero-stage">
             <div className="home-unicorn-title-shield" />
             <div ref={heroCopyRef} className="home-unicorn-copy">
