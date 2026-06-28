@@ -108,16 +108,6 @@ export function BrandGatewayPage({ onNavigate }: { onNavigate: (page: Page, proj
             <div className="home-light-plasma-frame" aria-hidden="true">
               <PlasmaWave
                 className="home-light-plasma-wave"
-                xOffset={-140}
-                yOffset={20}
-                rotationDeg={0}
-                focalLength={0.88}
-                speed1={0.032}
-                speed2={0.024}
-                dir2={-1}
-                bend1={0.76}
-                bend2={0.42}
-                colors={["#9aa3af", "#ded7cb"]}
               />
             </div>
           ) : null}

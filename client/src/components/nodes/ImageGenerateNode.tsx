@@ -38,6 +38,11 @@ function formatAspectRatioLabel(value?: string) {
   return `比例：${value}`;
 }
 
+function withAutoAspectRatio(ratios: string[]) {
+  const deduped = Array.from(new Set(ratios.filter(Boolean)));
+  return deduped.includes("auto") ? deduped : ["auto", ...deduped];
+}
+
 function qualityValueForTier(tier: string, qualities: string[]) {
   if (qualities.length === 0) return "auto";
   if (tier === "1K") return qualities[0];
@@ -292,7 +297,7 @@ function ImageGenerateNodeComponent(props: NodeProps<ImageGenerateNodeData>) {
         setOptions(result);
         const patch: Partial<ImageGenerateNodeData> = {};
         if (result.normalizedSelection.inputMode && result.normalizedSelection.inputMode !== props.data.inputMode) patch.inputMode = result.normalizedSelection.inputMode as ImageInputMode;
-        if (!props.data.aspectRatio) patch.aspectRatio = "1:1";
+        if (!props.data.aspectRatio) patch.aspectRatio = "auto";
         if (result.normalizedSelection.imageQuality && result.normalizedSelection.imageQuality !== props.data.imageQuality) patch.imageQuality = result.normalizedSelection.imageQuality;
         if (result.normalizedSelection.imageFormat && result.normalizedSelection.imageFormat !== props.data.imageFormat) patch.imageFormat = result.normalizedSelection.imageFormat;
         if (Object.keys(patch).length) update(props.id, patch as Record<string, unknown>);
@@ -306,15 +311,15 @@ function ImageGenerateNodeComponent(props: NodeProps<ImageGenerateNodeData>) {
   }, [selectedModelIdForOptions, props.data.inputMode, props.data.imageSize, props.data.imageQuality, props.data.imageFormat, props.data.aspectRatio, props.id, resolvedInputs.hasImageInput, update]);
 
   const availableModes = (options?.availableInputModes ?? selectedModel?.capabilities.inputModes.filter((mode) => ["text-to-image", "image-to-image", "image-edit"].includes(mode)) ?? ["text-to-image"]) as ImageInputMode[];
-  const ratios = selectedModel?.capabilities.imageAspectRatios ?? imageAspectRatios;
+  const ratios = withAutoAspectRatio(selectedModel?.capabilities.imageAspectRatios ?? imageAspectRatios);
   const qualities = options?.availableImageQualities ?? selectedModel?.capabilities.imageQualities ?? ["auto"];
   const formats = options?.availableImageFormats ?? selectedModel?.capabilities.imageFormats ?? ["png"];
   const selectedQualityTier = imageQualityTiers.includes(props.data.imageSize ?? "")
     ? props.data.imageSize!
     : tierForQuality(props.data.imageQuality, qualities);
-  const selectedAspectRatio = props.data.aspectRatio ?? ratios[0];
+  const selectedAspectRatio = props.data.aspectRatio ?? "auto";
   const aspectRatioLabel = formatAspectRatioLabel(selectedAspectRatio);
-  const displayRatio = outputRatioFromSummary(props.data.payloadSummary, props.data.aspectRatio || "1:1");
+  const displayRatio = outputRatioFromSummary(props.data.payloadSummary, props.data.aspectRatio && props.data.aspectRatio !== "auto" ? props.data.aspectRatio : "1:1");
   const imageReferenceLimit = imageReferenceLimitLabel(props.data.inputMode, selectedModel?.modelName || selectedModel?.displayName);
 
   useEffect(() => {
@@ -399,7 +404,7 @@ function ImageGenerateNodeComponent(props: NodeProps<ImageGenerateNodeData>) {
         modelConfigId: submission.modelId,
         inputMode: submission.inputMode,
         prompt: promptForProvider,
-        aspectRatio: props.data.aspectRatio ?? ratios[0],
+        aspectRatio: props.data.aspectRatio === "auto" ? undefined : props.data.aspectRatio,
         imageSize: props.data.imageSize,
         imageQuality: props.data.imageQuality ?? qualities[0],
         imageFormat: props.data.imageFormat ?? formats[0],

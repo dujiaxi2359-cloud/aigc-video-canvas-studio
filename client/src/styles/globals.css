@@ -1690,25 +1690,20 @@ select {
 }
 
 .home-light-plasma-frame::before {
-  background:
-    radial-gradient(ellipse at 50% 49%, rgba(255, 255, 255, 0.76) 0%, rgba(255, 255, 255, 0.54) 33%, rgba(255, 255, 255, 0.14) 64%, transparent 82%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.62), rgba(255, 255, 255, 0.46));
-  mix-blend-mode: screen;
+  display: none;
 }
 
 .home-light-plasma-frame::after {
-  background:
-    radial-gradient(ellipse at 50% 52%, rgba(255, 255, 255, 0.68) 0%, rgba(255, 255, 255, 0.24) 44%, transparent 72%),
-    linear-gradient(90deg, rgba(247, 246, 242, 0.74) 0%, transparent 18%, transparent 82%, rgba(247, 246, 242, 0.74) 100%);
+  display: none;
 }
 
 .home-light-plasma-wave {
   inset: -12% -10%;
   width: 120%;
   height: 124%;
-  opacity: 0.9;
-  filter: blur(0.5px) saturate(0.55) contrast(0.82) brightness(1.58);
-  mix-blend-mode: multiply;
+  opacity: 1;
+  filter: none;
+  mix-blend-mode: normal;
 }
 
 .plasma-wave-container canvas {
@@ -10569,6 +10564,31 @@ video:-webkit-full-screen,
 
 :root[data-theme="light"] .node-parameter-popover :is(.text-white, [class*="text-white/"]) {
   color: rgba(33, 31, 40, 0.74) !important;
+}
+
+:root[data-theme="light"] .node-parameter-popover .node-parameter-title,
+:root[data-theme="light"] .node-parameter-popover .node-parameter-label {
+  color: #211f28 !important;
+}
+
+:root[data-theme="light"] .node-parameter-popover .node-parameter-title span,
+:root[data-theme="light"] .node-parameter-popover .node-parameter-hint,
+:root[data-theme="light"] .node-parameter-popover .node-parameter-section > span {
+  color: rgba(33, 31, 40, 0.64) !important;
+}
+
+:root[data-theme="light"] .node-parameter-popover .node-parameter-segment {
+  border-color: rgba(35, 34, 40, 0.1) !important;
+  background: rgba(35, 34, 40, 0.045) !important;
+}
+
+:root[data-theme="light"] .node-parameter-popover .node-parameter-segment button {
+  color: rgba(33, 31, 40, 0.68) !important;
+}
+
+:root[data-theme="light"] .node-parameter-popover .node-parameter-segment button.is-active {
+  background: rgba(35, 34, 40, 0.1) !important;
+  color: #211f28 !important;
 }
 
 .director-node-card {

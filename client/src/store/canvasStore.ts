@@ -17,7 +17,7 @@ const defaults: Record<WorkflowNodeType, unknown> = {
   textGenerate: { title: "创意工作台", prompt: "", taskType: "prompt-polish", status: "idle" },
   text: { title: "文本节点", content: "" },
   image: { title: "图片素材" },
-  imageGenerate: { title: "图片生成", prompt: "", inputMode: "text-to-image", aspectRatio: "1:1", generateCount: 1, status: "idle" },
+  imageGenerate: { title: "图片生成", prompt: "", inputMode: "text-to-image", aspectRatio: "auto", generateCount: 1, status: "idle" },
   video: { title: "视频节点", prompt: "", inputMode: "text-to-video", videoMode: "text_to_video", generateCount: 1, status: "idle" },
   audio: { title: "音频节点" },
   script: {

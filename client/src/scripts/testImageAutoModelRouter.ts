@@ -30,7 +30,7 @@ const edit = model({ id: "edit", modelType: "image-edit", capabilities: { inputM
 const notReady = model({ id: "missing-key", maskedApiKey: "", modelType: "image-edit", capabilities: { inputModes: ["image-edit"], supportsImageInput: true } });
 
 assert.equal(AUTO_IMAGE_MODEL_ID, "__auto_image_model__");
-assert.equal(AUTO_IMAGE_MODEL_LABEL, "模型：自动");
+assert.equal(AUTO_IMAGE_MODEL_LABEL, "选择模型");
 assert.deepEqual(selectAutomaticImageModel({ models: [text, edit], hasReferenceImages: false }), { ok: true, modelId: "txt", inputMode: "text-to-image", model: text });
 assert.deepEqual(selectAutomaticImageModel({ models: [text, edit], hasReferenceImages: true }), { ok: true, modelId: "edit", inputMode: "image-edit", model: edit });
 assert.equal(selectAutomaticImageModel({ models: [text, notReady], hasReferenceImages: true }).ok, false);

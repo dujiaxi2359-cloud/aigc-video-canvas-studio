@@ -2,7 +2,7 @@ import type { ImageInputMode, ModelConfig } from "../types/model";
 import { isCanvasReadyModel } from "./modelReadiness";
 
 export const AUTO_IMAGE_MODEL_ID = "__auto_image_model__";
-export const AUTO_IMAGE_MODEL_LABEL = "模型：自动";
+export const AUTO_IMAGE_MODEL_LABEL = "选择模型";
 
 function referenceMode(model: ModelConfig): ImageInputMode | undefined {
   if (model.modelType === "text-to-image" && !["image_to_image", "image_edit"].includes(model.capabilities.capability || "")) return undefined;
